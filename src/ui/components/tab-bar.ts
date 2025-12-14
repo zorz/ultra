@@ -72,10 +72,13 @@ export class TabBar implements MouseHandler {
     const { x, y, width } = this.rect;
     this.tabPositions = [];
 
+    // Guard against invalid dimensions
+    if (width <= 0) return;
+
     // Background
     ctx.term.moveTo(x, y);
     ctx.term.bgColor256(234);  // Very dark gray
-    ctx.term(' '.repeat(width));
+    ctx.term(' '.repeat(Math.max(0, width)));
     ctx.term.moveTo(x, y);
 
     let currentX = x;
