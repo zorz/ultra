@@ -183,6 +183,37 @@ const NODE_TYPE_TO_SCOPE: Record<string, string> = {
   'pair': 'meta.structure.dictionary.json',
   'object': 'meta.structure.dictionary.json',
   'array': 'meta.structure.array.json',
+  
+  // CSS
+  'tag_name': 'entity.name.tag.css',
+  'class_name': 'entity.other.attribute-name.class.css',
+  'class_selector': 'entity.other.attribute-name.class.css',
+  'id_name': 'entity.other.attribute-name.id.css',
+  'id_selector': 'entity.other.attribute-name.id.css',
+  'property_name': 'support.type.property-name.css',
+  'plain_value': 'support.constant.property-value.css',
+  'color_value': 'constant.other.color.css',
+  'integer_value': 'constant.numeric.css',
+  'float_value': 'constant.numeric.css',
+  'unit': 'keyword.other.unit.css',
+  'important': 'keyword.other.important.css',
+  'pseudo_class_selector': 'entity.other.attribute-name.pseudo-class.css',
+  'pseudo_element_selector': 'entity.other.attribute-name.pseudo-element.css',
+  'attribute_selector': 'entity.other.attribute-name.css',
+  'attribute_name': 'entity.other.attribute-name.css',
+  'namespace_name': 'entity.name.namespace.css',
+  'function_name': 'support.function.css',
+  'call_expression': 'meta.function-call.css',
+  'keyframes_name': 'entity.name.function.css',
+  'feature_name': 'support.type.property-name.media.css',
+  'keyword_query': 'keyword.control.at-rule.css',
+  'at_keyword': 'keyword.control.at-rule.css',
+  'to': 'keyword.control.css',
+  'from': 'keyword.control.css',
+  'and': 'keyword.operator.logical.css',
+  'or': 'keyword.operator.logical.css',
+  'not': 'keyword.operator.logical.css',
+  'nesting_selector': 'entity.other.attribute-name.css',
 };
 
 /**
@@ -236,6 +267,20 @@ export class Highlighter {
   private content: string = '';
   private lineCache: Map<number, HighlightToken[]> = new Map();
   private useRegexFallback: boolean = false;
+  
+  // Multi-line state tracking for regex fallback
+  // Maps line number to state: 'comment' | 'string' | null
+  private lineStartState: Map<number, 'comment' | 'string' | null> = new Map();
+
+  // Languages that always use regex (tree-sitter not compatible)
+  private static readonly REGEX_ONLY_LANGUAGES = ['markdown', 'css'];
+  
+  // Languages that have regex fallback implementations
+  private static readonly REGEX_FALLBACK_LANGUAGES = [
+    'markdown', 'css', 'typescript', 'typescriptreact', 
+    'javascript', 'javascriptreact', 'json', 'python',
+    'rust', 'go', 'html', 'shellscript', 'bash'
+  ];
 
   /**
    * Set the language for highlighting
@@ -243,8 +288,8 @@ export class Highlighter {
   setLanguage(languageId: string): boolean {
     if (this.languageId === languageId) return true;
     
-    // Check if we need regex fallback for unsupported languages
-    if (languageId === 'markdown') {
+    // Check if this language requires regex-only (tree-sitter doesn't work)
+    if (Highlighter.REGEX_ONLY_LANGUAGES.includes(languageId)) {
       this.languageId = languageId;
       this.useRegexFallback = true;
       this.parser = null;
@@ -253,19 +298,31 @@ export class Highlighter {
       return true;
     }
     
+    // Try tree-sitter first
     this.parser = treeSitterLoader.createParser(languageId);
-    if (!this.parser) {
-      this.languageId = null;
+    if (this.parser) {
+      this.languageId = languageId;
       this.tree = null;
       this.useRegexFallback = false;
-      return false;
+      this.lineCache.clear();
+      return true;
     }
     
-    this.languageId = languageId;
+    // Fall back to regex if available
+    if (Highlighter.REGEX_FALLBACK_LANGUAGES.includes(languageId)) {
+      this.languageId = languageId;
+      this.useRegexFallback = true;
+      this.parser = null;
+      this.tree = null;
+      this.lineCache.clear();
+      return true;
+    }
+    
+    // Language not supported at all
+    this.languageId = null;
     this.tree = null;
     this.useRegexFallback = false;
-    this.lineCache.clear();
-    return true;
+    return false;
   }
 
   /**
@@ -281,14 +338,120 @@ export class Highlighter {
   parse(content: string): void {
     this.content = content;
     this.lineCache.clear();
+    this.lineStartState.clear();
     
     if (this.useRegexFallback) {
-      // For regex-based highlighting, we just store content
+      // Compute multi-line comment/string state for each line
+      this.computeMultiLineState();
       return;
     }
     
     if (!this.parser) return;
     this.tree = this.parser.parse(content);
+  }
+
+  /**
+   * Compute multi-line comment and string state for regex-based highlighting
+   */
+  private computeMultiLineState(): void {
+    const lines = this.content.split('\n');
+    let inBlockComment = false;
+    let inMultiLineString = false;
+    let stringDelimiter = '';
+    
+    // Determine comment style based on language
+    const usesBlockComments = ['typescript', 'typescriptreact', 'javascript', 'javascriptreact', 
+                              'css', 'rust', 'go', 'c', 'cpp', 'java'].includes(this.languageId || '');
+    const usesHtmlComments = this.languageId === 'html';
+    const usesPythonTripleQuotes = this.languageId === 'python';
+    
+    for (let i = 0; i < lines.length; i++) {
+      // Record state at start of this line
+      if (inBlockComment) {
+        this.lineStartState.set(i, 'comment');
+      } else if (inMultiLineString) {
+        this.lineStartState.set(i, 'string');
+      } else {
+        this.lineStartState.set(i, null);
+      }
+      
+      const line = lines[i]!;
+      let j = 0;
+      
+      while (j < line.length) {
+        if (inBlockComment) {
+          // Look for end of block comment
+          if (usesBlockComments && line.slice(j, j + 2) === '*/') {
+            inBlockComment = false;
+            j += 2;
+          } else if (usesHtmlComments && line.slice(j, j + 3) === '-->') {
+            inBlockComment = false;
+            j += 3;
+          } else {
+            j++;
+          }
+        } else if (inMultiLineString) {
+          // Look for end of multi-line string
+          if (usesPythonTripleQuotes && line.slice(j, j + 3) === stringDelimiter) {
+            inMultiLineString = false;
+            j += 3;
+          } else if (line[j] === '\\') {
+            j += 2; // Skip escaped char
+          } else {
+            j++;
+          }
+        } else {
+          // Check for start of block comment
+          if (usesBlockComments && line.slice(j, j + 2) === '/*') {
+            // Check if it ends on same line
+            const endIdx = line.indexOf('*/', j + 2);
+            if (endIdx === -1) {
+              inBlockComment = true;
+            }
+            j += 2;
+          } else if (usesHtmlComments && line.slice(j, j + 4) === '<!--') {
+            const endIdx = line.indexOf('-->', j + 4);
+            if (endIdx === -1) {
+              inBlockComment = true;
+            }
+            j += 4;
+          } else if (usesBlockComments && line.slice(j, j + 2) === '//') {
+            // Line comment - skip rest of line
+            break;
+          } else if (this.languageId === 'python' && line[j] === '#') {
+            // Python line comment
+            break;
+          } else if (usesPythonTripleQuotes && (line.slice(j, j + 3) === '"""' || line.slice(j, j + 3) === "'''")) {
+            // Python triple-quoted string
+            stringDelimiter = line.slice(j, j + 3);
+            const endIdx = line.indexOf(stringDelimiter, j + 3);
+            if (endIdx === -1) {
+              inMultiLineString = true;
+            }
+            j += 3;
+          } else if (line[j] === '"' || line[j] === "'") {
+            // Regular string - find end on same line
+            const quote = line[j];
+            j++;
+            while (j < line.length && line[j] !== quote) {
+              if (line[j] === '\\') j++;
+              j++;
+            }
+            j++; // Skip closing quote
+          } else if (line[j] === '`' && ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'].includes(this.languageId || '')) {
+            // Template string - can span multiple lines but we handle per-line
+            j++;
+            while (j < line.length && line[j] !== '`') {
+              if (line[j] === '\\') j++;
+              j++;
+            }
+            j++;
+          } else {
+            j++;
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -357,9 +520,42 @@ export class Highlighter {
     const cached = this.lineCache.get(lineNumber);
     if (cached) return cached;
 
-    // Use regex fallback for markdown
-    if (this.useRegexFallback && this.languageId === 'markdown') {
-      const tokens = this.highlightMarkdownLine(lineNumber);
+    // Use regex fallback
+    if (this.useRegexFallback) {
+      let tokens: HighlightToken[] = [];
+      switch (this.languageId) {
+        case 'markdown':
+          tokens = this.highlightMarkdownLine(lineNumber);
+          break;
+        case 'css':
+          tokens = this.highlightCssLine(lineNumber);
+          break;
+        case 'typescript':
+        case 'typescriptreact':
+        case 'javascript':
+        case 'javascriptreact':
+          tokens = this.highlightJsLine(lineNumber);
+          break;
+        case 'json':
+          tokens = this.highlightJsonLine(lineNumber);
+          break;
+        case 'python':
+          tokens = this.highlightPythonLine(lineNumber);
+          break;
+        case 'rust':
+          tokens = this.highlightRustLine(lineNumber);
+          break;
+        case 'go':
+          tokens = this.highlightGoLine(lineNumber);
+          break;
+        case 'html':
+          tokens = this.highlightHtmlLine(lineNumber);
+          break;
+        case 'shellscript':
+        case 'bash':
+          tokens = this.highlightBashLine(lineNumber);
+          break;
+      }
       this.lineCache.set(lineNumber, tokens);
       return tokens;
     }
@@ -552,6 +748,1105 @@ export class Highlighter {
         scope: 'markup.strikethrough'
       });
     }
+  }
+
+  /**
+   * Highlight a CSS line using regex patterns
+   */
+  private highlightCssLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Check if we're starting inside a multi-line comment
+    const startState = this.lineStartState.get(lineNumber);
+    if (startState === 'comment') {
+      const endIdx = line.indexOf('*/');
+      if (endIdx === -1) {
+        tokens.push({
+          start: 0,
+          end: line.length,
+          scope: 'comment.block.css'
+        });
+        return tokens;
+      } else {
+        tokens.push({
+          start: 0,
+          end: endIdx + 2,
+          scope: 'comment.block.css'
+        });
+      }
+    }
+
+    // Comments: /* ... */ or /* ... (start of multi-line)
+    const commentRegex = /\/\*.*?\*\/|\/\*.*$/g;
+    while ((match = commentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.block.css'
+        });
+      }
+    }
+
+    // At-rules: @media, @keyframes, @import, etc.
+    const atRuleRegex = /@[\w-]+/g;
+    while ((match = atRuleRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      if (!inComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'keyword.control.at-rule.css'
+        });
+      }
+    }
+
+    // Class selectors: .classname
+    const classRegex = /\.[\w-]+/g;
+    while ((match = classRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      if (!inComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.other.attribute-name.class.css'
+        });
+      }
+    }
+
+    // ID selectors: #idname
+    const idRegex = /#[\w-]+(?![0-9a-fA-F]{2,})/g;
+    while ((match = idRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      // Make sure it's not a hex color
+      if (!inComment && !/^#[0-9a-fA-F]{3,8}$/.test(match[0])) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.other.attribute-name.id.css'
+        });
+      }
+    }
+
+    // Pseudo selectors: :hover, ::before
+    const pseudoRegex = /:{1,2}[\w-]+/g;
+    while ((match = pseudoRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'entity.other.attribute-name.pseudo-class.css'
+      });
+    }
+
+    // Property names (before colon in declaration)
+    const propertyRegex = /[\w-]+(?=\s*:)/g;
+    while ((match = propertyRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'support.type.property-name.css'
+      });
+    }
+
+    // Colors: #fff, #ffffff, #ffffffff
+    const colorRegex = /#[0-9a-fA-F]{3,8}\b/g;
+    while ((match = colorRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'constant.other.color.css'
+      });
+    }
+
+    // Numbers with units: 10px, 1.5em, 100%
+    const numberUnitRegex = /\b[\d.]+(?:px|em|rem|%|vh|vw|vmin|vmax|ch|ex|cm|mm|in|pt|pc|deg|rad|grad|turn|s|ms|Hz|kHz|dpi|dpcm|dppx|fr)\b/g;
+    while ((match = numberUnitRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'constant.numeric.css'
+      });
+    }
+
+    // Plain numbers
+    const numberRegex = /\b\d+\.?\d*\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      // Check if already covered by number+unit
+      const alreadyCovered = tokens.some(t => 
+        t.scope === 'constant.numeric.css' && 
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric.css'
+        });
+      }
+    }
+
+    // Strings: "..." or '...'
+    const stringRegex = /(["'])(?:(?!\1)[^\\]|\\.)*\1/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'string.quoted.css'
+      });
+    }
+
+    // Function calls: rgb(), url(), calc(), etc.
+    const funcRegex = /[\w-]+(?=\()/g;
+    while ((match = funcRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'support.function.css'
+      });
+    }
+
+    // Important
+    const importantRegex = /!important\b/g;
+    while ((match = importantRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'keyword.other.important.css'
+      });
+    }
+
+    // Tag selectors (simple words at start or after comma/space, before { or ,)
+    // This is a simplified heuristic
+    const tagRegex = /\b(html|body|div|span|p|a|ul|ol|li|h[1-6]|header|footer|nav|main|section|article|aside|table|tr|td|th|thead|tbody|form|input|button|label|select|textarea|img|video|audio|canvas|svg|iframe)\b/g;
+    while ((match = tagRegex.exec(line)) !== null) {
+      // Check if not already covered
+      const alreadyCovered = tokens.some(t => 
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.name.tag.css'
+        });
+      }
+    }
+
+    // Sort tokens by start position
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a JavaScript/TypeScript line using regex patterns
+   */
+  private highlightJsLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Check if we're starting inside a multi-line comment
+    const startState = this.lineStartState.get(lineNumber);
+    if (startState === 'comment') {
+      // Find where the comment ends on this line, or mark whole line as comment
+      const endIdx = line.indexOf('*/');
+      if (endIdx === -1) {
+        // Whole line is a comment
+        tokens.push({
+          start: 0,
+          end: line.length,
+          scope: 'comment.block'
+        });
+        return tokens;
+      } else {
+        // Comment ends on this line
+        tokens.push({
+          start: 0,
+          end: endIdx + 2,
+          scope: 'comment.block'
+        });
+      }
+    }
+
+    // Line comments: // ...
+    const lineCommentRegex = /\/\/.*/g;
+    while ((match = lineCommentRegex.exec(line)) !== null) {
+      // Make sure not inside an existing token
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.line'
+        });
+      }
+    }
+
+    // Block comments: /* ... */ (single line) or /* ... (start of multi-line)
+    const blockCommentRegex = /\/\*.*?\*\/|\/\*.*$/g;
+    while ((match = blockCommentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.block'
+        });
+      }
+    }
+
+    // Strings: "...", '...', `...`
+    const stringRegex = /(["'`])(?:(?!\1)[^\\]|\\.)*\1/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        const quote = match[1];
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: quote === '`' ? 'string.template' : 'string.quoted'
+        });
+      }
+    }
+
+    // Keywords
+    const keywordRegex = /\b(const|let|var|function|class|interface|type|enum|namespace|module|import|export|from|as|default|if|else|switch|case|break|continue|return|throw|try|catch|finally|for|while|do|new|this|super|extends|implements|static|public|private|protected|readonly|async|await|yield|typeof|instanceof|in|of|delete|void|null|undefined|true|false)\b/g;
+    while ((match = keywordRegex.exec(line)) !== null) {
+      // Check if inside string or comment
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        let scope = 'keyword';
+        const word = match[0];
+        if (['const', 'let', 'var', 'function', 'class', 'interface', 'type', 'enum'].includes(word)) {
+          scope = 'keyword.declaration';
+        } else if (['if', 'else', 'switch', 'case', 'for', 'while', 'do'].includes(word)) {
+          scope = 'keyword.control';
+        } else if (['import', 'export', 'from', 'as', 'default'].includes(word)) {
+          scope = 'keyword.control.import';
+        } else if (['true', 'false'].includes(word)) {
+          scope = 'constant.language.boolean';
+        } else if (['null', 'undefined'].includes(word)) {
+          scope = 'constant.language.null';
+        } else if (['this', 'super'].includes(word)) {
+          scope = 'variable.language';
+        }
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope
+        });
+      }
+    }
+
+    // Type annotations (simplified): : Type, <Type>
+    const typeRegex = /:\s*([A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?)/g;
+    while ((match = typeRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index + match[0].indexOf(match[1]!),
+          end: match.index + match[0].length,
+          scope: 'entity.name.type'
+        });
+      }
+    }
+
+    // Function calls: name(
+    const funcCallRegex = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/g;
+    while ((match = funcCallRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      const isKeyword = tokens.some(t => 
+        t.scope.startsWith('keyword') &&
+        match!.index === t.start
+      );
+      if (!inStringOrComment && !isKeyword) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[1]!.length,
+          scope: 'entity.name.function'
+        });
+      }
+    }
+
+    // Numbers
+    const numberRegex = /\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*(?:e[+-]?\d+)?)\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric'
+        });
+      }
+    }
+
+    // Decorators: @decorator
+    const decoratorRegex = /@[a-zA-Z_$][a-zA-Z0-9_$]*/g;
+    while ((match = decoratorRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'entity.name.decorator'
+      });
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a JSON line using regex patterns
+   */
+  private highlightJsonLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Property keys: "key":
+    const keyRegex = /"([^"\\]|\\.)*"\s*:/g;
+    while ((match = keyRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length - 1, // exclude the colon
+        scope: 'support.type.property-name.json'
+      });
+    }
+
+    // String values
+    const stringRegex = /"([^"\\]|\\.)*"/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      // Check if it's a key (already covered)
+      const isKey = tokens.some(t => 
+        t.scope === 'support.type.property-name.json' &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!isKey) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted.json'
+        });
+      }
+    }
+
+    // Numbers
+    const numberRegex = /-?\b\d+\.?\d*(?:e[+-]?\d+)?\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'constant.numeric.json'
+      });
+    }
+
+    // Booleans and null
+    const constRegex = /\b(true|false|null)\b/g;
+    while ((match = constRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: match[0] === 'null' ? 'constant.language.null' : 'constant.language.boolean'
+      });
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a Python line using regex patterns
+   */
+  private highlightPythonLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Comments: # ...
+    const commentRegex = /#.*/g;
+    while ((match = commentRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'comment.line'
+      });
+    }
+
+    // Triple-quoted strings
+    const tripleStringRegex = /("""|''').*?(\1|$)/g;
+    while ((match = tripleStringRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'string.quoted'
+      });
+    }
+
+    // Regular strings
+    const stringRegex = /(["'])(?:(?!\1)[^\\]|\\.)*\1/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      const inTriple = tokens.some(t => 
+        t.scope === 'string.quoted' &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inTriple) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Keywords
+    const keywordRegex = /\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|raise|break|continue|pass|lambda|and|or|not|in|is|True|False|None|async|await|global|nonlocal)\b/g;
+    while ((match = keywordRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        let scope = 'keyword';
+        const word = match[0];
+        if (['def', 'class', 'lambda'].includes(word)) {
+          scope = 'keyword.declaration';
+        } else if (['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with'].includes(word)) {
+          scope = 'keyword.control';
+        } else if (['import', 'from', 'as'].includes(word)) {
+          scope = 'keyword.control.import';
+        } else if (['True', 'False'].includes(word)) {
+          scope = 'constant.language.boolean';
+        } else if (word === 'None') {
+          scope = 'constant.language.null';
+        }
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope
+        });
+      }
+    }
+
+    // Function definitions
+    const funcDefRegex = /\bdef\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    while ((match = funcDefRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index + 4, // after "def "
+        end: match.index + 4 + match[1]!.length,
+        scope: 'entity.name.function'
+      });
+    }
+
+    // Class definitions
+    const classDefRegex = /\bclass\s+([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    while ((match = classDefRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index + 6, // after "class "
+        end: match.index + 6 + match[1]!.length,
+        scope: 'entity.name.class'
+      });
+    }
+
+    // Decorators
+    const decoratorRegex = /@[a-zA-Z_][a-zA-Z0-9_.]*/g;
+    while ((match = decoratorRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'entity.name.decorator'
+      });
+    }
+
+    // Numbers
+    const numberRegex = /\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*(?:e[+-]?\d+)?j?)\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric'
+        });
+      }
+    }
+
+    // Self/cls
+    const selfRegex = /\b(self|cls)\b/g;
+    while ((match = selfRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'variable.language'
+        });
+      }
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a Rust line using regex patterns
+   */
+  private highlightRustLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Check if we're starting inside a multi-line comment
+    const startState = this.lineStartState.get(lineNumber);
+    if (startState === 'comment') {
+      const endIdx = line.indexOf('*/');
+      if (endIdx === -1) {
+        tokens.push({ start: 0, end: line.length, scope: 'comment.block' });
+        return tokens;
+      } else {
+        tokens.push({ start: 0, end: endIdx + 2, scope: 'comment.block' });
+      }
+    }
+
+    // Line comments
+    const lineCommentRegex = /\/\/.*/g;
+    while ((match = lineCommentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.line'
+        });
+      }
+    }
+
+    // Block comments
+    const blockCommentRegex = /\/\*.*?\*\/|\/\*.*$/g;
+    while ((match = blockCommentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.block'
+        });
+      }
+    }
+
+    // Strings
+    const stringRegex = /"(?:[^"\\]|\\.)*"/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Characters
+    const charRegex = /'(?:[^'\\]|\\.)'/g;
+    while ((match = charRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Keywords
+    const keywordRegex = /\b(fn|let|mut|const|static|struct|enum|impl|trait|type|where|pub|crate|mod|use|as|self|Self|super|if|else|match|loop|while|for|in|break|continue|return|async|await|move|ref|unsafe|extern|dyn|true|false)\b/g;
+    while ((match = keywordRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        let scope = 'keyword';
+        const word = match[0];
+        if (['fn', 'let', 'const', 'static', 'struct', 'enum', 'impl', 'trait', 'type', 'mod'].includes(word)) {
+          scope = 'keyword.declaration';
+        } else if (['if', 'else', 'match', 'loop', 'while', 'for'].includes(word)) {
+          scope = 'keyword.control';
+        } else if (['use', 'mod', 'crate', 'pub', 'extern'].includes(word)) {
+          scope = 'keyword.control.import';
+        } else if (['true', 'false'].includes(word)) {
+          scope = 'constant.language.boolean';
+        } else if (['self', 'Self', 'super'].includes(word)) {
+          scope = 'variable.language';
+        }
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope
+        });
+      }
+    }
+
+    // Types (capitalized identifiers)
+    const typeRegex = /\b([A-Z][a-zA-Z0-9_]*)\b/g;
+    while ((match = typeRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      const isKeyword = tokens.some(t => 
+        t.scope.startsWith('keyword') &&
+        match!.index === t.start
+      );
+      if (!inStringOrComment && !isKeyword && match[0] !== 'Self') {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.name.type'
+        });
+      }
+    }
+
+    // Macros
+    const macroRegex = /\b[a-z_][a-z0-9_]*!/g;
+    while ((match = macroRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'entity.name.function.macro'
+      });
+    }
+
+    // Lifetimes
+    const lifetimeRegex = /'[a-z_][a-z0-9_]*/g;
+    while ((match = lifetimeRegex.exec(line)) !== null) {
+      // Make sure it's not a char literal
+      const isChar = tokens.some(t => 
+        t.scope === 'string.quoted' &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!isChar) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'storage.modifier.lifetime'
+        });
+      }
+    }
+
+    // Numbers
+    const numberRegex = /\b(0x[0-9a-fA-F_]+|0b[01_]+|0o[0-7_]+|\d[0-9_]*\.?[0-9_]*(?:e[+-]?[0-9_]+)?(?:f32|f64|i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?)\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric'
+        });
+      }
+    }
+
+    // Attributes
+    const attrRegex = /#\[.*?\]/g;
+    while ((match = attrRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'meta.attribute'
+      });
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a Go line using regex patterns
+   */
+  private highlightGoLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Check if we're starting inside a multi-line comment
+    const startState = this.lineStartState.get(lineNumber);
+    if (startState === 'comment') {
+      const endIdx = line.indexOf('*/');
+      if (endIdx === -1) {
+        tokens.push({ start: 0, end: line.length, scope: 'comment.block' });
+        return tokens;
+      } else {
+        tokens.push({ start: 0, end: endIdx + 2, scope: 'comment.block' });
+      }
+    }
+
+    // Line comments
+    const lineCommentRegex = /\/\/.*/g;
+    while ((match = lineCommentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.line'
+        });
+      }
+    }
+
+    // Block comments
+    const blockCommentRegex = /\/\*.*?\*\/|\/\*.*$/g;
+    while ((match = blockCommentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.block'
+        });
+      }
+    }
+
+    // Strings
+    const stringRegex = /"(?:[^"\\]|\\.)*"|`[^`]*`/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Characters
+    const charRegex = /'(?:[^'\\]|\\.)'/g;
+    while ((match = charRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Keywords
+    const keywordRegex = /\b(package|import|func|type|struct|interface|map|chan|const|var|if|else|switch|case|default|for|range|break|continue|return|go|defer|select|fallthrough|true|false|nil|iota)\b/g;
+    while ((match = keywordRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        let scope = 'keyword';
+        const word = match[0];
+        if (['func', 'type', 'struct', 'interface', 'const', 'var'].includes(word)) {
+          scope = 'keyword.declaration';
+        } else if (['if', 'else', 'switch', 'case', 'default', 'for', 'range', 'select'].includes(word)) {
+          scope = 'keyword.control';
+        } else if (['package', 'import'].includes(word)) {
+          scope = 'keyword.control.import';
+        } else if (['true', 'false'].includes(word)) {
+          scope = 'constant.language.boolean';
+        } else if (word === 'nil') {
+          scope = 'constant.language.null';
+        }
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope
+        });
+      }
+    }
+
+    // Types (capitalized identifiers, but also built-in types)
+    const typeRegex = /\b(int|int8|int16|int32|int64|uint|uint8|uint16|uint32|uint64|float32|float64|complex64|complex128|byte|rune|string|bool|error|[A-Z][a-zA-Z0-9_]*)\b/g;
+    while ((match = typeRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      const isKeyword = tokens.some(t => 
+        t.scope.startsWith('keyword') &&
+        match!.index === t.start
+      );
+      if (!inStringOrComment && !isKeyword) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.name.type'
+        });
+      }
+    }
+
+    // Numbers
+    const numberRegex = /\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\d+\.?\d*(?:e[+-]?\d+)?i?)\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric'
+        });
+      }
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight an HTML line using regex patterns
+   */
+  private highlightHtmlLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Check if we're starting inside a multi-line comment
+    const startState = this.lineStartState.get(lineNumber);
+    if (startState === 'comment') {
+      const endIdx = line.indexOf('-->');
+      if (endIdx === -1) {
+        tokens.push({ start: 0, end: line.length, scope: 'comment.block.html' });
+        return tokens;
+      } else {
+        tokens.push({ start: 0, end: endIdx + 3, scope: 'comment.block.html' });
+      }
+    }
+
+    // Comments
+    const commentRegex = /<!--.*?-->|<!--.*$/g;
+    while ((match = commentRegex.exec(line)) !== null) {
+      const alreadyCovered = tokens.some(t => match!.index >= t.start && match!.index < t.end);
+      if (!alreadyCovered) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'comment.block.html'
+        });
+      }
+    }
+
+    // Tags
+    const tagRegex = /<\/?([a-zA-Z][a-zA-Z0-9-]*)/g;
+    while ((match = tagRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      if (!inComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'entity.name.tag.html'
+        });
+      }
+    }
+
+    // Attributes
+    const attrRegex = /\s([a-zA-Z][a-zA-Z0-9-]*)(?==)/g;
+    while ((match = attrRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      if (!inComment) {
+        tokens.push({
+          start: match.index + 1,
+          end: match.index + 1 + match[1]!.length,
+          scope: 'entity.other.attribute-name.html'
+        });
+      }
+    }
+
+    // Attribute values
+    const valueRegex = /=\s*(["'])(?:(?!\1)[^\\]|\\.)*\1/g;
+    while ((match = valueRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => t.scope.startsWith('comment') && match!.index >= t.start && match!.index < t.end);
+      if (!inComment) {
+        tokens.push({
+          start: match.index + 1,
+          end: match.index + match[0].length,
+          scope: 'string.quoted.html'
+        });
+      }
+    }
+
+    // DOCTYPE
+    const doctypeRegex = /<!DOCTYPE[^>]*>/gi;
+    while ((match = doctypeRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'meta.tag.sgml.doctype.html'
+      });
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
+  }
+
+  /**
+   * Highlight a Bash/Shell line using regex patterns
+   */
+  private highlightBashLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+    let match;
+
+    // Comments
+    const commentRegex = /#.*/g;
+    while ((match = commentRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'comment.line'
+      });
+    }
+
+    // Strings
+    const stringRegex = /(["'])(?:(?!\1)[^\\]|\\.)*\1/g;
+    while ((match = stringRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => 
+        t.scope === 'comment.line' &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'string.quoted'
+        });
+      }
+    }
+
+    // Keywords
+    const keywordRegex = /\b(if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|exit|break|continue|local|export|source|alias|unalias|set|unset|declare|readonly|shift|eval|exec|trap)\b/g;
+    while ((match = keywordRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'keyword.control'
+        });
+      }
+    }
+
+    // Variables: $var, ${var}
+    const varRegex = /\$[a-zA-Z_][a-zA-Z0-9_]*|\$\{[^}]+\}/g;
+    while ((match = varRegex.exec(line)) !== null) {
+      const inComment = tokens.some(t => 
+        t.scope === 'comment.line' &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'variable.other'
+        });
+      }
+    }
+
+    // Command substitution: $(...)
+    const cmdSubRegex = /\$\([^)]+\)/g;
+    while ((match = cmdSubRegex.exec(line)) !== null) {
+      tokens.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        scope: 'string.interpolated'
+      });
+    }
+
+    // Numbers
+    const numberRegex = /\b\d+\b/g;
+    while ((match = numberRegex.exec(line)) !== null) {
+      const inStringOrComment = tokens.some(t => 
+        (t.scope.startsWith('string') || t.scope.startsWith('comment')) &&
+        match!.index >= t.start && match!.index < t.end
+      );
+      if (!inStringOrComment) {
+        tokens.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          scope: 'constant.numeric'
+        });
+      }
+    }
+
+    tokens.sort((a, b) => a.start - b.start);
+    return tokens;
   }
 
   /**

@@ -5,35 +5,49 @@
  */
 
 // Use require for native Node-API modules
-// @ts-ignore - Native module loading
-const Parser = require('tree-sitter');
+let Parser: any = null;
+let TypeScript: any = null;
+let JavaScript: any = null;
+let JSON_LANG: any = null;
+let Python: any = null;
+let Rust: any = null;
+let Go: any = null;
+let C: any = null;
+let Cpp: any = null;
+let HTML: any = null;
+let Ruby: any = null;
+let Bash: any = null;
 
-// Import language grammars - these have native bindings
-// @ts-ignore
-const TypeScript = require('tree-sitter-typescript');
-// @ts-ignore
-const JavaScript = require('tree-sitter-javascript');
-// @ts-ignore
-const JSON_LANG = require('tree-sitter-json');
-// @ts-ignore
-const Python = require('tree-sitter-python');
-// @ts-ignore
-const Rust = require('tree-sitter-rust');
-// @ts-ignore
-const Go = require('tree-sitter-go');
-// @ts-ignore
-const C = require('tree-sitter-c');
-// @ts-ignore
-const Cpp = require('tree-sitter-cpp');
-// @ts-ignore
-const HTML = require('tree-sitter-html');
-// CSS uses top-level await which doesn't work with require()
-// @ts-ignore
-const Ruby = require('tree-sitter-ruby');
-// @ts-ignore
-const Bash = require('tree-sitter-bash');
-// Markdown has ABI version mismatch issues
-// const Markdown = require('tree-sitter-markdown');
+let treeSitterLoadError: string | null = null;
+
+try {
+  // @ts-ignore - Native module loading
+  Parser = require('tree-sitter');
+  // @ts-ignore
+  TypeScript = require('tree-sitter-typescript');
+  // @ts-ignore
+  JavaScript = require('tree-sitter-javascript');
+  // @ts-ignore
+  JSON_LANG = require('tree-sitter-json');
+  // @ts-ignore
+  Python = require('tree-sitter-python');
+  // @ts-ignore
+  Rust = require('tree-sitter-rust');
+  // @ts-ignore
+  Go = require('tree-sitter-go');
+  // @ts-ignore
+  C = require('tree-sitter-c');
+  // @ts-ignore
+  Cpp = require('tree-sitter-cpp');
+  // @ts-ignore
+  HTML = require('tree-sitter-html');
+  // @ts-ignore
+  Ruby = require('tree-sitter-ruby');
+  // @ts-ignore
+  Bash = require('tree-sitter-bash');
+} catch (error: any) {
+  treeSitterLoadError = error?.message || 'Unknown error loading tree-sitter';
+}
 
 export interface Grammar {
   languageId: string;
@@ -53,11 +67,9 @@ const languageModules: Record<string, any> = {
   'c': C,
   'cpp': Cpp,
   'html': HTML,
-  // 'css': CSS,  // CSS uses top-level await, not compatible
   'ruby': Ruby,
   'shellscript': Bash,
   'bash': Bash,
-  // 'markdown': Markdown,  // ABI version mismatch
 };
 
 export class TreeSitterLoader {
@@ -117,19 +129,33 @@ export class TreeSitterLoader {
    * Get list of supported languages
    */
   getSupportedLanguages(): string[] {
+    if (treeSitterLoadError) return [];
     return Object.keys(languageModules);
+  }
+
+  /**
+   * Get tree-sitter load error, if any
+   */
+  getLoadError(): string | null {
+    return treeSitterLoadError;
   }
 
   /**
    * Create a new parser for a language
    */
   createParser(languageId: string): any {
+    if (!Parser || treeSitterLoadError) return null;
+    
     const grammar = this.getGrammar(languageId);
     if (!grammar) return null;
 
-    const parser = new Parser();
-    parser.setLanguage(grammar.language);
-    return parser;
+    try {
+      const parser = new Parser();
+      parser.setLanguage(grammar.language);
+      return parser;
+    } catch (error) {
+      return null;
+    }
   }
 }
 

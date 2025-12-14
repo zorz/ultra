@@ -373,15 +373,21 @@ export class EditorPane implements MouseHandler {
     if (scope.startsWith('string')) return '#a6d189';
     if (scope.startsWith('constant.numeric')) return '#ef9f76';
     if (scope.startsWith('constant.language')) return '#ef9f76';
+    if (scope.startsWith('constant.other.color')) return '#ef9f76';
     if (scope.startsWith('keyword')) return '#ca9ee6';
     if (scope.startsWith('storage')) return '#ca9ee6';
     if (scope.startsWith('entity.name.function')) return '#8caaee';
     if (scope.startsWith('entity.name.class')) return '#e5c890';
     if (scope.startsWith('entity.name.type')) return '#e5c890';
+    if (scope.startsWith('entity.name.tag')) return '#e78284';
+    if (scope.startsWith('entity.other.attribute-name')) return '#e5c890';
     if (scope.startsWith('variable.parameter')) return '#eebebe';
     if (scope.startsWith('variable.other.property')) return '#8caaee';
     if (scope.startsWith('variable.language')) return '#e78284';
     if (scope.startsWith('variable')) return '#c6d0f5';
+    if (scope.startsWith('support.type.property-name')) return '#8caaee';
+    if (scope.startsWith('support.constant.property-value')) return '#99d1db';
+    if (scope.startsWith('support.function')) return '#8caaee';
     if (scope.startsWith('support.type')) return '#e5c890';
     if (scope.startsWith('punctuation')) return '#c6d0f5';
     
@@ -398,7 +404,6 @@ export class EditorPane implements MouseHandler {
     if (scope.startsWith('markup.hr')) return '#626880';
     if (scope.startsWith('markup.strikethrough')) return '#626880';
     if (scope.startsWith('markup')) return '#c6d0f5';
-    if (scope.startsWith('punctuation')) return '#c6d0f5';
     
     return null;
   }
