@@ -387,7 +387,7 @@ export class App {
     const closingChar = pairs[char];
     if (closingChar) {
       doc.insert(char + closingChar);
-      doc.cursorLeft();
+      doc.moveLeft();
     } else {
       doc.insert(char);
     }
