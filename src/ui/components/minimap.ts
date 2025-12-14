@@ -255,18 +255,23 @@ export class Minimap implements MouseHandler {
     const fgRgb = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
     const reset = '\x1b[0m';
 
-    // Get colors from theme
-    const minimapBg = this.hexToRgb(themeLoader.getColor('minimap.background')) ||
-                      this.hexToRgb(themeLoader.getColor('editor.background')) ||
-                      { r: 30, g: 30, b: 46 };
+    // Get colors from theme - use editor background as base
+    const editorBgHex = themeLoader.getColor('editor.background');
+    const editorBg = this.hexToRgb(editorBgHex);
     
-    const sliderBg = this.hexToRgb(
-      this.isDragging 
-        ? themeLoader.getColor('minimapSlider.activeBackground')
-        : this.isHovering
-          ? themeLoader.getColor('minimapSlider.hoverBackground')
-          : themeLoader.getColor('minimapSlider.background')
-    ) || { r: 100, g: 100, b: 120 };
+    // Minimap background is slightly darker/different than editor
+    const minimapBg = editorBg 
+      ? { r: Math.max(0, editorBg.r - 10), g: Math.max(0, editorBg.g - 10), b: Math.max(0, editorBg.b - 10) }
+      : { r: 30, g: 30, b: 46 };
+    
+    // Slider background is a semi-transparent overlay effect - lighten the background
+    const sliderBg = editorBg
+      ? { 
+          r: Math.min(255, editorBg.r + (this.isDragging ? 60 : this.isHovering ? 45 : 30)), 
+          g: Math.min(255, editorBg.g + (this.isDragging ? 60 : this.isHovering ? 45 : 30)), 
+          b: Math.min(255, editorBg.b + (this.isDragging ? 60 : this.isHovering ? 45 : 30))
+        }
+      : { r: 100, g: 100, b: 120 };
 
     let output = '';
     
