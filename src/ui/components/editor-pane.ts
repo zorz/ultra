@@ -11,6 +11,8 @@ import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import type { Position } from '../../core/buffer.ts';
 import { hasSelection, getSelectionRange } from '../../core/cursor.ts';
+import { Highlighter, type HighlightToken } from '../../features/syntax/highlighter.ts';
+import { themeLoader } from '../themes/theme-loader.ts';
 
 export interface EditorTheme {
   background: string;
@@ -42,6 +44,9 @@ export class EditorPane implements MouseHandler {
   private gutterWidth: number = 5;  // Line numbers + margin
   private theme: EditorTheme = defaultTheme;
   private isFocused: boolean = true;
+  private highlighter: Highlighter = new Highlighter();
+  private lastParsedContent: string = '';
+  private lastLanguage: string = '';
 
   // Callbacks
   private onClickCallback?: (position: Position, clickCount: number, event: MouseEvent) => void;
@@ -56,6 +61,21 @@ export class EditorPane implements MouseHandler {
     this.scrollTop = 0;
     this.scrollLeft = 0;
     this.updateGutterWidth();
+    
+    // Setup syntax highlighting
+    if (doc) {
+      const language = doc.language;
+      if (language !== this.lastLanguage) {
+        this.highlighter.setLanguage(language);
+        this.lastLanguage = language;
+      }
+      // Parse the document for highlighting
+      const content = doc.content;
+      if (content !== this.lastParsedContent) {
+        this.highlighter.parse(content);
+        this.lastParsedContent = content;
+      }
+    }
   }
 
   /**
@@ -169,6 +189,13 @@ export class EditorPane implements MouseHandler {
 
     // Update gutter width based on line count
     this.updateGutterWidth();
+    
+    // Update syntax highlighting if content changed
+    const content = this.document.content;
+    if (content !== this.lastParsedContent) {
+      this.highlighter.parse(content);
+      this.lastParsedContent = content;
+    }
 
     const visibleLines = this.getVisibleLineCount();
     const textWidth = this.rect.width - this.gutterWidth;
@@ -210,6 +237,7 @@ export class EditorPane implements MouseHandler {
     // ANSI escape helpers
     const bg = (n: number) => `\x1b[48;5;${n}m`;
     const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const fgRgb = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
     const reset = '\x1b[0m';
     
     let output = '';
@@ -238,8 +266,15 @@ export class EditorPane implements MouseHandler {
       const visibleStart = this.scrollLeft;
       const visibleEnd = this.scrollLeft + textWidth;
       
+      // Get highlight tokens for this line
+      const tokens = this.highlighter.highlightLine(lineNum);
+      
+      // Build a color map for each column
+      const colorMap = this.buildColorMap(line.length, tokens);
+      
       let currentBg = baseBg;
-      output += bg(baseBg) + fg(252);
+      let currentFg = -1; // -1 means default foreground
+      output += bg(baseBg);
       
       for (let col = visibleStart; col < visibleEnd; col++) {
         const char = col < line.length ? line[col]! : ' ';
@@ -255,10 +290,24 @@ export class EditorPane implements MouseHandler {
           return true;
         });
         
+        // Apply background
         const newBg = isSelected ? selectionBg : baseBg;
         if (newBg !== currentBg) {
           currentBg = newBg;
           output += bg(currentBg);
+        }
+        
+        // Apply foreground color from syntax highlighting
+        const tokenColor = col < colorMap.length ? colorMap[col] : null;
+        if (tokenColor) {
+          const rgb = this.hexToRgb(tokenColor);
+          if (rgb && currentFg !== this.rgbToKey(rgb)) {
+            currentFg = this.rgbToKey(rgb);
+            output += fgRgb(rgb.r, rgb.g, rgb.b);
+          }
+        } else if (currentFg !== -1) {
+          currentFg = -1;
+          output += fg(252); // Default foreground
         }
         
         output += char === '\t' ? '  ' : char;
@@ -267,6 +316,87 @@ export class EditorPane implements MouseHandler {
     
     output += reset;
     return output;
+  }
+
+  /**
+   * Build a color map for a line based on highlight tokens
+   */
+  private buildColorMap(lineLength: number, tokens: HighlightToken[]): (string | null)[] {
+    const colorMap: (string | null)[] = new Array(lineLength).fill(null);
+    
+    for (const token of tokens) {
+      const color = this.getColorForScope(token.scope);
+      if (color) {
+        for (let col = token.start; col < token.end && col < lineLength; col++) {
+          colorMap[col] = color;
+        }
+      }
+    }
+    
+    return colorMap;
+  }
+
+  /**
+   * Get color for a TextMate scope from the theme
+   */
+  private getColorForScope(scope: string): string | null {
+    // Try the full scope first, then progressively shorter prefixes
+    const parts = scope.split('.');
+    
+    for (let i = parts.length; i > 0; i--) {
+      const testScope = parts.slice(0, i).join('.');
+      const settings = themeLoader.getTokenColor(testScope);
+      if (settings.foreground) {
+        return settings.foreground;
+      }
+    }
+    
+    // Fallback colors based on common scope prefixes
+    return this.getFallbackColor(scope);
+  }
+
+  /**
+   * Get fallback color for scope when theme doesn't have a match
+   */
+  private getFallbackColor(scope: string): string | null {
+    // One Dark inspired fallback colors
+    if (scope.startsWith('comment')) return '#5c6370';
+    if (scope.startsWith('string')) return '#98c379';
+    if (scope.startsWith('constant.numeric')) return '#d19a66';
+    if (scope.startsWith('constant.language')) return '#d19a66';
+    if (scope.startsWith('keyword')) return '#c678dd';
+    if (scope.startsWith('storage')) return '#c678dd';
+    if (scope.startsWith('entity.name.function')) return '#61afef';
+    if (scope.startsWith('entity.name.class')) return '#e5c07b';
+    if (scope.startsWith('entity.name.type')) return '#e5c07b';
+    if (scope.startsWith('variable.parameter')) return '#e06c75';
+    if (scope.startsWith('variable.other.property')) return '#e06c75';
+    if (scope.startsWith('variable.language')) return '#e06c75';
+    if (scope.startsWith('variable')) return '#e06c75';
+    if (scope.startsWith('support.type')) return '#e5c07b';
+    if (scope.startsWith('punctuation')) return '#abb2bf';
+    
+    return null;
+  }
+
+  /**
+   * Convert hex color to RGB
+   */
+  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+    if (!match) return null;
+    return {
+      r: parseInt(match[1]!, 16),
+      g: parseInt(match[2]!, 16),
+      b: parseInt(match[3]!, 16)
+    };
+  }
+
+  /**
+   * Create a unique key for an RGB color (for comparison)
+   */
+  private rgbToKey(rgb: { r: number; g: number; b: number }): number {
+    return (rgb.r << 16) | (rgb.g << 8) | rgb.b;
   }
 
   /**
