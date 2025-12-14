@@ -13,6 +13,7 @@ import { mouseManager, type MouseEvent as UltraMouseEvent } from './ui/mouse.ts'
 import { EditorPane } from './ui/components/editor-pane.ts';
 import { statusBar } from './ui/components/status-bar.ts';
 import { tabBar, type Tab } from './ui/components/tab-bar.ts';
+import { filePicker } from './ui/components/file-picker.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
 import { keybindingsLoader } from './input/keybindings-loader.ts';
@@ -131,6 +132,47 @@ export class App {
   private setupKeyboardHandler(): void {
     renderer.onKey(async (event: KeyEvent) => {
       if (!this.isRunning) return;
+
+      // Handle file picker input first if it's open
+      if (filePicker.isOpen()) {
+        if (event.key === 'Escape') {
+          filePicker.hide();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'Enter') {
+          filePicker.confirm();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'ArrowUp' || (event.ctrl && event.key === 'p')) {
+          filePicker.selectPrevious();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'ArrowDown' || (event.ctrl && event.key === 'n')) {
+          filePicker.selectNext();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'Backspace') {
+          filePicker.backspaceQuery();
+          renderer.scheduleRender();
+          return;
+        }
+        // Type into search
+        if (event.char && event.char.length === 1 && !event.ctrl && !event.meta) {
+          filePicker.appendToQuery(event.char);
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key.length === 1 && !event.ctrl && !event.meta && !event.alt) {
+          filePicker.appendToQuery(event.key);
+          renderer.scheduleRender();
+          return;
+        }
+        return;
+      }
 
       // Convert our KeyEvent to ParsedKey format
       const parsed: ParsedKey = {
@@ -251,6 +293,7 @@ export class App {
     });
 
     // Register editor pane as mouse handler
+    mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(this.editorPane);
     mouseManager.registerHandler(tabBar);
   }
@@ -461,6 +504,9 @@ export class App {
     // Render status bar
     statusBar.setRect(statusBarRect);
     statusBar.render(ctx);
+
+    // Render file picker (on top of everything)
+    filePicker.render(ctx);
 
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
@@ -919,14 +965,18 @@ export class App {
         handler: () => this.goToTab(8)
       },
       
-      // File operations (placeholder for future dialog)
+      // File operations
       {
         id: 'ultra.openFile',
         title: 'Open File',
         category: 'File',
-        handler: () => {
-          // TODO: Implement file picker dialog
-          // For now, this is a no-op as it requires a file browser UI
+        handler: async () => {
+          const workspaceRoot = process.cwd();
+          await filePicker.show(workspaceRoot, renderer.width, renderer.height);
+          filePicker.onSelect((path) => {
+            this.openFile(path);
+          });
+          renderer.scheduleRender();
         }
       },
       
@@ -1063,8 +1113,13 @@ export class App {
         id: 'ultra.quickOpen',
         title: 'Quick Open',
         category: 'Navigation',
-        handler: () => {
-          // TODO: Implement quick open UI
+        handler: async () => {
+          const workspaceRoot = process.cwd();
+          await filePicker.show(workspaceRoot, renderer.width, renderer.height);
+          filePicker.onSelect((path) => {
+            this.openFile(path);
+          });
+          renderer.scheduleRender();
         }
       },
       {
