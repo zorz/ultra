@@ -340,7 +340,7 @@ export const defaultSettings: Record<string, any> = {
   "editor.fontSize": 14,
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
-  "editor.wordWrap": "off",
+  "editor.wordWrap": "on",
   "editor.lineNumbers": "on",
   "editor.minimap.enabled": true,
   "editor.minimap.width": 10,
