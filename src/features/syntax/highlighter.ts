@@ -235,6 +235,7 @@ export class Highlighter {
   private languageId: string | null = null;
   private content: string = '';
   private lineCache: Map<number, HighlightToken[]> = new Map();
+  private useRegexFallback: boolean = false;
 
   /**
    * Set the language for highlighting
@@ -242,15 +243,27 @@ export class Highlighter {
   setLanguage(languageId: string): boolean {
     if (this.languageId === languageId) return true;
     
+    // Check if we need regex fallback for unsupported languages
+    if (languageId === 'markdown') {
+      this.languageId = languageId;
+      this.useRegexFallback = true;
+      this.parser = null;
+      this.tree = null;
+      this.lineCache.clear();
+      return true;
+    }
+    
     this.parser = treeSitterLoader.createParser(languageId);
     if (!this.parser) {
       this.languageId = null;
       this.tree = null;
+      this.useRegexFallback = false;
       return false;
     }
     
     this.languageId = languageId;
     this.tree = null;
+    this.useRegexFallback = false;
     this.lineCache.clear();
     return true;
   }
@@ -266,11 +279,16 @@ export class Highlighter {
    * Parse or reparse the document content
    */
   parse(content: string): void {
-    if (!this.parser) return;
-    
     this.content = content;
-    this.tree = this.parser.parse(content);
     this.lineCache.clear();
+    
+    if (this.useRegexFallback) {
+      // For regex-based highlighting, we just store content
+      return;
+    }
+    
+    if (!this.parser) return;
+    this.tree = this.parser.parse(content);
   }
 
   /**
@@ -339,6 +357,13 @@ export class Highlighter {
     const cached = this.lineCache.get(lineNumber);
     if (cached) return cached;
 
+    // Use regex fallback for markdown
+    if (this.useRegexFallback && this.languageId === 'markdown') {
+      const tokens = this.highlightMarkdownLine(lineNumber);
+      this.lineCache.set(lineNumber, tokens);
+      return tokens;
+    }
+
     if (!this.tree) return [];
 
     const tokens: HighlightToken[] = [];
@@ -361,6 +386,172 @@ export class Highlighter {
     // Cache and return
     this.lineCache.set(lineNumber, tokens);
     return tokens;
+  }
+
+  /**
+   * Highlight a markdown line using regex patterns
+   */
+  private highlightMarkdownLine(lineNumber: number): HighlightToken[] {
+    const lines = this.content.split('\n');
+    if (lineNumber >= lines.length) return [];
+
+    const line = lines[lineNumber]!;
+    if (line.length === 0) return [];
+
+    const tokens: HighlightToken[] = [];
+
+    // ATX Headings: # Heading
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      // Heading marker
+      tokens.push({
+        start: 0,
+        end: headingMatch[1]!.length,
+        scope: 'markup.heading.marker'
+      });
+      // Heading text
+      if (headingMatch[2]!.length > 0) {
+        tokens.push({
+          start: headingMatch[1]!.length + 1,
+          end: line.length,
+          scope: 'markup.heading'
+        });
+      }
+      return tokens;
+    }
+
+    // Horizontal rule
+    if (/^(\*{3,}|-{3,}|_{3,})\s*$/.test(line)) {
+      tokens.push({ start: 0, end: line.length, scope: 'markup.hr' });
+      return tokens;
+    }
+
+    // Blockquote
+    const blockquoteMatch = line.match(/^(\s*>+)(.*)$/);
+    if (blockquoteMatch) {
+      tokens.push({
+        start: 0,
+        end: blockquoteMatch[1]!.length,
+        scope: 'markup.quote.marker'
+      });
+      // Continue to process rest of line for inline elements
+      this.addInlineMarkdownTokens(line, blockquoteMatch[1]!.length, tokens);
+      return tokens;
+    }
+
+    // List items
+    const listMatch = line.match(/^(\s*)([*+-]|\d+\.)\s+(.*)$/);
+    if (listMatch) {
+      const markerStart = listMatch[1]!.length;
+      const markerEnd = markerStart + listMatch[2]!.length;
+      tokens.push({
+        start: markerStart,
+        end: markerEnd,
+        scope: 'markup.list.marker'
+      });
+      // Continue to process rest of line for inline elements
+      this.addInlineMarkdownTokens(line, markerEnd + 1, tokens);
+      return tokens;
+    }
+
+    // Code block fence
+    const codeFenceMatch = line.match(/^(`{3,}|~{3,})(\w*)$/);
+    if (codeFenceMatch) {
+      tokens.push({
+        start: 0,
+        end: codeFenceMatch[1]!.length,
+        scope: 'markup.fenced_code.delimiter'
+      });
+      if (codeFenceMatch[2]!.length > 0) {
+        tokens.push({
+          start: codeFenceMatch[1]!.length,
+          end: line.length,
+          scope: 'markup.fenced_code.language'
+        });
+      }
+      return tokens;
+    }
+
+    // Regular line - check for inline elements
+    this.addInlineMarkdownTokens(line, 0, tokens);
+    return tokens;
+  }
+
+  /**
+   * Add tokens for inline markdown elements (bold, italic, code, links)
+   */
+  private addInlineMarkdownTokens(line: string, startOffset: number, tokens: HighlightToken[]): void {
+    const text = line.slice(startOffset);
+    
+    // Inline code: `code`
+    const codeRegex = /`([^`]+)`/g;
+    let match;
+    while ((match = codeRegex.exec(text)) !== null) {
+      tokens.push({
+        start: startOffset + match.index,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.inline.raw'
+      });
+    }
+
+    // Bold: **text** or __text__
+    const boldRegex = /(\*\*|__)(?!\s)(.+?)(?<!\s)\1/g;
+    while ((match = boldRegex.exec(text)) !== null) {
+      tokens.push({
+        start: startOffset + match.index,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.bold'
+      });
+    }
+
+    // Italic: *text* or _text_ (but not inside bold)
+    const italicRegex = /(?<!\*|\w)(\*|_)(?!\s)([^*_]+?)(?<!\s)\1(?!\*|\w)/g;
+    while ((match = italicRegex.exec(text)) !== null) {
+      tokens.push({
+        start: startOffset + match.index,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.italic'
+      });
+    }
+
+    // Links: [text](url)
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+    while ((match = linkRegex.exec(text)) !== null) {
+      // Link text
+      const textStart = startOffset + match.index + 1;
+      const textEnd = textStart + match[1]!.length;
+      tokens.push({
+        start: startOffset + match.index,
+        end: textEnd + 1,
+        scope: 'markup.link.text'
+      });
+      // Link URL
+      tokens.push({
+        start: textEnd + 2,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.underline.link'
+      });
+    }
+
+    // Images: ![alt](url)
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    while ((match = imageRegex.exec(text)) !== null) {
+      tokens.push({
+        start: startOffset + match.index,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.link.image'
+      });
+    }
+
+    // Strikethrough: ~~text~~
+    const strikeRegex = /~~([^~]+)~~/g;
+    while ((match = strikeRegex.exec(text)) !== null) {
+      tokens.push({
+        start: startOffset + match.index,
+        end: startOffset + match.index + match[0].length,
+        scope: 'markup.strikethrough'
+      });
+    }
   }
 
   /**

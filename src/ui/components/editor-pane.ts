@@ -385,6 +385,21 @@ export class EditorPane implements MouseHandler {
     if (scope.startsWith('support.type')) return '#e5c890';
     if (scope.startsWith('punctuation')) return '#c6d0f5';
     
+    // Markdown-specific scopes
+    if (scope.startsWith('markup.heading')) return '#e78284';
+    if (scope.startsWith('markup.bold')) return '#ef9f76';
+    if (scope.startsWith('markup.italic')) return '#f4b8e4';
+    if (scope.startsWith('markup.inline.raw')) return '#a6d189';
+    if (scope.startsWith('markup.fenced_code')) return '#a6d189';
+    if (scope.startsWith('markup.underline.link')) return '#8caaee';
+    if (scope.startsWith('markup.link')) return '#99d1db';
+    if (scope.startsWith('markup.list.marker')) return '#8caaee';
+    if (scope.startsWith('markup.quote')) return '#626880';
+    if (scope.startsWith('markup.hr')) return '#626880';
+    if (scope.startsWith('markup.strikethrough')) return '#626880';
+    if (scope.startsWith('markup')) return '#c6d0f5';
+    if (scope.startsWith('punctuation')) return '#c6d0f5';
+    
     return null;
   }
 
