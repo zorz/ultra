@@ -1,5 +1,6 @@
 .dev.vars
-.envnode_modules/
+.env
+node_modules/
 bun.lockb
 .env
 .dev.vars
