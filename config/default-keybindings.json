@@ -66,8 +66,8 @@
   { "key": "ctrl+7", "command": "ultra.goToTab7" },
   { "key": "ctrl+8", "command": "ultra.goToTab8" },
   { "key": "ctrl+9", "command": "ultra.goToTab9" },
-  { "key": "ctrl+tab", "command": "ultra.nextTab" },
-  { "key": "ctrl+shift+tab", "command": "ultra.previousTab" },
+  { "key": "ctrl+alt+right", "command": "ultra.nextTab" },
+  { "key": "ctrl+alt+left", "command": "ultra.previousTab" },
 
   { "key": "ctrl+`", "command": "ultra.toggleTerminal" },
   { "key": "ctrl+i", "command": "ultra.toggleAIPanel" },

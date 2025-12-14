@@ -197,7 +197,7 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.projectSearch"
   },
   {
-    "key": "ctrl+p",
+    "key": "ctrl+shift+p",
     "command": "ultra.commandPalette"
   },
   {
@@ -245,11 +245,11 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.goToTab9"
   },
   {
-    "key": "ctrl+tab",
+    "key": "ctrl+alt+right",
     "command": "ultra.nextTab"
   },
   {
-    "key": "ctrl+shift+tab",
+    "key": "ctrl+alt+left",
     "command": "ultra.previousTab"
   },
   {
