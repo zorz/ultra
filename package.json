@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "build": "bun build --compile --target=bun-darwin-arm64 ./src/index.ts --outfile ultra",
+    "build:dist": "rm -rf dist && mkdir -p dist && bun build --compile --target=bun-darwin-arm64 ./src/index.ts --outfile dist/ultra && cp -r node_modules dist/ && cp -r config dist/",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
