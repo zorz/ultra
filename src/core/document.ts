@@ -378,7 +378,7 @@ export class Document {
       // Move cursor back to the middle line
       const newLine = currentLine + 1;
       const newCol = result.indent.length;
-      this._cursorManager.setCursor({ line: newLine, column: newCol });
+      this._cursorManager.setPosition({ line: newLine, column: newCol });
     } else {
       // Normal case: insert newline + indent
       this.insert('\n' + result.indent);
