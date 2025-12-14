@@ -203,10 +203,11 @@ export class InputHandler {
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
 
-    // Enable CSI u (modifyOtherKeys) mode for better modifier key support
-    // Mode 1: Report ambiguous keys differently
-    // Mode 2: Report all keys with modifiers
-    process.stdout.write('\x1b[>4;2m');  // Enable modifyOtherKeys mode 2
+    // Enable enhanced keyboard protocols for better modifier key support
+    // modifyOtherKeys mode 2: Report all keys with modifiers
+    process.stdout.write('\x1b[>4;2m');
+    // Kitty keyboard protocol (CSI u mode): Full modifier support including ctrl+shift
+    process.stdout.write('\x1b[>1u');
     
     // Use 'readable' event with read() for more reliable input handling
     // This works better with Bun's compiled binaries
@@ -234,8 +235,9 @@ export class InputHandler {
     if (!this.isRunning) return;
     this.isRunning = false;
 
-    // Disable CSI u mode
-    process.stdout.write('\x1b[>4;0m');
+    // Disable enhanced keyboard protocols
+    process.stdout.write('\x1b[>4;0m');  // Disable modifyOtherKeys
+    process.stdout.write('\x1b[<u');      // Disable Kitty keyboard protocol
 
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
@@ -337,17 +339,26 @@ export class InputHandler {
     }
 
     // Check for CSI u format: ESC [ keycode ; modifiers u
-    // This is the "fixterms" / "libtermkey" encoding that properly reports modifiers
+    // This is the "fixterms" / "libtermkey" / Kitty protocol encoding
+    // Kitty extended format: ESC [ keycode ; modifiers : event-type u
     if (this.buffer.startsWith(`${ESC}[`)) {
-      const csiUMatch = this.buffer.match(/^\x1b\[(\d+)(?:;(\d+))?u/);
+      // Match both basic CSI u and extended Kitty format
+      const csiUMatch = this.buffer.match(/^\x1b\[(\d+)(?:;(\d+))?(?::(\d+))?u/);
       if (csiUMatch) {
         const keycode = parseInt(csiUMatch[1]!, 10);
         const modifiers = csiUMatch[2] ? parseInt(csiUMatch[2], 10) : 1;
+        const eventType = csiUMatch[3] ? parseInt(csiUMatch[3], 10) : 1; // 1=press, 2=repeat, 3=release
+        
+        // Skip release events (we only care about press/repeat)
+        if (eventType === 3) {
+          return csiUMatch[0].length;
+        }
         
         // Decode modifiers: 1=none, 2=shift, 3=alt, 4=alt+shift, 5=ctrl, 6=ctrl+shift, 7=ctrl+alt, 8=all
         const shift = (modifiers - 1) & 1;
         const alt = (modifiers - 1) & 2;
         const ctrl = (modifiers - 1) & 4;
+        const meta = (modifiers - 1) & 8;  // Kitty also reports super/meta
         
         // Get key name
         let key = CSI_U_KEYS[keycode] || String.fromCharCode(keycode).toUpperCase();
@@ -358,7 +369,7 @@ export class InputHandler {
           ctrl: ctrl !== 0,
           alt: alt !== 0,
           shift: shift !== 0,
-          meta: false
+          meta: meta !== 0
         });
         return csiUMatch[0].length;
       }

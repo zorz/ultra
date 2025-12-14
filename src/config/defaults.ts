@@ -55,6 +55,14 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.commandPalette"
   },
   {
+    "key": "ctrl+shift+up",
+    "command": "ultra.focusSidebar"
+  },
+  {
+    "key": "ctrl+shift+m",
+    "command": "ultra.toggleMinimap"
+  },
+  {
     "key": "home",
     "command": "ultra.cursorLineStart"
   },
@@ -209,14 +217,6 @@ export const defaultKeybindings: KeyBinding[] = [
   {
     "key": "ctrl+b",
     "command": "ultra.toggleSidebar"
-  },
-  {
-    "key": "ctrl+alt+e",
-    "command": "ultra.focusSidebar"
-  },
-  {
-    "key": "ctrl+shift+m",
-    "command": "ultra.toggleMinimap"
   },
   {
     "key": "ctrl+\\",

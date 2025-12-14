@@ -15,6 +15,14 @@
     "key": "ctrl+p",
     "command": "ultra.commandPalette"
   },
+  {
+    "key": "ctrl+shift+up",
+    "command": "ultra.focusSidebar"
+  },
+  {
+    "key": "ctrl+shift+m",
+    "command": "ultra.toggleMinimap"
+  },
 
   { "key": "home", "command": "ultra.cursorLineStart" },
   { "key": "end", "command": "ultra.cursorLineEnd" },
@@ -63,8 +71,6 @@
   
 
   { "key": "ctrl+b", "command": "ultra.toggleSidebar" },
-  { "key": "ctrl+shift+e", "command": "ultra.focusSidebar" },
-  { "key": "ctrl+shift+m", "command": "ultra.toggleMinimap" },
   { "key": "ctrl+\\", "command": "ultra.splitVertical" },
 
   { "key": "ctrl+1", "command": "ultra.goToTab1" },
