@@ -626,7 +626,7 @@ export class Document {
    * Select next occurrence of selected text (Cmd+D behavior)
    */
   selectNextOccurrence(): void {
-    const primaryCursor = this._cursorManager.primaryCursor;
+    const primaryCursor = this._cursorManager.getPrimaryCursor();
     
     // If no selection, select word at cursor
     if (!primaryCursor.selection || 
@@ -651,6 +651,20 @@ export class Document {
       nextIndex = content.indexOf(selectedText);
     }
     
+    // Skip if we found the current selection
+    const firstCursor = this._cursorManager.cursors[0]!;
+    const firstSelectionStart = this._buffer.positionToOffset(
+      firstCursor.selection?.anchor || firstCursor.position
+    );
+    if (nextIndex === firstSelectionStart && this._cursorManager.cursors.length === 1) {
+      // We only have one cursor and found the same word - search again from after it
+      nextIndex = content.indexOf(selectedText, startOffset);
+      if (nextIndex === -1 || nextIndex === firstSelectionStart) {
+        // No other occurrence found
+        return;
+      }
+    }
+    
     if (nextIndex !== -1) {
       const nextStart = this._buffer.offsetToPosition(nextIndex);
       const nextEnd = this._buffer.offsetToPosition(nextIndex + selectedText.length);
@@ -669,10 +683,60 @@ export class Document {
   }
 
   /**
+   * Select all occurrences of selected text
+   */
+  selectAllOccurrences(): void {
+    const primaryCursor = this._cursorManager.getPrimaryCursor();
+    
+    // If no selection, select word at cursor first
+    if (!primaryCursor.selection || 
+        (primaryCursor.selection.anchor.line === primaryCursor.selection.head.line &&
+         primaryCursor.selection.anchor.column === primaryCursor.selection.head.column)) {
+      this.selectWordAtCursor();
+    }
+    
+    // Get selected text
+    const selectedText = this.getSelectedText();
+    if (!selectedText) return;
+    
+    // Find all occurrences
+    const content = this._buffer.getContent();
+    let index = 0;
+    const occurrences: { start: Position; end: Position }[] = [];
+    
+    while ((index = content.indexOf(selectedText, index)) !== -1) {
+      const start = this._buffer.offsetToPosition(index);
+      const end = this._buffer.offsetToPosition(index + selectedText.length);
+      occurrences.push({ start, end });
+      index += selectedText.length;
+    }
+    
+    if (occurrences.length <= 1) return;
+    
+    // Clear existing cursors and add one for each occurrence
+    this._cursorManager.clearSecondary();
+    
+    // Set the first occurrence as primary cursor
+    const first = occurrences[0]!;
+    const primary = this._cursorManager.getPrimaryCursor();
+    primary.position = { ...first.end };
+    primary.selection = {
+      anchor: { ...first.start },
+      head: { ...first.end }
+    };
+    
+    // Add cursors for remaining occurrences
+    for (let i = 1; i < occurrences.length; i++) {
+      const occ = occurrences[i]!;
+      this._cursorManager.addCursorWithSelection(occ.start, occ.end);
+    }
+  }
+
+  /**
    * Select word at cursor position
    */
   private selectWordAtCursor(): void {
-    const cursor = this._cursorManager.primaryCursor;
+    const cursor = this._cursorManager.getPrimaryCursor();
     const line = this._buffer.getLine(cursor.position.line);
     let start = cursor.position.column;
     let end = cursor.position.column;

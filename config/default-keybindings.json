@@ -36,6 +36,7 @@
   { "key": "ctrl+l", "command": "ultra.selectLine" },
 
   { "key": "ctrl+d", "command": "ultra.selectNextOccurrence" },
+  { "key": "ctrl+d a", "command": "ultra.selectAllOccurrences" },
   { "key": "ctrl+shift+l", "command": "ultra.splitSelectionIntoLines" },
   { "key": "ctrl+u", "command": "ultra.addCursorAbove" },
   { "key": "ctrl+j", "command": "ultra.addCursorBelow" },
@@ -81,5 +82,6 @@
   { "key": "tab", "command": "ultra.tab" },
   { "key": "shift+tab", "command": "ultra.outdent" },
   { "key": "backspace", "command": "ultra.backspace" },
-  { "key": "delete", "command": "ultra.delete" }
+  { "key": "delete", "command": "ultra.delete" },
+  { "key": "ctrl+shift+c", "command": "ultra.copyStatusMessage" }
 ]

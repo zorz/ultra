@@ -4,7 +4,6 @@
  * Coordinates all components and handles the main application lifecycle.
  */
 
-import * as fs from 'fs';
 import { Document } from './core/document.ts';
 import { type Position } from './core/buffer.ts';
 import { clonePosition, hasSelection, getSelectionRange } from './core/cursor.ts';
@@ -114,19 +113,15 @@ export class App {
     renderer.terminal.on('key', async (key: string, matches: unknown, data?: { code?: string; shift?: boolean; ctrl?: boolean; meta?: boolean; alt?: boolean }) => {
       if (!this.isRunning) return;
 
-      // DEBUG: Log key events to file
-      const debugInfo = `key="${key}" data=${JSON.stringify(data)}\n`;
-      fs.appendFileSync('/Users/keith/Development/ultra-editor/keys.log', debugInfo);
-
       // Parse the key
       const parsed = keymap.parseTerminalKey(key, data);
-      
-      // DEBUG: Log parsed key
-      const parsedInfo = `parsed=${JSON.stringify(parsed)} keyStr=${keymap.keyToString(parsed)}\n\n`;
-      fs.appendFileSync('/Users/keith/Development/ultra-editor/keys.log', parsedInfo);
+      const keyStr = keymap.keyToString(parsed);
 
       // Check for command binding
       const commandId = keymap.getCommand(parsed);
+      
+      // DEBUG: Show in status bar what key was pressed (include raw key name)
+      statusBar.setMessage(`Raw: ${key} | Parsed: ${keyStr} -> ${commandId || 'none'}`, 2000);
       
       if (commandId) {
         await commandRegistry.execute(commandId);
@@ -137,8 +132,10 @@ export class App {
       // Handle character input
       if (this.shouldInsertKey(parsed)) {
         this.insertCharacter(key);
-        renderer.scheduleRender();
       }
+      
+      // Always render to show debug message
+      renderer.scheduleRender();
     });
   }
 
@@ -763,6 +760,17 @@ export class App {
           }
         }
       },
+      {
+        id: 'ultra.copyStatusMessage',
+        title: 'Copy Status Message to Clipboard',
+        handler: async () => {
+          const msg = statusBar.getMessage();
+          if (msg) {
+            await this.copyToClipboard(msg);
+            statusBar.setMessage('Copied to clipboard!', 1500);
+          }
+        }
+      },
 
       // View commands
       {
@@ -885,6 +893,19 @@ export class App {
           const doc = this.getActiveDocument();
           if (doc) {
             doc.selectNextOccurrence();
+            this.editorPane.ensureCursorVisible();
+            this.updateStatusBar();
+          }
+        }
+      },
+      {
+        id: 'ultra.selectAllOccurrences',
+        title: 'Select All Occurrences',
+        category: 'Selection',
+        handler: () => {
+          const doc = this.getActiveDocument();
+          if (doc) {
+            doc.selectAllOccurrences();
             this.editorPane.ensureCursorVisible();
             this.updateStatusBar();
           }

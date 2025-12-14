@@ -23,7 +23,7 @@ export class Keymap {
   private bindings: Map<string, KeyBinding> = new Map();
   private pendingChord: string | null = null;
   private chordTimeout: ReturnType<typeof setTimeout> | null = null;
-  private chordTimeoutMs: number = 1000;
+  private chordTimeoutMs: number = 500;  // Half second for chord timeout
 
   /**
    * Load keybindings from config
@@ -66,22 +66,25 @@ export class Keymap {
       if (binding) {
         return binding.command;
       }
-      return null;
+      // Chord didn't match - fall through to check if this key has its own binding
     }
 
     // Check for chord start
     const chordPrefix = keyStr + ' ';
     const hasChord = Array.from(this.bindings.keys()).some(k => k.startsWith(chordPrefix));
     
+    // Check for direct binding
+    const directBinding = this.bindings.get(keyStr);
+    
     if (hasChord) {
+      // Start chord window, but execute direct binding immediately if it exists
       this.pendingChord = keyStr;
       this.chordTimeout = setTimeout(() => this.clearChord(), this.chordTimeoutMs);
-      return null;  // Wait for next key
+      // Return direct binding - it executes now, but chord window stays open
+      return directBinding?.command || null;
     }
 
-    // Check for direct binding
-    const binding = this.bindings.get(keyStr);
-    return binding?.command || null;
+    return directBinding?.command || null;
   }
 
   /**

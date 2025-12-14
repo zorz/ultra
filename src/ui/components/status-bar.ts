@@ -24,6 +24,8 @@ export class StatusBar {
     cursorPosition: { line: 0, column: 0 },
     cursorCount: 1
   };
+  private message: string | null = null;
+  private messageTimeout: ReturnType<typeof setTimeout> | null = null;
 
   /**
    * Set the status bar rect
@@ -37,6 +39,27 @@ export class StatusBar {
    */
   setState(state: Partial<StatusBarState>): void {
     this.state = { ...this.state, ...state };
+  }
+
+  /**
+   * Set a temporary message to display
+   */
+  setMessage(message: string, duration: number = 3000): void {
+    this.message = message;
+    if (this.messageTimeout) {
+      clearTimeout(this.messageTimeout);
+    }
+    this.messageTimeout = setTimeout(() => {
+      this.message = null;
+      this.messageTimeout = null;
+    }, duration);
+  }
+
+  /**
+   * Get current message (for copying to clipboard)
+   */
+  getMessage(): string | null {
+    return this.message;
   }
 
   /**
@@ -55,6 +78,14 @@ export class StatusBar {
 
     // Build entire status bar as one string
     let output = moveTo(x, y) + bg(236) + ' '.repeat(width) + moveTo(x, y) + bg(236);
+
+    // If there's a message, show it prominently
+    if (this.message) {
+      output += fg(226) + ' ' + this.message;
+      output += reset;
+      ctx.buffer(output);
+      return;
+    }
 
     // Left side
     if (this.state.document) {
