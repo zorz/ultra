@@ -74,45 +74,30 @@ export class CommandPalette implements MouseHandler {
   render(ctx: RenderContext): void {
     if (!this.isVisible) return;
 
-    // Background/border
-    for (let y = 0; y < this.height; y++) {
-      ctx.term.moveTo(this.x, this.y + y);
-      ctx.term.bgColor256(237);
-      ctx.term(' '.repeat(this.width));
-    }
+    // Background
+    ctx.fill(this.x, this.y, this.width, this.height, ' ', undefined, '#3a3a3a');
 
     // Input field
-    ctx.term.moveTo(this.x + 1, this.y);
-    ctx.term.bgColor256(239);
-    ctx.term.color256(252);
     const inputText = ('> ' + this.query).padEnd(this.width - 2);
-    ctx.term(inputText);
+    ctx.drawStyled(this.x + 1, this.y, inputText, '#d0d0d0', '#4e4e4e');
 
     // Results
     const maxResults = this.height - 2;
     for (let i = 0; i < maxResults; i++) {
       const cmd = this.filteredCommands[i];
-      ctx.term.moveTo(this.x + 1, this.y + 1 + i);
       
       if (!cmd) {
-        ctx.term.bgColor256(237);
-        ctx.term(' '.repeat(this.width - 2));
+        ctx.drawStyled(this.x + 1, this.y + 1 + i, ' '.repeat(this.width - 2), undefined, '#3a3a3a');
         continue;
       }
 
-      if (i === this.selectedIndex) {
-        ctx.term.bgColor256(240);
-        ctx.term.color256(255);
-      } else {
-        ctx.term.bgColor256(237);
-        ctx.term.color256(250);
-      }
-
       const title = cmd.title.slice(0, this.width - 4);
-      ctx.term((' ' + title).padEnd(this.width - 2));
+      if (i === this.selectedIndex) {
+        ctx.drawStyled(this.x + 1, this.y + 1 + i, (' ' + title).padEnd(this.width - 2), '#ffffff', '#585858');
+      } else {
+        ctx.drawStyled(this.x + 1, this.y + 1 + i, (' ' + title).padEnd(this.width - 2), '#bcbcbc', '#3a3a3a');
+      }
     }
-
-    ctx.term.styleReset();
   }
 
   containsPoint(x: number, y: number): boolean {

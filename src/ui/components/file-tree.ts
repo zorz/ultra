@@ -33,18 +33,10 @@ export class FileTree implements MouseHandler {
 
   render(ctx: RenderContext): void {
     // Fill with background
-    for (let y = 0; y < this.rect.height; y++) {
-      ctx.term.moveTo(this.rect.x, this.rect.y + y);
-      ctx.term.bgColor256(235);
-      ctx.term(' '.repeat(this.rect.width));
-    }
+    ctx.fill(this.rect.x, this.rect.y, this.rect.width, this.rect.height, ' ', undefined, '#262626');
 
     // Title
-    ctx.term.moveTo(this.rect.x + 1, this.rect.y);
-    ctx.term.color256(245);
-    ctx.term('EXPLORER');
-
-    ctx.term.styleReset();
+    ctx.drawStyled(this.rect.x + 1, this.rect.y, 'EXPLORER', '#8a8a8a', '#262626');
   }
 
   containsPoint(x: number, y: number): boolean {

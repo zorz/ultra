@@ -197,7 +197,7 @@ export class Keymap {
 
     // Check for macOS Option+key character first
     if (macOSOptionChars[keyName]) {
-      const mapped = macOSOptionChars[keyName];
+      const mapped = macOSOptionChars[keyName]!;
       return {
         ctrl: false,
         shift: data?.shift || false,

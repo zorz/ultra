@@ -22,25 +22,13 @@ export class TerminalPane implements MouseHandler {
 
   render(ctx: RenderContext): void {
     // Background
-    for (let y = 0; y < this.rect.height; y++) {
-      ctx.term.moveTo(this.rect.x, this.rect.y + y);
-      ctx.term.bgColor256(233);  // Very dark
-      ctx.term(' '.repeat(this.rect.width));
-    }
+    ctx.fill(this.rect.x, this.rect.y, this.rect.width, this.rect.height, ' ', undefined, '#121212');
 
     // Border/title
-    ctx.term.moveTo(this.rect.x, this.rect.y);
-    ctx.term.bgColor256(236);
-    ctx.term.color256(245);
-    ctx.term(' TERMINAL'.padEnd(this.rect.width));
+    ctx.drawStyled(this.rect.x, this.rect.y, ' TERMINAL'.padEnd(this.rect.width), '#8a8a8a', '#303030');
 
     // Placeholder content
-    ctx.term.moveTo(this.rect.x + 2, this.rect.y + 2);
-    ctx.term.bgColor256(233);
-    ctx.term.color256(245);
-    ctx.term('Terminal coming soon...');
-
-    ctx.term.styleReset();
+    ctx.drawStyled(this.rect.x + 2, this.rect.y + 2, 'Terminal coming soon...', '#8a8a8a', '#121212');
   }
 
   containsPoint(x: number, y: number): boolean {

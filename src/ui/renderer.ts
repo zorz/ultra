@@ -1,34 +1,46 @@
 /**
- * Main Terminal-Kit Renderer
+ * Main Renderer
  * 
  * Handles terminal initialization, screen management, and rendering loop.
+ * Uses raw ANSI escape codes instead of terminal-kit.
  */
 
-import termkit from '../terminal-shim.ts';
-
-const { terminal: term } = termkit;
-
-// Type for terminal instance
-type Terminal = typeof term;
+import { terminal, type KeyEvent, type MouseEventData } from '../terminal/index.ts';
+import { CURSOR, STYLE, fgHex, bgHex } from '../terminal/ansi.ts';
 
 export interface ScreenBuffer {
   width: number;
   height: number;
 }
 
+interface StyleOpts {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  inverse?: boolean;
+  dim?: boolean;
+}
+
 export interface RenderContext {
-  term: Terminal;
   width: number;
   height: number;
-  buffer: (str: string) => void;  // Buffer output for atomic write
+  buffer: (str: string) => void;
+  moveTo: (row: number, col: number) => void;
   draw: (x: number, y: number, text: string) => void;
-  drawStyled: (x: number, y: number, text: string, fg?: string, bg?: string) => void;
+  drawStyled: (x: number, y: number, text: string, fg?: string, bg?: string, opts?: StyleOpts) => void;
   fill: (x: number, y: number, width: number, height: number, char: string, fg?: string, bg?: string) => void;
+  setFg: (hex: string) => void;
+  setBg: (hex: string) => void;
+  resetStyle: () => void;
+  bold: () => void;
+  italic: () => void;
+  underline: () => void;
+  inverse: () => void;
+  dim: () => void;
   clear: () => void;
 }
 
 export class Renderer {
-  private term: Terminal;
   private _width: number = 0;
   private _height: number = 0;
   private isInitialized: boolean = false;
@@ -36,11 +48,9 @@ export class Renderer {
   private needsRender: boolean = true;
   private renderScheduled: boolean = false;
   private cursorVisible: boolean = false;
-  private outputBuffer: string = '';  // Collect all output for atomic write
+  private outputBuffer: string = '';
 
-  constructor() {
-    this.term = term;
-  }
+  constructor() {}
 
   /**
    * Initialize the terminal
@@ -48,19 +58,18 @@ export class Renderer {
   async init(): Promise<void> {
     if (this.isInitialized) return;
 
-    // Get terminal size
-    this._width = this.term.width;
-    this._height = this.term.height;
+    // Initialize terminal
+    terminal.init();
 
-    // Setup terminal
-    this.term.fullscreen(true);
-    this.hideCursor();
-    
-    // Enable mouse tracking with motion
-    this.term.grabInput({ mouse: 'motion' });
+    // Get terminal size
+    this._width = terminal.width;
+    this._height = terminal.height;
+
+    // Enable mouse tracking
+    terminal.enableMouse();
 
     // Handle resize
-    this.term.on('resize', (width: number, height: number) => {
+    terminal.onResize((width, height) => {
       this._width = width;
       this._height = height;
       this.scheduleRender();
@@ -73,11 +82,7 @@ export class Renderer {
    * Cleanup and restore terminal
    */
   cleanup(): void {
-    this.term.grabInput(false);
-    this.term.fullscreen(false);
-    // Show cursor using ANSI escape
-    process.stdout.write('\x1b[?25h');
-    this.term.processExit(0);
+    terminal.exit(0);
   }
 
   get width(): number {
@@ -88,8 +93,18 @@ export class Renderer {
     return this._height;
   }
 
-  get terminal(): Terminal {
-    return this.term;
+  /**
+   * Register key event handler
+   */
+  onKey(callback: (event: KeyEvent) => void): () => void {
+    return terminal.onKey(callback);
+  }
+
+  /**
+   * Register mouse event handler
+   */
+  onMouse(callback: (event: MouseEventData) => void): () => void {
+    return terminal.onMouse(callback);
   }
 
   /**
@@ -123,7 +138,7 @@ export class Renderer {
   render(): void {
     this.needsRender = false;
     
-    // Reset output buffer for this frame
+    // Start buffering for this frame
     this.outputBuffer = '';
     
     const ctx = this.createRenderContext();
@@ -151,7 +166,6 @@ export class Renderer {
    */
   private createRenderContext(): RenderContext {
     return {
-      term: this.term,
       width: this._width,
       height: this._height,
       
@@ -159,35 +173,77 @@ export class Renderer {
         this.outputBuffer += str;
       },
       
-      draw: (x: number, y: number, text: string) => {
-        if (y < 1 || y > this._height || x < 1 || x > this._width) return;
-        this.term.moveTo(x, y, text);
+      moveTo: (row: number, col: number) => {
+        this.outputBuffer += CURSOR.moveTo(row, col);
       },
       
-      drawStyled: (x: number, y: number, text: string, fg?: string, bg?: string) => {
+      draw: (x: number, y: number, text: string) => {
         if (y < 1 || y > this._height || x < 1 || x > this._width) return;
-        this.term.moveTo(x, y);
-        if (fg) this.term.color(fg as Parameters<Terminal['color']>[0]);
-        if (bg) this.term.bgColor(bg as Parameters<Terminal['bgColor']>[0]);
-        this.term(text);
-        this.term.styleReset();
+        this.outputBuffer += CURSOR.moveTo(y, x) + text;
+      },
+      
+      drawStyled: (x: number, y: number, text: string, fg?: string, bg?: string, opts?: StyleOpts) => {
+        if (y < 1 || y > this._height || x < 1 || x > this._width) return;
+        
+        let codes = CURSOR.moveTo(y, x);
+        if (opts?.bold) codes += STYLE.bold;
+        if (opts?.italic) codes += STYLE.italic;
+        if (opts?.underline) codes += STYLE.underline;
+        if (opts?.inverse) codes += STYLE.inverse;
+        if (opts?.dim) codes += STYLE.dim;
+        if (fg) codes += fgHex(fg);
+        if (bg) codes += bgHex(bg);
+        
+        this.outputBuffer += codes + text + STYLE.reset;
       },
       
       fill: (x: number, y: number, width: number, height: number, char: string, fg?: string, bg?: string) => {
         const line = char.repeat(width);
+        let style = '';
+        if (fg) style += fgHex(fg);
+        if (bg) style += bgHex(bg);
+        
         for (let row = 0; row < height; row++) {
           const targetY = y + row;
           if (targetY < 1 || targetY > this._height) continue;
-          this.term.moveTo(x, targetY);
-          if (fg) this.term.color(fg as Parameters<Terminal['color']>[0]);
-          if (bg) this.term.bgColor(bg as Parameters<Terminal['bgColor']>[0]);
-          this.term(line);
-          this.term.styleReset();
+          this.outputBuffer += CURSOR.moveTo(targetY, x) + style + line + STYLE.reset;
         }
+      },
+
+      setFg: (hex: string) => {
+        this.outputBuffer += fgHex(hex);
+      },
+
+      setBg: (hex: string) => {
+        this.outputBuffer += bgHex(hex);
+      },
+
+      resetStyle: () => {
+        this.outputBuffer += STYLE.reset;
+      },
+
+      bold: () => {
+        this.outputBuffer += STYLE.bold;
+      },
+
+      italic: () => {
+        this.outputBuffer += STYLE.italic;
+      },
+
+      underline: () => {
+        this.outputBuffer += STYLE.underline;
+      },
+
+      inverse: () => {
+        this.outputBuffer += STYLE.inverse;
+      },
+
+      dim: () => {
+        this.outputBuffer += STYLE.dim;
       },
       
       clear: () => {
-        this.term.clear();
+        this.outputBuffer += '\x1b[2J\x1b[1;1H';
       }
     };
   }
@@ -196,16 +252,15 @@ export class Renderer {
    * Position cursor for text input
    */
   positionCursor(x: number, y: number): void {
-    this.term.moveTo(x, y);
+    terminal.moveTo(y, x);
   }
 
   /**
-   * Hide cursor (minimize ANSI output by tracking state)
+   * Hide cursor
    */
   hideCursor(): void {
     if (this.cursorVisible) {
-      // Hide cursor using ANSI escape
-      process.stdout.write('\x1b[?25l');
+      this.outputBuffer += CURSOR.hide;
       this.cursorVisible = false;
     }
   }
@@ -215,7 +270,7 @@ export class Renderer {
    */
   showCursor(): void {
     if (!this.cursorVisible) {
-      process.stdout.write('\x1b[?25h');
+      this.outputBuffer += CURSOR.show;
       this.cursorVisible = true;
     }
   }
@@ -224,14 +279,7 @@ export class Renderer {
    * Set cursor shape
    */
   setCursorShape(shape: 'block' | 'underline' | 'bar'): void {
-    // Terminal-kit doesn't directly support cursor shape, 
-    // but we can use ANSI escape codes
-    const shapes: Record<string, string> = {
-      'block': '\x1b[2 q',
-      'underline': '\x1b[4 q',
-      'bar': '\x1b[6 q'
-    };
-    process.stdout.write(shapes[shape] || shapes['block']!);
+    terminal.setCursorShape(shape);
   }
 }
 

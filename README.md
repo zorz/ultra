@@ -219,4 +219,4 @@ Place VS Code-compatible theme JSON files in `~/.config/ultra/themes/`.
 
 ## License
 
-MIT
+Copyright 2025, Zorz LLC, All Rights Reserved

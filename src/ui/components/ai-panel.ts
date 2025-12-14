@@ -7,6 +7,7 @@
 import type { RenderContext } from '../renderer.ts';
 import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
+import { FG, BG, CURSOR, STYLE } from '../../terminal/ansi.ts';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -38,32 +39,17 @@ export class AIPanel implements MouseHandler {
 
   render(ctx: RenderContext): void {
     // Background
-    for (let y = 0; y < this.rect.height; y++) {
-      ctx.term.moveTo(this.rect.x, this.rect.y + y);
-      ctx.term.bgColor256(235);
-      ctx.term(' '.repeat(this.rect.width));
-    }
+    ctx.fill(this.rect.x, this.rect.y, this.rect.width, this.rect.height, ' ', undefined, '#262626');
 
     // Title bar
-    ctx.term.moveTo(this.rect.x, this.rect.y);
-    ctx.term.bgColor256(237);
-    ctx.term.color256(252);
-    ctx.term(' AI ASSISTANT'.padEnd(this.rect.width));
+    ctx.drawStyled(this.rect.x, this.rect.y, ' AI ASSISTANT'.padEnd(this.rect.width), '#d0d0d0', '#3a3a3a');
 
     // Placeholder content
-    ctx.term.moveTo(this.rect.x + 2, this.rect.y + 2);
-    ctx.term.bgColor256(235);
-    ctx.term.color256(245);
-    ctx.term('AI panel coming soon...');
+    ctx.drawStyled(this.rect.x + 2, this.rect.y + 2, 'AI panel coming soon...', '#8a8a8a', '#262626');
 
     // Input area at bottom
-    ctx.term.moveTo(this.rect.x, this.rect.y + this.rect.height - 1);
-    ctx.term.bgColor256(238);
-    ctx.term.color256(250);
     const inputDisplay = ('> ' + this.inputText).slice(0, this.rect.width);
-    ctx.term(inputDisplay.padEnd(this.rect.width));
-
-    ctx.term.styleReset();
+    ctx.drawStyled(this.rect.x, this.rect.y + this.rect.height - 1, inputDisplay.padEnd(this.rect.width), '#bcbcbc', '#444444');
   }
 
   containsPoint(x: number, y: number): boolean {

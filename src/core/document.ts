@@ -588,7 +588,7 @@ export class Document {
    * Outdent current line or selection
    */
   outdent(): void {
-    for (const cursor of this._cursorManager.cursors) {
+    for (const cursor of this._cursorManager.getMutableCursors()) {
       const line = cursor.position.line;
       const lineContent = this._buffer.getLine(line);
       
@@ -609,11 +609,10 @@ export class Document {
       }
       
       if (removeCount > 0) {
-        const range: Range = {
-          start: { line, column: 0 },
-          end: { line, column: removeCount }
-        };
-        this._buffer.delete(range);
+        this._buffer.deleteRange(
+          { line, column: 0 },
+          { line, column: removeCount }
+        );
         this.markDirty();
         
         // Adjust cursor
@@ -642,7 +641,7 @@ export class Document {
     
     // Find next occurrence after the last cursor
     const content = this._buffer.getContent();
-    const lastCursor = this._cursorManager.cursors[this._cursorManager.cursors.length - 1]!;
+    const lastCursor = this._cursorManager.getMutableCursors()[this._cursorManager.getMutableCursors().length - 1]!;
     const startOffset = this._buffer.positionToOffset(lastCursor.selection?.head || lastCursor.position);
     
     let nextIndex = content.indexOf(selectedText, startOffset);
@@ -652,11 +651,11 @@ export class Document {
     }
     
     // Skip if we found the current selection
-    const firstCursor = this._cursorManager.cursors[0]!;
+    const firstCursor = this._cursorManager.getMutableCursors()[0]!;
     const firstSelectionStart = this._buffer.positionToOffset(
       firstCursor.selection?.anchor || firstCursor.position
     );
-    if (nextIndex === firstSelectionStart && this._cursorManager.cursors.length === 1) {
+    if (nextIndex === firstSelectionStart && this._cursorManager.getMutableCursors().length === 1) {
       // We only have one cursor and found the same word - search again from after it
       nextIndex = content.indexOf(selectedText, startOffset);
       if (nextIndex === -1 || nextIndex === firstSelectionStart) {
@@ -670,7 +669,7 @@ export class Document {
       const nextEnd = this._buffer.offsetToPosition(nextIndex + selectedText.length);
       
       // Check if we already have a cursor at this position
-      const alreadySelected = this._cursorManager.cursors.some(c => 
+      const alreadySelected = this._cursorManager.getMutableCursors().some(c => 
         c.selection &&
         c.selection.anchor.line === nextStart.line &&
         c.selection.anchor.column === nextStart.column
@@ -762,7 +761,7 @@ export class Document {
    * Add cursor above current position
    */
   addCursorAbove(): void {
-    const primaryCursor = this._cursorManager.primaryCursor;
+    const primaryCursor = this._cursorManager.getPrimaryCursor();
     if (primaryCursor.position.line > 0) {
       const newLine = primaryCursor.position.line - 1;
       const newColumn = Math.min(
@@ -777,7 +776,7 @@ export class Document {
    * Add cursor below current position
    */
   addCursorBelow(): void {
-    const primaryCursor = this._cursorManager.primaryCursor;
+    const primaryCursor = this._cursorManager.getPrimaryCursor();
     if (primaryCursor.position.line < this._buffer.lineCount - 1) {
       const newLine = primaryCursor.position.line + 1;
       const newColumn = Math.min(
@@ -792,7 +791,7 @@ export class Document {
    * Split selection into lines (put cursor on each line)
    */
   splitSelectionIntoLines(): void {
-    const primaryCursor = this._cursorManager.primaryCursor;
+    const primaryCursor = this._cursorManager.getPrimaryCursor();
     if (!primaryCursor.selection) return;
     
     const { anchor, head } = primaryCursor.selection;
@@ -835,7 +834,7 @@ export class Document {
       const first = newCursors[0]!;
       this._cursorManager.setPosition(first.position);
       if (first.selection) {
-        this._cursorManager.primaryCursor.selection = first.selection;
+        this._cursorManager.getPrimaryCursor().selection = first.selection;
       }
       
       for (let i = 1; i < newCursors.length; i++) {

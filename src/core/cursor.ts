@@ -106,11 +106,11 @@ export function cloneCursor(cursor: Cursor): Cursor {
 }
 
 export class CursorManager {
-  private cursors: Cursor[];
+  private _cursors: Cursor[];
   private primaryIndex: number = 0;
 
   constructor() {
-    this.cursors = [{
+    this._cursors = [{
       position: { line: 0, column: 0 },
       selection: null,
       desiredColumn: 0
@@ -118,31 +118,38 @@ export class CursorManager {
   }
 
   /**
-   * Get all cursors
+   * Get all cursors (read-only array, but cursor objects can be mutated)
    */
   getCursors(): readonly Cursor[] {
-    return this.cursors;
+    return this._cursors;
+  }
+
+  /**
+   * Get mutable reference to all cursors (for internal operations)
+   */
+  getMutableCursors(): Cursor[] {
+    return this._cursors;
   }
 
   /**
    * Get the primary cursor
    */
   getPrimaryCursor(): Cursor {
-    return this.cursors[this.primaryIndex]!;
+    return this._cursors[this.primaryIndex]!;
   }
 
   /**
    * Get cursor count
    */
   get count(): number {
-    return this.cursors.length;
+    return this._cursors.length;
   }
 
   /**
    * Set cursors to a single position
    */
   setSingle(position: Position): void {
-    this.cursors = [{
+    this._cursors = [{
       position: clonePosition(position),
       selection: null,
       desiredColumn: position.column
@@ -178,10 +185,10 @@ export class CursorManager {
    */
   addCursor(position: Position): void {
     // Check if cursor already exists at this position
-    const exists = this.cursors.some(c => positionsEqual(c.position, position));
+    const exists = this._cursors.some(c => positionsEqual(c.position, position));
     if (exists) return;
 
-    this.cursors.push({
+    this._cursors.push({
       position: clonePosition(position),
       selection: null,
       desiredColumn: position.column
@@ -195,7 +202,7 @@ export class CursorManager {
    * Add cursor with selection
    */
   addCursorWithSelection(anchor: Position, head: Position): void {
-    this.cursors.push({
+    this._cursors.push({
       position: clonePosition(head),
       selection: {
         anchor: clonePosition(anchor),
@@ -212,7 +219,7 @@ export class CursorManager {
    */
   clearSecondary(): void {
     const primary = this.getPrimaryCursor();
-    this.cursors = [cloneCursor(primary)];
+    this._cursors = [cloneCursor(primary)];
     this.primaryIndex = 0;
   }
 
@@ -220,7 +227,7 @@ export class CursorManager {
    * Clear all selections
    */
   clearSelections(): void {
-    for (const cursor of this.cursors) {
+    for (const cursor of this._cursors) {
       cursor.selection = null;
     }
   }
@@ -232,7 +239,7 @@ export class CursorManager {
     mover: (cursor: Cursor) => Position,
     selecting: boolean = false
   ): void {
-    for (const cursor of this.cursors) {
+    for (const cursor of this._cursors) {
       const newPosition = mover(cursor);
       
       if (selecting) {
@@ -258,7 +265,7 @@ export class CursorManager {
    * Update desired column for all cursors (call after horizontal movement)
    */
   updateDesiredColumn(): void {
-    for (const cursor of this.cursors) {
+    for (const cursor of this._cursors) {
       cursor.desiredColumn = cursor.position.column;
     }
   }
@@ -268,7 +275,7 @@ export class CursorManager {
    */
   setSelections(selections: Selection[]): void {
     // Clear all cursors and create new ones from selections
-    this.cursors = selections.map(sel => ({
+    this._cursors = selections.map(sel => ({
       position: clonePosition(sel.head),
       selection: {
         anchor: clonePosition(sel.anchor),
@@ -277,8 +284,8 @@ export class CursorManager {
       desiredColumn: sel.head.column
     }));
     
-    if (this.cursors.length === 0) {
-      this.cursors = [{
+    if (this._cursors.length === 0) {
+      this._cursors = [{
         position: { line: 0, column: 0 },
         selection: null,
         desiredColumn: 0
@@ -293,7 +300,7 @@ export class CursorManager {
    * Select all with a single cursor
    */
   selectAll(endPosition: Position): void {
-    this.cursors = [{
+    this._cursors = [{
       position: clonePosition(endPosition),
       selection: {
         anchor: { line: 0, column: 0 },
@@ -308,7 +315,7 @@ export class CursorManager {
    * Get all selections (for operations that need ranges)
    */
   getSelections(): Range[] {
-    return this.cursors.map(cursor => {
+    return this._cursors.map(cursor => {
       if (cursor.selection && hasSelection(cursor.selection)) {
         return getSelectionRange(cursor.selection);
       }
@@ -324,7 +331,7 @@ export class CursorManager {
    * Get selected text ranges (non-empty selections only)
    */
   getSelectedRanges(): Range[] {
-    return this.cursors
+    return this._cursors
       .filter(c => c.selection && hasSelection(c.selection))
       .map(c => getSelectionRange(c.selection!));
   }
@@ -333,7 +340,7 @@ export class CursorManager {
    * Sort cursors by position (top to bottom, left to right)
    */
   private sortCursors(): void {
-    this.cursors.sort((a, b) => comparePositions(a.position, b.position));
+    this._cursors.sort((a, b) => comparePositions(a.position, b.position));
     this.primaryIndex = 0;
   }
 
@@ -341,13 +348,13 @@ export class CursorManager {
    * Merge cursors that have overlapping selections or same position
    */
   private mergeOverlappingCursors(): void {
-    if (this.cursors.length <= 1) return;
+    if (this._cursors.length <= 1) return;
     
     this.sortCursors();
     
     const merged: Cursor[] = [];
     
-    for (const cursor of this.cursors) {
+    for (const cursor of this._cursors) {
       const last = merged[merged.length - 1];
       
       if (!last) {
@@ -391,22 +398,22 @@ export class CursorManager {
       merged.push(cursor);
     }
     
-    this.cursors = merged;
-    this.primaryIndex = Math.min(this.primaryIndex, this.cursors.length - 1);
+    this._cursors = merged;
+    this.primaryIndex = Math.min(this.primaryIndex, this._cursors.length - 1);
   }
 
   /**
    * Create a snapshot for undo/redo
    */
   getSnapshot(): Cursor[] {
-    return this.cursors.map(cloneCursor);
+    return this._cursors.map(cloneCursor);
   }
 
   /**
    * Restore from snapshot
    */
   restoreSnapshot(snapshot: Cursor[]): void {
-    this.cursors = snapshot.map(cloneCursor);
+    this._cursors = snapshot.map(cloneCursor);
     this.primaryIndex = 0;
   }
 }

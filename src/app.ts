@@ -18,6 +18,7 @@ import { keymap, type ParsedKey } from './input/keymap.ts';
 import { keybindingsLoader } from './input/keybindings-loader.ts';
 import { settings } from './config/settings.ts';
 import { settingsLoader } from './config/settings-loader.ts';
+import { type KeyEvent, type MouseEventData } from './terminal/index.ts';
 
 interface OpenDocument {
   id: string;
@@ -110,18 +111,26 @@ export class App {
    * Setup keyboard event handler
    */
   private setupKeyboardHandler(): void {
-    renderer.terminal.on('key', async (key: string, matches: unknown, data?: { code?: string; shift?: boolean; ctrl?: boolean; meta?: boolean; alt?: boolean }) => {
+    renderer.onKey(async (event: KeyEvent) => {
       if (!this.isRunning) return;
 
-      // Parse the key
-      const parsed = keymap.parseTerminalKey(key, data);
+      // Convert our KeyEvent to ParsedKey format
+      const parsed: ParsedKey = {
+        ctrl: event.ctrl,
+        alt: event.alt,
+        shift: event.shift,
+        meta: event.meta,
+        key: event.key.toLowerCase()
+      };
+
+      // Check for macOS Option+key characters (our input handler already sets alt)
       const keyStr = keymap.keyToString(parsed);
 
       // Check for command binding
       const commandId = keymap.getCommand(parsed);
       
-      // DEBUG: Show in status bar what key was pressed (include raw key name)
-      statusBar.setMessage(`Raw: ${key} | Parsed: ${keyStr} -> ${commandId || 'none'}`, 2000);
+      // DEBUG: Show in status bar what key was pressed
+      statusBar.setMessage(`Key: ${event.key} | Parsed: ${keyStr} -> ${commandId || 'none'}`, 2000);
       
       if (commandId) {
         await commandRegistry.execute(commandId);
@@ -130,8 +139,8 @@ export class App {
       }
 
       // Handle character input
-      if (this.shouldInsertKey(parsed)) {
-        this.insertCharacter(key);
+      if (this.shouldInsertKey(event)) {
+        this.insertCharacter(event.char || event.key);
       }
       
       // Always render to show debug message
@@ -142,12 +151,13 @@ export class App {
   /**
    * Check if a key should be inserted as character
    */
-  private shouldInsertKey(parsed: ParsedKey): boolean {
+  private shouldInsertKey(event: KeyEvent): boolean {
     // Don't insert control characters
-    if (parsed.ctrl || parsed.meta) return false;
+    if (event.ctrl || event.meta) return false;
     
-    // Only insert printable characters
-    if (parsed.key.length === 1) return true;
+    // Only insert printable characters (have a char property or single key)
+    if (event.char && event.char.length === 1) return true;
+    if (event.key.length === 1 && !event.alt) return true;
     
     return false;
   }
@@ -171,25 +181,18 @@ export class App {
     let lastRenderTime = 0;
     let lastEventX = -1;
     let lastEventY = -1;
-    let lastEventName = '';
+    let lastEventType = '';
     const MOUSE_THROTTLE_MS = 16; // ~60fps max for continuous mouse events
     
-    renderer.terminal.on('mouse', (name: string, data: { x: number; y: number; shift?: boolean; ctrl?: boolean; meta?: boolean; alt?: boolean }) => {
+    renderer.onMouse((event: MouseEventData) => {
       if (!this.isRunning) return;
-
-      // Ignore pure motion events - only process when dragging or button events
-      // MOUSE_MOTION is sent when no button is pressed
-      // MOUSE_DRAG is sent when a button is held during movement
-      if (name === 'MOUSE_MOTION') {
-        return;
-      }
 
       const now = Date.now();
       
-      // For continuous events (drag), throttle and skip if position hasn't changed
-      if (name === 'MOUSE_DRAG') {
+      // For continuous events (move), throttle and skip if position hasn't changed
+      if (event.type === 'move') {
         // Skip if position is the same as last event
-        if (data.x === lastEventX && data.y === lastEventY && name === lastEventName) {
+        if (event.x === lastEventX && event.y === lastEventY && event.type === lastEventType) {
           return;
         }
         // Throttle drag events
@@ -199,22 +202,32 @@ export class App {
       }
       
       // Skip duplicate button press events at same position (click & hold artifacts)
-      if (name === 'MOUSE_LEFT_BUTTON_PRESSED') {
-        if (data.x === lastEventX && data.y === lastEventY && name === lastEventName &&
+      if (event.type === 'press') {
+        if (event.x === lastEventX && event.y === lastEventY && event.type === lastEventType &&
             now - lastRenderTime < 100) {
           return;
         }
       }
       
       lastRenderTime = now;
-      lastEventX = data.x;
-      lastEventY = data.y;
-      lastEventName = name;
+      lastEventX = event.x;
+      lastEventY = event.y;
+      lastEventType = event.type;
 
-      mouseManager.processEvent(name, data);
+      // Convert to the format expected by mouseManager
+      const mouseEventName = this.convertMouseEventType(event);
+      
+      mouseManager.processEvent(mouseEventName, {
+        x: event.x,
+        y: event.y,
+        shift: event.shift,
+        ctrl: event.ctrl,
+        alt: event.alt,
+        meta: false
+      });
       
       // Only render for meaningful events
-      if (name !== 'MOUSE_OTHER_BUTTON_PRESSED' && name !== 'MOUSE_OTHER_BUTTON_RELEASED') {
+      if (event.type !== 'wheel') {
         renderer.scheduleRender();
       }
     });
@@ -222,6 +235,34 @@ export class App {
     // Register editor pane as mouse handler
     mouseManager.registerHandler(this.editorPane);
     mouseManager.registerHandler(tabBar);
+  }
+  
+  /**
+   * Convert mouse event type to terminal-kit style name for mouseManager
+   */
+  private convertMouseEventType(event: MouseEventData): string {
+    const buttonMap: Record<string, string> = {
+      'left': 'LEFT',
+      'middle': 'MIDDLE', 
+      'right': 'RIGHT'
+    };
+    
+    switch (event.type) {
+      case 'press':
+        return `MOUSE_${buttonMap[event.button] || 'LEFT'}_BUTTON_PRESSED`;
+      case 'release':
+        return `MOUSE_${buttonMap[event.button] || 'LEFT'}_BUTTON_RELEASED`;
+      case 'move':
+        // Check if a button is pressed (drag) vs pure motion
+        if (event.button !== 'none') {
+          return 'MOUSE_DRAG';
+        }
+        return 'MOUSE_MOTION';
+      case 'wheel':
+        return event.button === 'wheelUp' ? 'MOUSE_WHEEL_UP' : 'MOUSE_WHEEL_DOWN';
+      default:
+        return 'MOUSE_MOTION';
+    }
   }
 
   /**
@@ -766,7 +807,7 @@ export class App {
         handler: async () => {
           const msg = statusBar.getMessage();
           if (msg) {
-            await this.copyToClipboard(msg);
+            await this.copyToSystemClipboard(msg);
             statusBar.setMessage('Copied to clipboard!', 1500);
           }
         }
