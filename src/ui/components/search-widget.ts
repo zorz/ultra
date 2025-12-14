@@ -198,13 +198,19 @@ export class SearchWidget implements MouseHandler {
       return true;
     }
 
-    // Enter - find next (or replace if in replace field)
-    if (key === 'RETURN') {
-      if (this.state.focusedField === 'replace' && shift) {
+    // Enter key behavior
+    if (key === 'ENTER' || key === 'RETURN') {
+      if (ctrl && shift) {
+        // Ctrl+Shift+Enter: Replace all
+        this.replaceAll();
+      } else if (ctrl || (this.state.focusedField === 'replace' && !shift)) {
+        // Ctrl+Enter OR Enter in replace field: Replace current and find next
         this.replaceCurrent();
       } else if (shift) {
+        // Shift+Enter: Find previous
         this.findPrevious();
       } else {
+        // Enter: Find next
         this.findNext();
       }
       return true;
@@ -231,20 +237,8 @@ export class SearchWidget implements MouseHandler {
     }
 
     // Alt+R - toggle regex
-    if (alt && key === 'r') {
+    if (alt && key === 'R') {
       this.toggleRegex();
-      return true;
-    }
-
-    // Ctrl+Shift+1 or Alt+Enter - replace current
-    if ((ctrl && shift && key === '1') || (alt && key === 'RETURN')) {
-      this.replaceCurrent();
-      return true;
-    }
-
-    // Ctrl+Alt+Enter - replace all
-    if (ctrl && alt && key === 'RETURN') {
-      this.replaceAll();
       return true;
     }
 
@@ -333,18 +327,18 @@ export class SearchWidget implements MouseHandler {
       return true;
     }
 
-    // Ctrl+V - paste (handled by normal input)
-    // Regular character input
-    if (key.length === 1 && !ctrl && !alt) {
+    // Regular character input - use event.char for actual character (preserves case)
+    const char = (event as any).char;
+    if (char && char.length === 1 && !ctrl && !alt) {
       if (this.state.focusedField === 'search') {
         this.state.searchQuery = 
           this.state.searchQuery.slice(0, this.state.cursorPosition) +
-          key +
+          char +
           this.state.searchQuery.slice(this.state.cursorPosition);
       } else {
         this.state.replaceQuery = 
           this.state.replaceQuery.slice(0, this.state.cursorPosition) +
-          key +
+          char +
           this.state.replaceQuery.slice(this.state.cursorPosition);
       }
       this.state.cursorPosition++;
@@ -352,7 +346,8 @@ export class SearchWidget implements MouseHandler {
       return true;
     }
 
-    return false;
+    // Consume all other keys to prevent them from affecting the editor
+    return true;
   }
 
   /**
@@ -539,10 +534,10 @@ export class SearchWidget implements MouseHandler {
       }
       col += inputWidth + 1;
       
-      // Replace buttons
-      ctx.drawStyled(col, replaceY, '⮕', '#888888', bgColor);  // Replace current
-      col += 2;
-      ctx.drawStyled(col, replaceY, '⮕⮕', '#888888', bgColor);  // Replace all
+      // Replace buttons with clearer labels
+      ctx.drawStyled(col, replaceY, '[⏎]', '#888888', bgColor);  // Replace current (Enter)
+      col += 4;
+      ctx.drawStyled(col, replaceY, '[All]', '#888888', bgColor);  // Replace all (Ctrl+Shift+Enter)
     }
   }
 
@@ -622,11 +617,13 @@ export class SearchWidget implements MouseHandler {
       // Replace row buttons
       if (this.state.mode === 'replace' && relY === 1) {
         const replaceButtonX = inputStartX + inputWidth + 1;
-        if (relX >= replaceButtonX && relX < replaceButtonX + 1) {
+        // [⏎] button (4 chars wide)
+        if (relX >= replaceButtonX && relX < replaceButtonX + 4) {
           this.replaceCurrent();
           return true;
         }
-        if (relX >= replaceButtonX + 2 && relX < replaceButtonX + 4) {
+        // [All] button (5 chars wide)
+        if (relX >= replaceButtonX + 4 && relX < replaceButtonX + 9) {
           this.replaceAll();
           return true;
         }

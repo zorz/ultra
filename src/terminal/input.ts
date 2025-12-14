@@ -496,8 +496,9 @@ export class InputHandler {
    */
   private parseControlChar(code: number): KeyEvent | null {
     switch (code) {
-      case 8:  // Ctrl+H or Backspace
-        return { key: 'BACKSPACE', ctrl: false, alt: false, shift: false, meta: false };
+      case 8:  // Ctrl+H (historically same as backspace, but we treat as Ctrl+H)
+        // Real backspace usually comes as DEL (127) or escape sequence
+        return { key: 'H', ctrl: true, alt: false, shift: false, meta: false };
       case 9:  // Tab
         return { key: 'TAB', ctrl: false, alt: false, shift: false, meta: false };
       case 10: // Line feed (Enter on Unix)
