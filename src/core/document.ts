@@ -8,6 +8,14 @@
 import { Buffer, type Position, type Range } from './buffer.ts';
 import { CursorManager, type Cursor, type Selection, clonePosition } from './cursor.ts';
 import { UndoManager, type EditOperation } from './undo.ts';
+import { 
+  calculateNewLineIndent, 
+  shouldDedentOnChar, 
+  findMatchingBracketIndent,
+  getLeadingWhitespace,
+  type IndentOptions 
+} from './auto-indent.ts';
+import { settings } from '../config/settings.ts';
 
 export interface DocumentState {
   filePath: string | null;
@@ -331,10 +339,101 @@ export class Document {
   }
 
   /**
-   * Insert a newline
+   * Insert a newline with smart indentation
    */
   newline(): void {
-    this.insert('\n');
+    const autoIndent = settings.get('editor.autoIndent');
+    const tabSize = settings.get('editor.tabSize');
+    const insertSpaces = settings.get('editor.insertSpaces');
+    
+    // If auto-indent is disabled, just insert newline
+    if (autoIndent === 'none') {
+      this.insert('\n');
+      return;
+    }
+    
+    // Get context for smart indentation
+    const cursor = this.primaryCursor;
+    const currentLine = cursor.position.line;
+    const currentColumn = cursor.position.column;
+    const lineContent = this.getLine(currentLine);
+    
+    // Get character before and after cursor
+    const charBefore = currentColumn > 0 ? lineContent[currentColumn - 1] : undefined;
+    const charAfter = currentColumn < lineContent.length ? lineContent[currentColumn] : undefined;
+    
+    // Calculate indentation
+    const indentOptions: IndentOptions = { tabSize, insertSpaces, autoIndent };
+    const result = calculateNewLineIndent(lineContent, charBefore, charAfter, indentOptions);
+    
+    if (result.extraLine !== undefined) {
+      // Between brackets: insert newline + indent + newline + base indent
+      // Cursor ends up on the indented middle line
+      this.insert('\n' + result.indent + '\n' + result.extraLine);
+      
+      // Move cursor back to the middle line
+      const newLine = currentLine + 1;
+      const newCol = result.indent.length;
+      this._cursorManager.setCursor({ line: newLine, column: newCol });
+    } else {
+      // Normal case: insert newline + indent
+      this.insert('\n' + result.indent);
+    }
+  }
+
+  /**
+   * Insert a character with smart dedent for closing brackets
+   */
+  insertWithAutoDedent(char: string): void {
+    const autoIndent = settings.get('editor.autoIndent');
+    
+    // If not full auto-indent, just insert normally
+    if (autoIndent !== 'full') {
+      this.insert(char);
+      return;
+    }
+    
+    const cursor = this.primaryCursor;
+    const currentLine = cursor.position.line;
+    const currentColumn = cursor.position.column;
+    const lineContent = this.getLine(currentLine);
+    const lineBeforeCursor = lineContent.slice(0, currentColumn);
+    
+    // Check if we should dedent
+    if (shouldDedentOnChar(lineBeforeCursor, char)) {
+      // Get all lines for bracket matching
+      const lines: string[] = [];
+      for (let i = 0; i < this.lineCount; i++) {
+        lines.push(this.getLine(i));
+      }
+      
+      // Find matching bracket indent
+      const matchingIndent = findMatchingBracketIndent(lines, currentLine, char);
+      
+      if (matchingIndent !== null) {
+        // Replace the current line's whitespace with the matching indent + character
+        const currentIndent = getLeadingWhitespace(lineContent);
+        
+        if (currentIndent !== matchingIndent) {
+          // Select from start of line to cursor position and replace
+          const startOfLine: Position = { line: currentLine, column: 0 };
+          
+          // Set cursor position and create selection
+          cursor.position = { line: currentLine, column: currentColumn };
+          cursor.selection = {
+            anchor: startOfLine,
+            head: { line: currentLine, column: currentColumn }
+          };
+          
+          // Replace selection with matching indent + character
+          this.insert(matchingIndent + char);
+          return;
+        }
+      }
+    }
+    
+    // Normal insert
+    this.insert(char);
   }
 
   /**

@@ -365,7 +365,12 @@ export class App {
     const doc = this.getActiveDocument();
     if (!doc) return;
 
-    doc.insert(char);
+    // Use auto-dedent for closing brackets
+    if (char === '}' || char === ']' || char === ')') {
+      doc.insertWithAutoDedent(char);
+    } else {
+      doc.insert(char);
+    }
     this.editorPane.ensureCursorVisible();
     this.updateStatusBar();
   }

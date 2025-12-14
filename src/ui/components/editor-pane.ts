@@ -63,7 +63,7 @@ export class EditorPane implements MouseHandler {
   // Word wrap state
   private wrappedLines: WrappedLine[] = [];
   private lastWrapWidth: number = 0;
-  private lastLineCount: number = 0;
+  private lastWrapContent: string = '';  // Track content for wrap cache invalidation
 
   // Callbacks
   private onClickCallback?: (position: Position, clickCount: number, event: MouseEvent) => void;
@@ -179,16 +179,18 @@ export class EditorPane implements MouseHandler {
     }
 
     const textWidth = this.getVisibleColumnCount();
-    const lineCount = this.document.lineCount;
+    const content = this.document.content;
 
-    // Cache check - only recompute if needed
-    if (textWidth === this.lastWrapWidth && lineCount === this.lastLineCount && this.wrappedLines.length > 0) {
+    // Cache check - only recompute if width or content changed
+    if (textWidth === this.lastWrapWidth && content === this.lastWrapContent && this.wrappedLines.length > 0) {
       return;
     }
 
     this.lastWrapWidth = textWidth;
-    this.lastLineCount = lineCount;
+    this.lastWrapContent = content;
     this.wrappedLines = [];
+
+    const lineCount = this.document.lineCount;
 
     if (!this.isWordWrapEnabled() || textWidth <= 0) {
       // No wrapping - each buffer line is one screen line
@@ -1128,7 +1130,7 @@ export class EditorPane implements MouseHandler {
    */
   invalidateWrapCache(): void {
     this.lastWrapWidth = 0;
-    this.lastLineCount = 0;
+    this.lastWrapContent = '';
   }
 }
 

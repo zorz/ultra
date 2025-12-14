@@ -8,6 +8,7 @@ export interface EditorSettings {
   'editor.fontSize': number;
   'editor.tabSize': number;
   'editor.insertSpaces': boolean;
+  'editor.autoIndent': 'none' | 'keep' | 'full';
   'editor.wordWrap': 'off' | 'on' | 'wordWrapColumn' | 'bounded';
   'editor.lineNumbers': 'on' | 'off' | 'relative';
   'editor.minimap.enabled': boolean;
@@ -33,6 +34,7 @@ const defaultSettings: EditorSettings = {
   'editor.fontSize': 14,
   'editor.tabSize': 2,
   'editor.insertSpaces': true,
+  'editor.autoIndent': 'full',
   'editor.wordWrap': 'off',
   'editor.lineNumbers': 'on',
   'editor.minimap.enabled': true,
