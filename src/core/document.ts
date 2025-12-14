@@ -358,13 +358,17 @@ export class Document {
     const currentColumn = cursor.position.column;
     const lineContent = this.getLine(currentLine);
     
+    // Only consider the content BEFORE the cursor for indentation decisions
+    // If cursor is at start of line, this will be empty string
+    const contentBeforeCursor = lineContent.slice(0, currentColumn);
+    
     // Get character before and after cursor
     const charBefore = currentColumn > 0 ? lineContent[currentColumn - 1] : undefined;
     const charAfter = currentColumn < lineContent.length ? lineContent[currentColumn] : undefined;
     
     // Calculate indentation
     const indentOptions: IndentOptions = { tabSize, insertSpaces, autoIndent };
-    const result = calculateNewLineIndent(lineContent, charBefore, charAfter, indentOptions);
+    const result = calculateNewLineIndent(contentBeforeCursor, charBefore, charAfter, indentOptions);
     
     if (result.extraLine !== undefined) {
       // Between brackets: insert newline + indent + newline + base indent

@@ -24,6 +24,7 @@ import { settings } from './config/settings.ts';
 import { userConfigManager } from './config/user-config.ts';
 import { type KeyEvent, type MouseEventData } from './terminal/index.ts';
 import { themeLoader } from './ui/themes/theme-loader.ts';
+import { shouldAutoPair, shouldSkipClosing, shouldDeletePair } from './core/auto-pair.ts';
 
 interface OpenDocument {
   id: string;
@@ -359,7 +360,7 @@ export class App {
   }
 
   /**
-   * Insert a character
+   * Insert a character with auto-pairing support
    */
   private insertCharacter(char: string): void {
     const doc = this.getActiveDocument();
@@ -368,11 +369,64 @@ export class App {
     // Use auto-dedent for closing brackets
     if (char === '}' || char === ']' || char === ')') {
       doc.insertWithAutoDedent(char);
+      this.editorPane.ensureCursorVisible();
+      this.updateStatusBar();
+      return;
+    }
+
+    // Simple auto-pairing for opening brackets only
+    const pairs: Record<string, string> = {
+      '{': '}',
+      '[': ']',
+      '(': ')',
+      '"': '"',
+      "'": "'",
+      '`': '`',
+    };
+    
+    const closingChar = pairs[char];
+    if (closingChar) {
+      doc.insert(char + closingChar);
+      doc.cursorLeft();
     } else {
       doc.insert(char);
     }
+    
     this.editorPane.ensureCursorVisible();
     this.updateStatusBar();
+  }
+
+  /**
+   * Smart backspace that deletes both characters of a pair when between them
+   */
+  private smartBackspace(doc: Document): void {
+    // If there's a selection, just do normal backspace (delete selection)
+    if (hasSelection(doc.primaryCursor)) {
+      doc.backspace();
+      return;
+    }
+    
+    const autoClosing = settings.get('editor.autoClosingBrackets');
+    if (autoClosing === 'never') {
+      doc.backspace();
+      return;
+    }
+    
+    // Check if we should delete a pair
+    const cursor = doc.primaryCursor;
+    const line = doc.getLine(cursor.position.line);
+    const col = cursor.position.column;
+    const charBefore = col > 0 ? line[col - 1] : undefined;
+    const charAfter = col < line.length ? line[col] : undefined;
+    
+    if (shouldDeletePair(charBefore, charAfter)) {
+      // Delete both the opening and closing character
+      doc.backspace();  // Delete char before cursor
+      doc.delete();     // Delete char after cursor (now at cursor position)
+      return;
+    }
+    
+    doc.backspace();
   }
 
   /**
