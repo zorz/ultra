@@ -14,6 +14,7 @@ import { EditorPane } from './ui/components/editor-pane.ts';
 import { statusBar } from './ui/components/status-bar.ts';
 import { tabBar, type Tab } from './ui/components/tab-bar.ts';
 import { filePicker } from './ui/components/file-picker.ts';
+import { fileBrowser } from './ui/components/file-browser.ts';
 import { commandPalette } from './ui/components/command-palette.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
@@ -220,6 +221,58 @@ export class App {
         return;
       }
 
+      // Handle file browser input if it's open
+      if (fileBrowser.isOpen()) {
+        if (event.key === 'ESCAPE') {
+          fileBrowser.hide();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'ENTER') {
+          fileBrowser.enter();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'UP' || (event.ctrl && event.key === 'P')) {
+          fileBrowser.selectPrevious();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'DOWN' || (event.ctrl && event.key === 'N')) {
+          fileBrowser.selectNext();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'LEFT' || event.key === 'BACKSPACE') {
+          fileBrowser.goUp();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'RIGHT') {
+          fileBrowser.enter();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'PAGEUP') {
+          fileBrowser.pageUp();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'PAGEDOWN') {
+          fileBrowser.pageDown();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'H' || event.key === 'h') {
+          fileBrowser.toggleHidden();
+          renderer.scheduleRender();
+          return;
+        }
+        // Consume all other keys while browser is open
+        renderer.scheduleRender();
+        return;
+      }
+
       // Convert our KeyEvent to ParsedKey format
       const parsed: ParsedKey = {
         ctrl: event.ctrl,
@@ -340,6 +393,7 @@ export class App {
 
     // Register editor pane as mouse handler
     mouseManager.registerHandler(commandPalette);
+    mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(this.editorPane);
     mouseManager.registerHandler(tabBar);
@@ -555,7 +609,10 @@ export class App {
     // Render file picker (on top of everything)
     filePicker.render(ctx);
 
-    // Render command palette (on top of file picker)
+    // Render file browser (on top of file picker)
+    fileBrowser.render(ctx);
+
+    // Render command palette (on top of everything)
     commandPalette.render(ctx);
 
     // Position cursor at the very end (after all rendering is done)
@@ -1018,12 +1075,12 @@ export class App {
       // File operations
       {
         id: 'ultra.openFile',
-        title: 'Open File',
+        title: 'Open File (Browse)',
         category: 'File',
         handler: async () => {
           const workspaceRoot = process.cwd();
-          await filePicker.show(workspaceRoot, renderer.width, renderer.height);
-          filePicker.onSelect(async (path) => {
+          fileBrowser.show(workspaceRoot, renderer.width, renderer.height);
+          fileBrowser.onSelect(async (path) => {
             await this.openFile(path);
             renderer.scheduleRender();
           });
