@@ -63,6 +63,7 @@
   
 
   { "key": "ctrl+b", "command": "ultra.toggleSidebar" },
+  { "key": "ctrl+shift+e", "command": "ultra.focusSidebar" },
   { "key": "ctrl+shift+m", "command": "ultra.toggleMinimap" },
   { "key": "ctrl+\\", "command": "ultra.splitVertical" },
 

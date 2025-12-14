@@ -16,6 +16,7 @@ import { tabBar, type Tab } from './ui/components/tab-bar.ts';
 import { filePicker } from './ui/components/file-picker.ts';
 import { fileBrowser } from './ui/components/file-browser.ts';
 import { commandPalette } from './ui/components/command-palette.ts';
+import { fileTree } from './ui/components/file-tree.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
 import { keybindingsLoader } from './input/keybindings-loader.ts';
@@ -66,6 +67,15 @@ export class App {
 
       // Register commands
       this.registerCommands();
+      
+      // Initialize file tree with workspace root
+      const workspaceRoot = process.cwd();
+      await fileTree.loadDirectory(workspaceRoot);
+      fileTree.onFileSelect(async (path) => {
+        await this.openFile(path);
+        fileTree.setFocused(false);
+        renderer.scheduleRender();
+      });
 
       // Open file if provided
       if (filePath) {
@@ -292,6 +302,15 @@ export class App {
         return;
       }
 
+      // Handle file tree input if it's focused
+      if (fileTree.getFocused()) {
+        const handled = await fileTree.handleKey(event.key, event.ctrl, event.shift);
+        if (handled) {
+          renderer.scheduleRender();
+          return;
+        }
+      }
+
       // Convert our KeyEvent to ParsedKey format
       const parsed: ParsedKey = {
         ctrl: event.ctrl,
@@ -417,6 +436,7 @@ export class App {
     mouseManager.registerHandler(tabBar);
     mouseManager.registerHandler(this.editorPane);
     mouseManager.registerHandler(this.editorPane.getMinimap());
+    mouseManager.registerHandler(fileTree);
   }
   
   /**
@@ -612,6 +632,16 @@ export class App {
     const tabBarRect = layoutManager.getTabBarRect();
     const statusBarRect = layoutManager.getStatusBarRect();
     const editorRect = layoutManager.getEditorAreaRect();
+    const sidebarRect = layoutManager.getSidebarRect();
+
+    // Render file tree sidebar (if visible)
+    if (sidebarRect) {
+      fileTree.setRect(sidebarRect);
+      fileTree.setVisible(true);
+      fileTree.render(ctx);
+    } else {
+      fileTree.setVisible(false);
+    }
 
     // Render tab bar
     tabBar.setRect(tabBarRect);
@@ -1009,7 +1039,23 @@ export class App {
         id: 'ultra.toggleSidebar',
         title: 'Toggle Sidebar',
         category: 'View',
-        handler: () => layoutManager.toggleSidebar()
+        handler: () => {
+          layoutManager.toggleSidebar(settings.get('ultra.sidebar.width') || 30);
+          fileTree.setVisible(layoutManager.isSidebarVisible());
+        }
+      },
+      {
+        id: 'ultra.focusSidebar',
+        title: 'Focus Sidebar',
+        category: 'View',
+        handler: () => {
+          // Show sidebar if not visible
+          if (!layoutManager.isSidebarVisible()) {
+            layoutManager.toggleSidebar(settings.get('ultra.sidebar.width') || 30);
+          }
+          fileTree.setVisible(true);
+          fileTree.setFocused(true);
+        }
       },
       {
         id: 'ultra.toggleTerminal',

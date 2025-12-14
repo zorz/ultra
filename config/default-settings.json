@@ -20,6 +20,8 @@
     "**/.DS_Store": true
   },
   "workbench.colorTheme": "catppuccin-frappe",
+  "workbench.sideBar.location": "left",
+  "ultra.sidebar.width": 30,
   "ultra.ai.model": "claude-sonnet-4-20250514",
   "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}"
 }

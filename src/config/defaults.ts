@@ -211,6 +211,10 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.toggleSidebar"
   },
   {
+    "key": "ctrl+alt+e",
+    "command": "ultra.focusSidebar"
+  },
+  {
     "key": "ctrl+shift+m",
     "command": "ultra.toggleMinimap"
   },
@@ -334,6 +338,8 @@ export const defaultSettings: Record<string, any> = {
     "**/.DS_Store": true
   },
   "workbench.colorTheme": "catppuccin-frappe",
+  "workbench.sideBar.location": "left",
+  "ultra.sidebar.width": 30,
   "ultra.ai.model": "claude-sonnet-4-20250514",
   "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}"
 };
