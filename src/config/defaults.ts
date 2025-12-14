@@ -45,6 +45,14 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.openFile"
   },
   {
+    "key": "ctrl+]",
+    "command": "ultra.quickOpen"
+  },
+  {
+    "key": "ctrl+p",
+    "command": "ultra.commandPalette"
+  },
+  {
     "key": "home",
     "command": "ultra.cursorLineStart"
   },
@@ -195,10 +203,6 @@ export const defaultKeybindings: KeyBinding[] = [
   {
     "key": "ctrl+shift+f",
     "command": "ultra.projectSearch"
-  },
-  {
-    "key": "ctrl+shift+p",
-    "command": "ultra.commandPalette"
   },
   {
     "key": "ctrl+b",

@@ -7,6 +7,14 @@
   { "key": "ctrl+w", "command": "ultra.closeTab" },
   { "key": "ctrl+n", "command": "ultra.newFile" },
   { "key": "ctrl+o", "command": "ultra.openFile" },
+  {
+    "key": "ctrl+]",
+    "command": "ultra.quickOpen"
+  },
+  {
+    "key": "ctrl+p",
+    "command": "ultra.commandPalette"
+  },
 
   { "key": "home", "command": "ultra.cursorLineStart" },
   { "key": "end", "command": "ultra.cursorLineEnd" },
@@ -52,7 +60,7 @@
   { "key": "ctrl+h", "command": "ultra.replace" },
   { "key": "ctrl+shift+f", "command": "ultra.projectSearch" },
 
-  { "key": "ctrl+shift+p", "command": "ultra.commandPalette" },
+  
 
   { "key": "ctrl+b", "command": "ultra.toggleSidebar" },
   { "key": "ctrl+\\", "command": "ultra.splitVertical" },
