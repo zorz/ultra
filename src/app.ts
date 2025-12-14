@@ -917,6 +917,30 @@ export class App {
         category: 'Navigation',
         handler: () => this.moveCursor('wordRight')
       },
+      {
+        id: 'ultra.pageUp',
+        title: 'Page Up',
+        category: 'Navigation',
+        handler: () => this.moveCursor('pageUp')
+      },
+      {
+        id: 'ultra.pageDown',
+        title: 'Page Down',
+        category: 'Navigation',
+        handler: () => this.moveCursor('pageDown')
+      },
+      {
+        id: 'ultra.selectPageUp',
+        title: 'Select Page Up',
+        category: 'Selection',
+        handler: () => this.moveCursor('pageUp', true)
+      },
+      {
+        id: 'ultra.selectPageDown',
+        title: 'Select Page Down',
+        category: 'Selection',
+        handler: () => this.moveCursor('pageDown', true)
+      },
 
       // Selection commands
       {
@@ -1445,11 +1469,13 @@ export class App {
    * Move cursor helper
    */
   private moveCursor(
-    direction: 'left' | 'right' | 'up' | 'down' | 'lineStart' | 'lineEnd' | 'fileStart' | 'fileEnd' | 'wordLeft' | 'wordRight',
+    direction: 'left' | 'right' | 'up' | 'down' | 'lineStart' | 'lineEnd' | 'fileStart' | 'fileEnd' | 'wordLeft' | 'wordRight' | 'pageUp' | 'pageDown',
     selecting: boolean = false
   ): void {
     const doc = this.getActiveDocument();
     if (!doc) return;
+
+    const pageSize = Math.max(1, this.editorPane.getVisibleLineCount() - 2);
 
     switch (direction) {
       case 'left': doc.moveLeft(selecting); break;
@@ -1462,6 +1488,8 @@ export class App {
       case 'fileEnd': doc.moveToDocumentEnd(selecting); break;
       case 'wordLeft': doc.moveWordLeft(selecting); break;
       case 'wordRight': doc.moveWordRight(selecting); break;
+      case 'pageUp': doc.movePageUp(pageSize, selecting); break;
+      case 'pageDown': doc.movePageDown(pageSize, selecting); break;
     }
 
     this.editorPane.ensureCursorVisible();

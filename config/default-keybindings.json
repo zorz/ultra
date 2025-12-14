@@ -52,6 +52,10 @@
   { "key": "shift+end", "command": "ultra.selectLineEnd" },
   { "key": "alt+shift+left", "command": "ultra.selectWordLeft" },
   { "key": "alt+shift+right", "command": "ultra.selectWordRight" },
+  { "key": "pageup", "command": "ultra.pageUp" },
+  { "key": "pagedown", "command": "ultra.pageDown" },
+  { "key": "shift+pageup", "command": "ultra.selectPageUp" },
+  { "key": "shift+pagedown", "command": "ultra.selectPageDown" },
   { "key": "ctrl+k", "command": "ultra.selectAll" },
   { "key": "ctrl+l", "command": "ultra.selectLine" },
 

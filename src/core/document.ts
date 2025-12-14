@@ -466,6 +466,34 @@ export class Document {
   }
 
   /**
+   * Move cursor up by page (multiple lines)
+   */
+  movePageUp(pageSize: number, selecting: boolean = false): void {
+    this._cursorManager.moveCursors((cursor) => {
+      const newLine = Math.max(0, cursor.position.line - pageSize);
+      const lineLength = this._buffer.getLineLength(newLine);
+      return {
+        line: newLine,
+        column: Math.min(cursor.desiredColumn, lineLength)
+      };
+    }, selecting);
+  }
+
+  /**
+   * Move cursor down by page (multiple lines)
+   */
+  movePageDown(pageSize: number, selecting: boolean = false): void {
+    this._cursorManager.moveCursors((cursor) => {
+      const newLine = Math.min(this._buffer.lineCount - 1, cursor.position.line + pageSize);
+      const lineLength = this._buffer.getLineLength(newLine);
+      return {
+        line: newLine,
+        column: Math.min(cursor.desiredColumn, lineLength)
+      };
+    }, selecting);
+  }
+
+  /**
    * Move cursor to line start
    */
   moveToLineStart(selecting: boolean = false): void {

@@ -155,6 +155,22 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.selectWordRight"
   },
   {
+    "key": "pageup",
+    "command": "ultra.pageUp"
+  },
+  {
+    "key": "pagedown",
+    "command": "ultra.pageDown"
+  },
+  {
+    "key": "shift+pageup",
+    "command": "ultra.selectPageUp"
+  },
+  {
+    "key": "shift+pagedown",
+    "command": "ultra.selectPageDown"
+  },
+  {
     "key": "ctrl+k",
     "command": "ultra.selectAll"
   },
