@@ -414,9 +414,9 @@ export class App {
     mouseManager.registerHandler(commandPalette);
     mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
-    mouseManager.registerHandler(this.editorPane.getMinimap());
-    mouseManager.registerHandler(this.editorPane);
     mouseManager.registerHandler(tabBar);
+    mouseManager.registerHandler(this.editorPane);
+    mouseManager.registerHandler(this.editorPane.getMinimap());
   }
   
   /**
