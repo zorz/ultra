@@ -175,21 +175,26 @@ export class Renderer {
    */
   positionCursor(x: number, y: number): void {
     this.term.moveTo(x, y);
-    if (!this.cursorVisible) {
-      // Show cursor using ANSI escape
-      process.stdout.write('\x1b[?25h');
-      this.cursorVisible = true;
-    }
   }
 
   /**
-   * Hide cursor
+   * Hide cursor (minimize ANSI output by tracking state)
    */
   hideCursor(): void {
     if (this.cursorVisible) {
       // Hide cursor using ANSI escape
       process.stdout.write('\x1b[?25l');
       this.cursorVisible = false;
+    }
+  }
+  
+  /**
+   * Show cursor
+   */
+  showCursor(): void {
+    if (!this.cursorVisible) {
+      process.stdout.write('\x1b[?25h');
+      this.cursorVisible = true;
     }
   }
 

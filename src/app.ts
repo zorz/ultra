@@ -308,6 +308,9 @@ export class App {
    * Main render function
    */
   private render(ctx: RenderContext): void {
+    // Hide cursor during render to prevent flickering
+    renderer.hideCursor();
+    
     // Update layout
     layoutManager.updateDimensions(ctx.width, ctx.height);
 
@@ -329,23 +332,14 @@ export class App {
     statusBar.setRect(statusBarRect);
     statusBar.render(ctx);
 
-    // Position cursor
+    // Position cursor at the very end (after all rendering is done)
+    // We render our own block cursor in the editor pane, so we just
+    // need to move the terminal cursor out of the way
     const doc = this.getActiveDocument();
     if (doc) {
-      const cursor = doc.primaryCursor;
-      const scrollTop = this.editorPane.getScrollTop();
-      const scrollLeft = this.editorPane.getScrollLeft();
-      const screenLine = cursor.position.line - scrollTop;
-      const screenCol = cursor.position.column - scrollLeft;
-
-      if (screenLine >= 0 && screenLine < editorRect.height) {
-        const gutterWidth = Math.max(3, String(doc.lineCount).length) + 2;
-        const cursorX = editorRect.x + gutterWidth + screenCol;
-        const cursorY = editorRect.y + screenLine;
-        renderer.positionCursor(cursorX, cursorY);
-      } else {
-        renderer.hideCursor();
-      }
+      // Move terminal cursor to a non-disruptive position (bottom right)
+      // The visual cursor is rendered by EditorPane.renderCursors()
+      ctx.term.moveTo(ctx.width, ctx.height);
     }
   }
 
