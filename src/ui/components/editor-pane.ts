@@ -308,7 +308,7 @@ export class EditorPane implements MouseHandler {
         return true;
       });
 
-      const newBg = isSelected ? 239 : (isCursorLine && this.isFocused ? 237 : 235);
+      const newBg = isSelected ? 24 : (isCursorLine && this.isFocused ? 237 : 235);  // 24 = dark blue for selection
       
       if (newBg !== currentBg) {
         // Flush current output
@@ -409,6 +409,11 @@ export class EditorPane implements MouseHandler {
 
   onMouseEvent(event: MouseEvent): boolean {
     if (!this.document) return false;
+
+    // Ignore pure motion events - only handle clicks, drags, and scrolls
+    if (event.name === 'MOUSE_MOTION' || event.name === 'MOUSE_OTHER_BUTTON_PRESSED') {
+      return false;
+    }
 
     const position = this.screenToBufferPosition(event.x, event.y);
     if (!position) return false;

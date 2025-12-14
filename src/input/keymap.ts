@@ -160,19 +160,23 @@ export class Keymap {
     let alt = data?.alt || false;
     let meta = data?.meta || false;
     let key = keyName;
+    let originalKeyName = keyName;
 
-    // Parse CTRL_, SHIFT_, ALT_ prefixes
-    if (keyName.startsWith('CTRL_')) {
-      ctrl = true;
-      keyName = keyName.slice(5);
-    }
-    if (keyName.startsWith('SHIFT_')) {
-      shift = true;
-      keyName = keyName.slice(6);
-    }
-    if (keyName.startsWith('ALT_')) {
-      alt = true;
-      keyName = keyName.slice(4);
+    // Parse CTRL_, SHIFT_, ALT_ prefixes from terminal-kit
+    // Note: On macOS, Cmd key often comes through as CTRL_ in terminal
+    while (true) {
+      if (keyName.startsWith('CTRL_')) {
+        ctrl = true;
+        keyName = keyName.slice(5);
+      } else if (keyName.startsWith('SHIFT_')) {
+        shift = true;
+        keyName = keyName.slice(6);
+      } else if (keyName.startsWith('ALT_')) {
+        alt = true;
+        keyName = keyName.slice(4);
+      } else {
+        break;
+      }
     }
 
     // Normalize key name
@@ -182,6 +186,16 @@ export class Keymap {
       key = keyName.toLowerCase();
     } else {
       key = keyName.toLowerCase();
+    }
+
+    // On macOS terminal, Cmd+key often comes as ctrl char (e.g., \x01 for Cmd+A)
+    // These are control characters with codes 1-26 mapping to a-z
+    if (originalKeyName.length === 1) {
+      const code = originalKeyName.charCodeAt(0);
+      if (code >= 1 && code <= 26) {
+        ctrl = true;
+        key = String.fromCharCode(code + 96);  // Convert to a-z
+      }
     }
 
     return { ctrl, shift, alt, meta, key };
