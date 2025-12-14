@@ -1,0 +1,25 @@
+{
+  "name": "ultra-editor",
+  "version": "1.0.0",
+  "description": "A terminal-based code editor",
+  "config": {
+    "theme": "catppuccin-frappe",
+    "fontSize": 14,
+    "tabSize": 2,
+    "wordWrap": false,
+    "lineNumbers": true
+  },
+  "features": ["syntax-highlighting", "git-integration", "file-search"],
+  "dependencies": {
+    "shiki": "^3.20.0",
+    "typescript": "^5.0.0"
+  },
+  "author": {
+    "name": "Developer",
+    "email": "dev@example.com"
+  },
+  "numbers": [1, 2, 3, 4, 5],
+  "enabled": true,
+  "debug": false,
+  "maxLines": null
+}

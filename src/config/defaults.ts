@@ -314,7 +314,7 @@ export const defaultSettings: Record<string, any> = {
   "editor.insertSpaces": true,
   "editor.wordWrap": "off",
   "editor.lineNumbers": "on",
-  "editor.minimap.enabled": false,
+  "editor.minimap.enabled": true,
   "editor.renderWhitespace": "selection",
   "editor.mouseWheelScrollSensitivity": 3,
   "editor.cursorBlinkRate": 500,
