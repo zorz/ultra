@@ -47,23 +47,28 @@ export class StatusBar {
     
     if (width <= 0) return;
 
-    // Background - single call
-    ctx.term.moveTo(x, y).bgColor256(236)(' '.repeat(width));
-    ctx.term.moveTo(x, y).bgColor256(236);
+    // ANSI helpers
+    const bg = (n: number) => `\x1b[48;5;${n}m`;
+    const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const reset = '\x1b[0m';
+    const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
-    // Build and render left side
+    // Build entire status bar as one string
+    let output = moveTo(x, y) + bg(236) + ' '.repeat(width) + moveTo(x, y) + bg(236);
+
+    // Left side
     if (this.state.document) {
       if (this.state.document.isDirty) {
-        ctx.term.color256(203)('● ');
+        output += fg(203) + '● ';
       }
-      ctx.term.color256(252)(this.state.document.fileName);
+      output += fg(252) + this.state.document.fileName;
     } else {
-      ctx.term.color256(245)('No file');
+      output += fg(245) + 'No file';
     }
 
     // Git branch (if available)
     if (this.state.gitBranch) {
-      ctx.term.color256(245)('  ').color256(141)('⎇ ' + this.state.gitBranch);
+      output += fg(245) + '  ' + fg(141) + '⎇ ' + this.state.gitBranch;
     }
 
     // Build right side content
@@ -99,8 +104,11 @@ export class StatusBar {
     // Position and render right side
     const rightX = x + width - right.length - 1;
     if (rightX > x) {
-      ctx.term.moveTo(rightX, y).bgColor256(236).color256(245)(right);
+      output += moveTo(rightX, y) + bg(236) + fg(245) + right;
     }
+    
+    output += reset;
+    process.stdout.write(output);
   }
 
   /**

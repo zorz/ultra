@@ -75,10 +75,15 @@ export class TabBar implements MouseHandler {
     // Guard against invalid dimensions
     if (width <= 0) return;
 
-    // Background - single call with chaining
-    ctx.term.moveTo(x, y).bgColor256(234)(' '.repeat(width));
-    ctx.term.moveTo(x, y);
+    // ANSI helpers
+    const bg = (n: number) => `\x1b[48;5;${n}m`;
+    const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const reset = '\x1b[0m';
+    const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
+    // Build entire tab bar as one string
+    let output = moveTo(x, y) + bg(234) + ' '.repeat(width);
+    
     let currentX = x;
     const maxTabWidth = Math.min(30, Math.floor(width / Math.max(1, this.tabs.length)));
 
@@ -97,28 +102,31 @@ export class TabBar implements MouseHandler {
 
       // Tab background
       const tabBg = tab.isActive ? 235 : 234;
-      ctx.term.moveTo(currentX, y).bgColor256(tabBg);
+      output += moveTo(currentX, y) + bg(tabBg);
 
       // Dirty indicator or space
       if (tab.isDirty) {
-        ctx.term.color256(203)(' ●');
+        output += fg(203) + ' ●';
       } else {
-        ctx.term('  ');
+        output += '  ';
       }
 
       // Tab name
-      ctx.term.color256(tab.isActive ? 252 : 245)(tabContent);
+      output += fg(tab.isActive ? 252 : 245) + tabContent;
 
       // Close button
-      ctx.term.color256(241)(' ×');
+      output += fg(241) + ' ×';
 
       // Tab separator
       currentX += tabWidth;
       if (currentX < x + width) {
-        ctx.term.moveTo(currentX, y).bgColor256(234).color256(238)('│');
+        output += moveTo(currentX, y) + bg(234) + fg(238) + '│';
         currentX += 1;
       }
     }
+    
+    output += reset;
+    process.stdout.write(output);
   }
 
   /**

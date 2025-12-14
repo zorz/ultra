@@ -171,7 +171,6 @@ export class EditorPane implements MouseHandler {
     this.updateGutterWidth();
 
     const visibleLines = this.getVisibleLineCount();
-    const textStartX = this.rect.x + this.gutterWidth;
     const textWidth = this.rect.width - this.gutterWidth;
 
     // Get all selection ranges for highlighting
@@ -179,150 +178,125 @@ export class EditorPane implements MouseHandler {
       .filter(c => c.selection && hasSelection(c.selection))
       .map(c => getSelectionRange(c.selection!));
 
-    // Render each visible line
+    // Render each visible line as a single string with embedded ANSI
     for (let i = 0; i < visibleLines; i++) {
       const lineNum = this.scrollTop + i;
       const screenY = this.rect.y + i;
 
-      if (lineNum >= this.document.lineCount) {
-        // Empty line after document end
-        this.renderGutter(ctx, screenY, -1);
-        this.renderEmptyLine(ctx, textStartX, screenY, textWidth);
-        continue;
-      }
-
-      // Render gutter (line number)
-      this.renderGutter(ctx, screenY, lineNum);
-
-      // Get line content
-      const line = this.document.getLine(lineNum);
+      // Build the entire line as a single string
+      const lineOutput = this.buildLineString(lineNum, textWidth, selections);
       
-      // Check if this line is the cursor line for highlighting
-      const isCursorLine = this.document.cursors.some(c => c.position.line === lineNum);
-
-      // Render line content with selection highlighting
-      this.renderLine(ctx, textStartX, screenY, textWidth, line, lineNum, selections, isCursorLine);
+      // Single moveTo + write for the entire line
+      ctx.term.moveTo(this.rect.x, screenY);
+      process.stdout.write(lineOutput);
     }
 
-    // Render cursor(s)
-    this.renderCursors(ctx, textStartX);
+    // Render cursor(s) - these are overlaid on top
+    this.renderCursors(ctx);
+  }
+
+  /**
+   * Build a complete line string with ANSI codes (gutter + content)
+   */
+  private buildLineString(
+    lineNum: number,
+    textWidth: number,
+    selections: { start: Position; end: Position }[]
+  ): string {
+    // ANSI escape helpers
+    const bg = (n: number) => `\x1b[48;5;${n}m`;
+    const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const reset = '\x1b[0m';
+    
+    let output = '';
+    
+    // Gutter
+    const gutterBg = bg(236);
+    if (lineNum >= 0 && lineNum < (this.document?.lineCount || 0)) {
+      const isCursorLine = this.document?.cursors.some(c => c.position.line === lineNum);
+      const gutterFg = isCursorLine ? fg(252) : fg(241);
+      const numStr = String(lineNum + 1).padStart(this.gutterWidth - 1, ' ') + ' ';
+      output += gutterBg + gutterFg + numStr;
+    } else {
+      output += gutterBg + ' '.repeat(this.gutterWidth);
+    }
+    
+    // Line content
+    if (lineNum < 0 || lineNum >= (this.document?.lineCount || 0)) {
+      // Empty line after document end
+      output += bg(235) + ' '.repeat(textWidth);
+    } else {
+      const line = this.document!.getLine(lineNum);
+      const isCursorLine = this.document?.cursors.some(c => c.position.line === lineNum);
+      const baseBg = isCursorLine && this.isFocused ? 237 : 235;
+      const selectionBg = 24;
+      
+      const visibleStart = this.scrollLeft;
+      const visibleEnd = this.scrollLeft + textWidth;
+      
+      let currentBg = baseBg;
+      output += bg(baseBg) + fg(252);
+      
+      for (let col = visibleStart; col < visibleEnd; col++) {
+        const char = col < line.length ? line[col]! : ' ';
+        
+        // Check if selected
+        const isSelected = selections.some(sel => {
+          if (lineNum < sel.start.line || lineNum > sel.end.line) return false;
+          if (lineNum === sel.start.line && lineNum === sel.end.line) {
+            return col >= sel.start.column && col < sel.end.column;
+          }
+          if (lineNum === sel.start.line) return col >= sel.start.column;
+          if (lineNum === sel.end.line) return col < sel.end.column;
+          return true;
+        });
+        
+        const newBg = isSelected ? selectionBg : baseBg;
+        if (newBg !== currentBg) {
+          currentBg = newBg;
+          output += bg(currentBg);
+        }
+        
+        output += char === '\t' ? '  ' : char;
+      }
+    }
+    
+    output += reset;
+    return output;
   }
 
   /**
    * Render empty state (no document)
    */
   private renderEmptyState(ctx: RenderContext): void {
-    // Fill with background - chain calls
-    const emptyLine = ' '.repeat(Math.max(0, this.rect.width));
+    const bg = (n: number) => `\x1b[48;5;${n}m`;
+    const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const reset = '\x1b[0m';
+    
+    const emptyLine = bg(236) + ' '.repeat(Math.max(0, this.rect.width)) + reset;
     for (let y = 0; y < this.rect.height; y++) {
-      const screenY = this.rect.y + y;
-      ctx.term.moveTo(this.rect.x, screenY).bgColor256(236)(emptyLine);
+      ctx.term.moveTo(this.rect.x, this.rect.y + y);
+      process.stdout.write(emptyLine);
     }
 
     // Center message
     const message = 'No file open';
     const msgX = this.rect.x + Math.floor((this.rect.width - message.length) / 2);
     const msgY = this.rect.y + Math.floor(this.rect.height / 2);
-    ctx.term.moveTo(msgX, msgY).color256(245)(message);
+    ctx.term.moveTo(msgX, msgY);
+    process.stdout.write(fg(245) + message + reset);
   }
 
   /**
-   * Render gutter (line numbers)
+   * Render cursors - overlaid on content
    */
-  private renderGutter(ctx: RenderContext, screenY: number, lineNum: number): void {
-    ctx.term.moveTo(this.rect.x, screenY);
-    
-    if (lineNum >= 0) {
-      const isCursorLine = this.document?.cursors.some(c => c.position.line === lineNum);
-      const numStr = String(lineNum + 1).padStart(this.gutterWidth - 1, ' ') + ' ';
-      // Use string formatting to set colors inline
-      if (isCursorLine) {
-        ctx.term.bgColor256(236).color256(252)(numStr);
-      } else {
-        ctx.term.bgColor256(236).color256(241)(numStr);
-      }
-    } else {
-      ctx.term.bgColor256(236)(' '.repeat(this.gutterWidth));
-    }
-  }
-
-  /**
-   * Render an empty line
-   */
-  private renderEmptyLine(ctx: RenderContext, x: number, y: number, width: number): void {
-    ctx.term.moveTo(x, y).bgColor256(235)(' '.repeat(Math.max(0, width)));
-  }
-
-  /**
-   * Render a line of text with selection highlighting
-   */
-  private renderLine(
-    ctx: RenderContext,
-    x: number,
-    y: number,
-    width: number,
-    line: string,
-    lineNum: number,
-    selections: { start: Position; end: Position }[],
-    isCursorLine: boolean
-  ): void {
-    ctx.term.moveTo(x, y);
-    
-    // Determine base background color
-    const baseBg = isCursorLine && this.isFocused ? 237 : 235;
-    const selectionBg = 24;  // Dark blue for selection
-
-    // Get visible portion of line
-    const visibleStart = this.scrollLeft;
-    const visibleEnd = this.scrollLeft + width;
-    
-    // Build the line, grouping characters by background color to minimize escape sequences
-    let currentBg = baseBg;
-    let output = '';
-    
-    // Start with base style
-    ctx.term.bgColor256(baseBg).color256(252);
-
-    for (let col = visibleStart; col < visibleEnd; col++) {
-      const char = col < line.length ? line[col]! : ' ';
-      
-      // Check if this position is selected
-      const isSelected = selections.some(sel => {
-        if (lineNum < sel.start.line || lineNum > sel.end.line) return false;
-        if (lineNum === sel.start.line && lineNum === sel.end.line) {
-          return col >= sel.start.column && col < sel.end.column;
-        }
-        if (lineNum === sel.start.line) return col >= sel.start.column;
-        if (lineNum === sel.end.line) return col < sel.end.column;
-        return true;
-      });
-
-      const newBg = isSelected ? selectionBg : baseBg;
-      
-      if (newBg !== currentBg) {
-        // Flush current output and change background
-        if (output) {
-          ctx.term(output);
-          output = '';
-        }
-        currentBg = newBg;
-        ctx.term.bgColor256(currentBg);
-      }
-      
-      output += char === '\t' ? '  ' : char;  // Simple tab handling
-    }
-    
-    // Flush remaining output
-    if (output) {
-      ctx.term(output);
-    }
-  }
-
-  /**
-   * Render cursors
-   */
-  private renderCursors(ctx: RenderContext, textStartX: number): void {
+  private renderCursors(ctx: RenderContext): void {
     if (!this.document || !this.isFocused) return;
+
+    const textStartX = this.rect.x + this.gutterWidth;
+    const bg = (n: number) => `\x1b[48;5;${n}m`;
+    const fg = (n: number) => `\x1b[38;5;${n}m`;
+    const reset = '\x1b[0m';
 
     for (const cursor of this.document.cursors) {
       const screenLine = cursor.position.line - this.scrollTop;
@@ -338,8 +312,8 @@ export class EditorPane implements MouseHandler {
       const line = this.document.getLine(cursor.position.line);
       const char = cursor.position.column < line.length ? line[cursor.position.column]! : ' ';
       
-      // Draw cursor (block style) - chain calls to minimize escape sequences
-      ctx.term.moveTo(cursorX, cursorY).bgColor256(75).color256(235)(char);
+      ctx.term.moveTo(cursorX, cursorY);
+      process.stdout.write(bg(75) + fg(235) + char + reset);
     }
   }
 

@@ -339,7 +339,7 @@ export class App {
     if (doc) {
       // Move terminal cursor to a non-disruptive position (bottom right)
       // The visual cursor is rendered by EditorPane.renderCursors()
-      ctx.term.moveTo(ctx.width, ctx.height);
+      process.stdout.write(`\x1b[${ctx.height};${ctx.width}H`);
     }
   }
 
