@@ -6,6 +6,7 @@
  */
 
 import { EditorPane } from './editor-pane.ts';
+import { TabBar, type Tab } from './tab-bar.ts';
 import { Document } from '../../core/document.ts';
 import { layoutManager, type Rect } from '../layout.ts';
 import type { RenderContext } from '../renderer.ts';
@@ -14,6 +15,7 @@ import type { Position } from '../../core/buffer.ts';
 
 interface PaneState {
   pane: EditorPane;
+  tabBar: TabBar;
   documentIds: string[];       // List of document IDs open in this pane (tabs)
   activeDocumentId: string | null;  // Currently active document in this pane
 }
@@ -27,6 +29,8 @@ export class PaneManager implements MouseHandler {
   private onPaneDragCallback?: (paneId: string, position: Position, event: MouseEvent) => void;
   private onPaneScrollCallback?: (paneId: string, deltaX: number, deltaY: number) => void;
   private onPaneFocusCallback?: (paneId: string) => void;
+  private onTabClickCallback?: (paneId: string, tabId: string) => void;
+  private onTabCloseCallback?: (paneId: string, tabId: string) => void;
 
   constructor() {
     // Create the initial main pane
@@ -38,8 +42,9 @@ export class PaneManager implements MouseHandler {
    */
   private createPane(paneId: string): EditorPane {
     const pane = new EditorPane();
+    const tabBar = new TabBar();
     
-    // Setup callbacks that include pane ID
+    // Setup pane callbacks that include pane ID
     pane.onClick((position, clickCount, event) => {
       this.setActivePane(paneId);
       if (this.onPaneClickCallback) {
@@ -59,7 +64,22 @@ export class PaneManager implements MouseHandler {
       }
     });
     
-    this.panes.set(paneId, { pane, documentIds: [], activeDocumentId: null });
+    // Setup tab bar callbacks that include pane ID
+    tabBar.onTabClick((tabId) => {
+      this.setActivePane(paneId);
+      this.setActivePaneDocument(paneId, tabId);
+      if (this.onTabClickCallback) {
+        this.onTabClickCallback(paneId, tabId);
+      }
+    });
+    
+    tabBar.onTabClose((tabId) => {
+      if (this.onTabCloseCallback) {
+        this.onTabCloseCallback(paneId, tabId);
+      }
+    });
+    
+    this.panes.set(paneId, { pane, tabBar, documentIds: [], activeDocumentId: null });
     return pane;
   }
 
@@ -399,15 +419,55 @@ export class PaneManager implements MouseHandler {
 
   /**
    * Update pane rects from layout manager
+   * Each pane gets a tab bar at the top, reducing editor space by 1 row
    */
   updatePaneRects(): void {
     const rects = layoutManager.getAllPaneRects();
     for (const [paneId, rect] of rects) {
       const state = this.panes.get(paneId);
       if (state) {
-        state.pane.setRect(rect);
+        // Tab bar takes the top row of the pane area
+        const tabBarRect = {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: 1
+        };
+        
+        // Editor pane starts below the tab bar
+        const paneRect = {
+          x: rect.x,
+          y: rect.y + 1,
+          width: rect.width,
+          height: rect.height - 1
+        };
+        
+        state.tabBar.setRect(tabBarRect);
+        state.pane.setRect(paneRect);
       }
     }
+  }
+
+  /**
+   * Get tabs for a specific pane
+   */
+  getTabsForPane(paneId: string): Tab[] {
+    const state = this.panes.get(paneId);
+    if (!state) return [];
+    
+    return state.documentIds
+      .map(docId => {
+        const doc = this.documents.get(docId);
+        if (!doc) return null;
+        return {
+          id: docId,
+          fileName: doc.fileName,
+          filePath: doc.filePath,
+          isDirty: doc.isDirty,
+          isActive: docId === state.activeDocumentId
+        };
+      })
+      .filter((tab): tab is Tab => tab !== null);
   }
 
   /**
@@ -419,10 +479,17 @@ export class PaneManager implements MouseHandler {
     
     const activePaneId = this.getActivePaneId();
     
-    // Render each pane
+    // Render each pane with its tab bar
     for (const [paneId, state] of this.panes) {
       // Set focus state
-      state.pane.setFocused(paneId === activePaneId);
+      const isFocused = paneId === activePaneId;
+      state.pane.setFocused(isFocused);
+      
+      // Update and render tab bar
+      state.tabBar.setTabs(this.getTabsForPane(paneId));
+      state.tabBar.render(ctx);
+      
+      // Render editor pane
       state.pane.render(ctx);
     }
     
@@ -527,10 +594,19 @@ export class PaneManager implements MouseHandler {
     this.onPaneFocusCallback = callback;
   }
 
+  onTabClick(callback: (paneId: string, tabId: string) => void): void {
+    this.onTabClickCallback = callback;
+  }
+
+  onTabClose(callback: (paneId: string, tabId: string) => void): void {
+    this.onTabCloseCallback = callback;
+  }
+
   // MouseHandler implementation
   containsPoint(x: number, y: number): boolean {
     for (const [, state] of this.panes) {
-      if (state.pane.containsPoint(x, y)) {
+      // Check both tab bar and pane
+      if (state.tabBar.containsPoint(x, y) || state.pane.containsPoint(x, y)) {
         return true;
       }
     }
@@ -538,7 +614,18 @@ export class PaneManager implements MouseHandler {
   }
 
   onMouseEvent(event: MouseEvent): boolean {
-    // Find which pane was clicked
+    // First check tab bars
+    for (const [paneId, state] of this.panes) {
+      if (state.tabBar.containsPoint(event.x, event.y)) {
+        // Set this pane as active on click
+        if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED') {
+          this.setActivePane(paneId);
+        }
+        return state.tabBar.onMouseEvent(event);
+      }
+    }
+    
+    // Then check panes
     for (const [paneId, state] of this.panes) {
       if (state.pane.containsPoint(event.x, event.y)) {
         // Set this pane as active on click

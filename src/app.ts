@@ -79,11 +79,13 @@ export class App {
       // Update editorPane reference when focus changes
       this.editorPane = paneManager.getPane(paneId);
       // Update active document based on pane's document
-      const docId = paneManager.getPaneDocumentId(paneId);
+      const docId = paneManager.getPaneActiveDocumentId(paneId);
       if (docId && docId !== this.activeDocumentId) {
         this.activeDocumentId = docId;
         this.updateStatusBar();
       }
+      // DEBUG
+      statusBar.setMessage(`Focus: ${paneId}, doc: ${docId || 'none'}`, 2000);
       renderer.scheduleRender();
     });
   }
@@ -2256,11 +2258,12 @@ export class App {
         title: 'Split Editor Right',
         category: 'View',
         handler: () => {
+          const oldPaneId = paneManager.getActivePaneId();
           const newPaneId = paneManager.splitVertical();
           if (newPaneId) {
             // Update editorPane reference to the new active pane
             this.editorPane = paneManager.getActivePane();
-            statusBar.setMessage('Split editor right', 2000);
+            statusBar.setMessage(`Split: ${oldPaneId} -> ${newPaneId}`, 2000);
           }
           renderer.scheduleRender();
         }
@@ -2511,12 +2514,17 @@ export class App {
     const doc = this.documents.find(d => d.id === id);
     if (!doc) return;
 
+    const activePaneId = paneManager.getActivePaneId();
+    
     this.activeDocumentId = id;
     this.editorPane.setDocument(doc.document);
     
     // Sync with pane manager - register document and set it for active pane
     paneManager.registerDocument(id, doc.document);
-    paneManager.setPaneDocument(paneManager.getActivePaneId(), id);
+    paneManager.setPaneDocument(activePaneId, id);
+    
+    // DEBUG: Show which pane received the document
+    statusBar.setMessage(`Opened in pane: ${activePaneId}`, 2000);
     
     this.updateStatusBar();
   }

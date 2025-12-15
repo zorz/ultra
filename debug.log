@@ -179,3 +179,11 @@
 [2025-12-15T04:59:27.308Z] [showHover] Calling lspManager.getHover...
 [2025-12-15T04:59:27.309Z] [showHover] Hover result: null
 [2025-12-15T04:59:27.309Z] [showHover] Symbols count: 0
+[2025-12-15T05:17:03.001Z] [LSP] openDocument: file:///Users/keith/Development/ultra/test/test.go, language: go
+[2025-12-15T05:17:03.001Z] [LSP] Checking if gopls exists...
+[2025-12-15T05:17:03.006Z] [LSP] Command not found: gopls
+[2025-12-15T05:17:03.007Z] [LSP] No client for language go
+[2025-12-15T05:18:48.157Z] [LSP] openDocument: file:///Users/keith/Development/ultra/test/test.html, language: html
+[2025-12-15T05:18:48.157Z] [LSP] Checking if vscode-html-language-server exists...
+[2025-12-15T05:18:48.161Z] [LSP] Command not found: vscode-html-language-server
+[2025-12-15T05:18:48.161Z] [LSP] No client for language html
