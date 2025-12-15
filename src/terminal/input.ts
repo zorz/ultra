@@ -203,6 +203,15 @@ export class InputHandler {
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
 
+    // Disable flow control (Ctrl+S/Ctrl+Q) so we can use these keys
+    // Raw mode should handle this, but be explicit
+    try {
+      const { spawnSync } = require('child_process');
+      spawnSync('stty', ['-ixon', '-ixoff'], { stdio: 'inherit' });
+    } catch {
+      // stty not available, rely on raw mode
+    }
+
     // Enable enhanced keyboard protocols for better modifier key support
     // modifyOtherKeys mode 2: Report all keys with modifiers
     process.stdout.write('\x1b[>4;2m');
