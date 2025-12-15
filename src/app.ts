@@ -45,6 +45,17 @@ export class App {
   private completionTriggerTimer: ReturnType<typeof setTimeout> | null = null;
   private hoverTimer: ReturnType<typeof setTimeout> | null = null;
   
+  // File watching
+  private fileWatchers = new Map<string, { watcher: ReturnType<typeof Bun.file>; lastModTime: number }>();
+  private fileWatchInterval: ReturnType<typeof setInterval> | null = null;
+  
+  // External change notification state
+  private externalChangeDialog: {
+    isOpen: boolean;
+    documentId: string | null;
+    fileName: string;
+  } = { isOpen: false, documentId: null, fileName: '' };
+  
   // Close confirmation dialog state
   private closeConfirmDialog: {
     isOpen: boolean;
@@ -100,6 +111,9 @@ export class App {
       lspManager.setWorkspaceRoot(workspaceRoot);
       await this.initializeLSP();
 
+      // Start file watcher
+      this.startFileWatcher();
+
       // Open file if provided
       if (filePath) {
         await this.openFile(filePath);
@@ -127,6 +141,9 @@ export class App {
     this.isRunning = false;
     userConfigManager.destroy();
     fileTree.destroy();
+    
+    // Stop file watcher
+    this.stopFileWatcher();
     
     // Shutdown LSP servers
     lspManager.shutdown();
@@ -237,6 +254,16 @@ export class App {
       // Handle save browser first if it's open
       if (saveBrowser.isOpen()) {
         saveBrowser.handleKey(event.key, event.char, event.ctrl, event.shift);
+        renderer.scheduleRender();
+        return;
+      }
+
+      // Handle external change dialog
+      if (this.externalChangeDialog.isOpen) {
+        if (this.handleExternalChangeDialog(event.key)) {
+          return;
+        }
+        // Consume all other keys while dialog is open
         renderer.scheduleRender();
         return;
       }
@@ -1329,8 +1356,9 @@ export class App {
     hoverTooltip.render(ctx, ctx.width, ctx.height);
     signatureHelp.render(ctx, ctx.width, ctx.height);
 
-    // Render close confirmation dialog (on top of everything)
+    // Render dialogs (on top of everything)
     this.renderCloseConfirmDialog(ctx);
+    this.renderExternalChangeDialog(ctx);
 
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
@@ -2523,6 +2551,221 @@ export class App {
     if (index >= 0 && index < this.documents.length) {
       this.activateDocument(this.documents[index]!.id);
     }
+  }
+
+  /**
+   * Start file watcher - polls for file changes
+   */
+  private startFileWatcher(): void {
+    // Poll every 1 second for file changes
+    this.fileWatchInterval = setInterval(() => {
+      this.checkForFileChanges();
+    }, 1000);
+  }
+
+  /**
+   * Stop file watcher
+   */
+  private stopFileWatcher(): void {
+    if (this.fileWatchInterval) {
+      clearInterval(this.fileWatchInterval);
+      this.fileWatchInterval = null;
+    }
+    this.fileWatchers.clear();
+  }
+
+  /**
+   * Watch a file for changes
+   */
+  private async watchFile(filePath: string): Promise<void> {
+    if (!filePath || this.fileWatchers.has(filePath)) return;
+    
+    try {
+      const file = Bun.file(filePath);
+      const stat = await file.stat();
+      if (stat) {
+        this.fileWatchers.set(filePath, {
+          watcher: file,
+          lastModTime: stat.mtime?.getTime() ?? Date.now()
+        });
+      }
+    } catch {
+      // File doesn't exist or can't be watched
+    }
+  }
+
+  /**
+   * Stop watching a file
+   */
+  private unwatchFile(filePath: string): void {
+    this.fileWatchers.delete(filePath);
+  }
+
+  /**
+   * Check all watched files for changes
+   */
+  private async checkForFileChanges(): Promise<void> {
+    // Skip if a dialog is already open
+    if (this.externalChangeDialog.isOpen || this.closeConfirmDialog.isOpen) return;
+    
+    for (const openDoc of this.documents) {
+      const filePath = openDoc.document.filePath;
+      if (!filePath) continue;
+      
+      const watchInfo = this.fileWatchers.get(filePath);
+      if (!watchInfo) {
+        // Start watching this file
+        await this.watchFile(filePath);
+        continue;
+      }
+      
+      try {
+        const file = Bun.file(filePath);
+        const stat = await file.stat();
+        if (!stat) continue;
+        
+        const currentModTime = stat.mtime?.getTime() ?? 0;
+        
+        if (currentModTime > watchInfo.lastModTime) {
+          // File has changed
+          watchInfo.lastModTime = currentModTime;
+          
+          if (openDoc.document.isDirty) {
+            // Document has local changes - show conflict dialog
+            this.showExternalChangeDialog(openDoc.id, openDoc.document.fileName);
+          } else {
+            // No local changes - auto-reload
+            await this.reloadDocument(openDoc.id);
+          }
+        }
+      } catch {
+        // File may have been deleted - ignore
+      }
+    }
+  }
+
+  /**
+   * Show dialog for external file change when local changes exist
+   */
+  private showExternalChangeDialog(documentId: string, fileName: string): void {
+    this.externalChangeDialog = {
+      isOpen: true,
+      documentId,
+      fileName
+    };
+    renderer.scheduleRender();
+  }
+
+  /**
+   * Handle external change dialog response
+   */
+  private handleExternalChangeDialog(key: string): boolean {
+    if (!this.externalChangeDialog.isOpen) return false;
+    
+    const docId = this.externalChangeDialog.documentId;
+    
+    if (key === 'r' || key === 'R') {
+      // Reload - discard local changes
+      if (docId) {
+        this.reloadDocument(docId);
+      }
+      this.externalChangeDialog.isOpen = false;
+      return true;
+    } else if (key === 'k' || key === 'K') {
+      // Keep local changes
+      this.externalChangeDialog.isOpen = false;
+      renderer.scheduleRender();
+      return true;
+    } else if (key === 'ESCAPE') {
+      // Cancel - same as keep
+      this.externalChangeDialog.isOpen = false;
+      renderer.scheduleRender();
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Reload a document from disk
+   */
+  private async reloadDocument(documentId: string): Promise<void> {
+    const openDoc = this.documents.find(d => d.id === documentId);
+    if (!openDoc) return;
+    
+    const success = await openDoc.document.reload();
+    if (success) {
+      // Update file watcher mod time
+      if (openDoc.document.filePath) {
+        const watchInfo = this.fileWatchers.get(openDoc.document.filePath);
+        if (watchInfo) {
+          const file = Bun.file(openDoc.document.filePath);
+          const stat = await file.stat();
+          if (stat?.mtime) {
+            watchInfo.lastModTime = stat.mtime.getTime();
+          }
+        }
+        
+        // Notify LSP of content change
+        if (this.lspEnabled) {
+          const uri = `file://${openDoc.document.filePath}`;
+          await lspManager.changeDocument(uri, openDoc.document.content);
+        }
+      }
+      
+      // Update editor pane if this is the active document
+      if (documentId === this.activeDocumentId) {
+        this.editorPane.setDocument(openDoc.document);
+      }
+      
+      statusBar.setMessage(`Reloaded: ${openDoc.document.fileName}`, 2000);
+    } else {
+      statusBar.setMessage(`Failed to reload: ${openDoc.document.fileName}`, 3000);
+    }
+    
+    renderer.scheduleRender();
+  }
+
+  /**
+   * Render external change dialog
+   */
+  private renderExternalChangeDialog(ctx: RenderContext): void {
+    if (!this.externalChangeDialog.isOpen) return;
+    
+    const dialogWidth = 55;
+    const dialogHeight = 8;
+    const dialogX = Math.floor((renderer.width - dialogWidth) / 2);
+    const dialogY = Math.floor((renderer.height - dialogHeight) / 2);
+
+    const bgColor = '#2d2d2d';
+    const borderColor = '#e5c07b';
+
+    // Background
+    ctx.fill(dialogX, dialogY, dialogWidth, dialogHeight, ' ', undefined, bgColor);
+
+    // Border
+    ctx.drawStyled(dialogX, dialogY, '╭' + '─'.repeat(dialogWidth - 2) + '╮', borderColor, bgColor);
+    for (let y = dialogY + 1; y < dialogY + dialogHeight - 1; y++) {
+      ctx.drawStyled(dialogX, y, '│', borderColor, bgColor);
+      ctx.drawStyled(dialogX + dialogWidth - 1, y, '│', borderColor, bgColor);
+    }
+    ctx.drawStyled(dialogX, dialogY + dialogHeight - 1, '╰' + '─'.repeat(dialogWidth - 2) + '╯', borderColor, bgColor);
+
+    // Title
+    const title = ' File Changed Externally ';
+    const titleX = dialogX + Math.floor((dialogWidth - title.length) / 2);
+    ctx.drawStyled(titleX, dialogY, title, '#e5c07b', bgColor);
+
+    // Message
+    const filename = this.externalChangeDialog.fileName;
+    const truncatedName = filename.length > dialogWidth - 6 ? filename.slice(0, dialogWidth - 9) + '...' : filename;
+    ctx.drawStyled(dialogX + 2, dialogY + 2, truncatedName, '#d4d4d4', bgColor);
+    ctx.drawStyled(dialogX + 2, dialogY + 3, 'has changed. You have unsaved changes.', '#888888', bgColor);
+
+    // Options
+    const options = '(R)eload from disk  (K)eep local changes';
+    const optX = dialogX + Math.floor((dialogWidth - options.length) / 2);
+    ctx.drawStyled(optX, dialogY + 5, options, '#98c379', bgColor);
   }
 
   /**

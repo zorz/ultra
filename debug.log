@@ -95,3 +95,27 @@
 [2025-12-15T04:28:29.580Z] [LSP] [HoverTooltip] First symbol: {"name":"greet","kind":14,"hasChildren":false,"isFlat":true}
 [2025-12-15T04:28:29.580Z] [LSP] [HoverTooltip] Using flat SymbolInformation format
 [2025-12-15T04:28:29.580Z] [LSP] [HoverTooltip] Found 6 members with containerName=UserService
+[2025-12-15T04:30:00.324Z] [LSPClient typescript-language-server] request[4]: shutdown
+[2025-12-15T04:31:41.702Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:31:41.702Z] [LSP] Checking if typescript-language-server exists...
+[2025-12-15T04:31:41.706Z] [LSP] Starting typescript-language-server for typescript...
+[2025-12-15T04:31:41.706Z] [LSPClient typescript-language-server] Starting: typescript-language-server --stdio
+[2025-12-15T04:31:41.706Z] [LSPClient typescript-language-server] Workspace root: /Users/keith/Development/ultra-editor
+[2025-12-15T04:31:41.707Z] [LSPClient typescript-language-server] Process spawned, PID: 75353
+[2025-12-15T04:31:41.707Z] [LSPClient typescript-language-server] Sending initialize request...
+[2025-12-15T04:31:41.707Z] [LSPClient typescript-language-server] request[1]: initialize
+[2025-12-15T04:31:41.760Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
+[2025-12-15T04:31:41.760Z] [LSP] Notification from typescript: window/logMessage
+[2025-12-15T04:31:41.760Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
+[2025-12-15T04:31:41.760Z] [LSPClient typescript-language-server] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
+[2025-12-15T04:31:41.760Z] [LSPClient typescript-language-server] Initialization complete
+[2025-12-15T04:31:41.760Z] [LSP] Successfully started typescript-language-server for typescript
+[2025-12-15T04:31:41.760Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
+[2025-12-15T04:31:41.765Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
+[2025-12-15T04:31:41.765Z] [LSP] Notification from typescript: $/typescriptVersion
+[2025-12-15T04:31:42.724Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:31:42.724Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:31:42.725Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:31:45.093Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/README.md, language: markdown
+[2025-12-15T04:31:45.093Z] [LSP] No server config for markdown
+[2025-12-15T04:31:45.093Z] [LSP] No client for language markdown

@@ -97,6 +97,54 @@ export class Document {
     await this.save();
   }
 
+  /**
+   * Reload the document from disk
+   * Returns true if reload was successful, false if file doesn't exist
+   */
+  async reload(): Promise<boolean> {
+    if (!this._filePath) return false;
+    
+    try {
+      const file = Bun.file(this._filePath);
+      const content = await file.text();
+      
+      // Normalize line endings
+      const normalized = content.replace(/\r\n/g, '\n');
+      if (content !== normalized) {
+        this._lineEnding = 'crlf';
+      }
+      
+      // Reset buffer with new content
+      this._buffer = new Buffer(normalized);
+      this._savedContent = normalized;
+      this._isDirty = false;
+      
+      // Reset cursor to safe position
+      this._cursorManager = new CursorManager();
+      
+      // Clear undo history since content changed externally
+      this._undoManager = new UndoManager();
+      
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Get the file's modification time
+   */
+  async getFileModTime(): Promise<number | null> {
+    if (!this._filePath) return null;
+    try {
+      const file = Bun.file(this._filePath);
+      const stat = await file.stat();
+      return stat?.mtime?.getTime() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   // Buffer accessors
   get buffer(): Buffer {
     return this._buffer;
