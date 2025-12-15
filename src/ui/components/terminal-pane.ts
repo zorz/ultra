@@ -24,6 +24,7 @@ export class TerminalPane implements MouseHandler {
   private terminals: TerminalInstance[] = [];
   private activeTerminalIndex: number = 0;
   private terminalIdCounter: number = 0;
+  private tabPositions: { index: number; startX: number; endX: number; closeX: number }[] = [];
   
   // Theme colors
   private bgColor: string = '#1e1e1e';
@@ -109,11 +110,13 @@ export class TerminalPane implements MouseHandler {
       : (process.env.SHELL || '/bin/zsh');
     
     const contentRect = this.getTerminalContentRect();
+    const scrollback = settings.get('terminal.integrated.scrollback') || 1000;
     const pty = new PTY({
       shell,
       cwd: cwd || process.cwd(),
       cols: Math.max(1, contentRect.width),
-      rows: Math.max(1, contentRect.height)
+      rows: Math.max(1, contentRect.height),
+      scrollback
     });
     
     const terminal: TerminalInstance = {
@@ -221,6 +224,32 @@ export class TerminalPane implements MouseHandler {
   }
 
   /**
+   * Close a terminal by index
+   */
+  closeTerminal(index: number): void {
+    if (index < 0 || index >= this.terminals.length) return;
+    
+    const terminal = this.terminals[index];
+    if (terminal) {
+      terminal.pty.kill();
+      this.terminals.splice(index, 1);
+      
+      // Adjust active index if needed
+      if (this.terminals.length === 0) {
+        this.activeTerminalIndex = 0;
+      } else if (this.activeTerminalIndex >= this.terminals.length) {
+        this.activeTerminalIndex = this.terminals.length - 1;
+      } else if (index < this.activeTerminalIndex) {
+        this.activeTerminalIndex--;
+      }
+      
+      if (this.onUpdateCallback) {
+        this.onUpdateCallback();
+      }
+    }
+  }
+
+  /**
    * Write to the active terminal
    */
   write(data: string): void {
@@ -232,8 +261,10 @@ export class TerminalPane implements MouseHandler {
 
   /**
    * Handle a key event
+   * @param key - The key name (uppercase, e.g., 'A', 'ENTER', 'BACKSPACE')
+   * @param char - The actual character typed (with proper case)
    */
-  handleKeyEvent(key: string, ctrl: boolean, alt: boolean, shift: boolean): boolean {
+  handleKeyEvent(key: string, char: string | undefined, ctrl: boolean, alt: boolean, shift: boolean): boolean {
     const terminal = this.getActiveTerminal();
     if (!terminal) return false;
     
@@ -250,21 +281,22 @@ export class TerminalPane implements MouseHandler {
     }
     
     // Map special keys to escape sequences
+    // Key names come from InputHandler which uses UPPERCASE
     const keyMap: Record<string, string> = {
-      'ArrowUp': '\x1b[A',
-      'ArrowDown': '\x1b[B',
-      'ArrowRight': '\x1b[C',
-      'ArrowLeft': '\x1b[D',
-      'Home': '\x1b[H',
-      'End': '\x1b[F',
-      'PageUp': '\x1b[5~',
-      'PageDown': '\x1b[6~',
-      'Insert': '\x1b[2~',
-      'Delete': '\x1b[3~',
-      'Backspace': '\x7f',
-      'Tab': '\t',
-      'Enter': '\r',
-      'Escape': '\x1b',
+      'UP': '\x1b[A',
+      'DOWN': '\x1b[B',
+      'RIGHT': '\x1b[C',
+      'LEFT': '\x1b[D',
+      'HOME': '\x1b[H',
+      'END': '\x1b[F',
+      'PAGEUP': '\x1b[5~',
+      'PAGEDOWN': '\x1b[6~',
+      'INSERT': '\x1b[2~',
+      'DELETE': '\x1b[3~',
+      'BACKSPACE': '\x7f',
+      'TAB': '\t',
+      'ENTER': '\r',
+      'ESCAPE': '\x1b',
       'F1': '\x1bOP',
       'F2': '\x1bOQ',
       'F3': '\x1bOR',
@@ -284,9 +316,9 @@ export class TerminalPane implements MouseHandler {
       return true;
     }
     
-    // Regular characters
-    if (key.length === 1) {
-      terminal.pty.write(key);
+    // Regular characters - use char for proper case
+    if (char && char.length === 1 && !ctrl && !alt) {
+      terminal.pty.write(char);
       return true;
     }
     
@@ -325,13 +357,26 @@ export class TerminalPane implements MouseHandler {
     output += ' '.repeat(this.rect.width);
     
     // Terminal tabs
+    this.tabPositions = [];
     let x = this.rect.x;
     for (let i = 0; i < this.terminals.length; i++) {
       const terminal = this.terminals[i]!;
       const isActive = i === this.activeTerminalIndex;
-      const title = ` ${i + 1}: ${terminal.title.substring(0, 15)} `;
+      const titleText = `${i + 1}: ${terminal.title.substring(0, 12)}`;
+      // Layout: space + title + space + × + space = titleText.length + 4
+      const tabWidth = titleText.length + 4;
       
-      if (x + title.length > this.rect.x + this.rect.width - 10) break;
+      if (x + tabWidth > this.rect.x + this.rect.width - 10) break;
+      
+      // Track tab position for click handling
+      // × is at position: x + 1 + titleText.length + 1 = x + titleText.length + 2
+      const closeButtonX = x + titleText.length + 2;
+      this.tabPositions.push({
+        index: i,
+        startX: x,
+        endX: x + tabWidth,
+        closeX: closeButtonX
+      });
       
       output += `\x1b[${this.rect.y};${x}H`;
       
@@ -343,8 +388,16 @@ export class TerminalPane implements MouseHandler {
       }
       if (fgRgb) output += `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
       
-      output += title;
-      x += title.length;
+      // Tab content: space + title + space
+      output += ` ${titleText} `;
+      
+      // Close button (dimmer color)
+      const closeFg = isActive 
+        ? { r: Math.floor((fgRgb?.r || 200) * 0.7), g: Math.floor((fgRgb?.g || 200) * 0.7), b: Math.floor((fgRgb?.b || 200) * 0.7) }
+        : { r: Math.floor((fgRgb?.r || 200) * 0.5), g: Math.floor((fgRgb?.g || 200) * 0.5), b: Math.floor((fgRgb?.b || 200) * 0.5) };
+      output += `\x1b[38;2;${closeFg.r};${closeFg.g};${closeFg.b}m×\x1b[38;2;${fgRgb?.r || 200};${fgRgb?.g || 200};${fgRgb?.b || 200}m `;
+      
+      x += tabWidth;
     }
     
     // New terminal button
@@ -493,16 +546,17 @@ export class TerminalPane implements MouseHandler {
           return true;
         }
         
-        // Check for terminal tab click
-        let x = this.rect.x;
-        for (let i = 0; i < this.terminals.length; i++) {
-          const terminal = this.terminals[i]!;
-          const title = ` ${i + 1}: ${terminal.title.substring(0, 15)} `;
-          if (event.x >= x && event.x < x + title.length) {
-            this.setActiveTerminal(i);
+        // Check for terminal tab click using tracked positions
+        for (const tabPos of this.tabPositions) {
+          if (event.x >= tabPos.startX && event.x < tabPos.endX) {
+            // Check if clicking on close button
+            if (event.x >= tabPos.closeX) {
+              this.closeTerminal(tabPos.index);
+            } else {
+              this.setActiveTerminal(tabPos.index);
+            }
             return true;
           }
-          x += title.length;
         }
       }
       

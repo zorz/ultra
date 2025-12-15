@@ -17,6 +17,7 @@ export interface PTYOptions {
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
+  scrollback?: number;
 }
 
 /**
@@ -81,6 +82,7 @@ function ansiToHex(code: number): string | null {
 class ScreenBuffer {
   private buffer: TerminalCell[][];
   private scrollback: TerminalCell[][] = [];
+  private viewOffset: number = 0;  // How many lines scrolled back (0 = showing current)
   private cursorX: number = 0;
   private cursorY: number = 0;
   private savedCursorX: number = 0;
@@ -95,7 +97,7 @@ class ScreenBuffer {
   private dim: boolean = false;
   private inverse: boolean = false;
   
-  constructor(private cols: number, private rows: number) {
+  constructor(private cols: number, private rows: number, private scrollbackLimit: number = 1000) {
     this.buffer = this.createEmptyBuffer();
   }
   
@@ -195,7 +197,7 @@ class ScreenBuffer {
     if (line) {
       this.scrollback.push(line);
       // Limit scrollback
-      if (this.scrollback.length > 1000) {
+      if (this.scrollback.length > this.scrollbackLimit) {
         this.scrollback.shift();
       }
     }
@@ -407,10 +409,19 @@ class ScreenBuffer {
   }
   
   /**
-   * Get buffer for rendering
+   * Get buffer for rendering (accounts for view offset when scrolled back)
    */
   getBuffer(): TerminalCell[][] {
-    return this.buffer;
+    if (this.viewOffset === 0) {
+      return this.buffer;
+    }
+    
+    // When scrolled back, combine scrollback and buffer
+    const allLines = [...this.scrollback, ...this.buffer];
+    const startLine = allLines.length - this.rows - this.viewOffset;
+    const endLine = startLine + this.rows;
+    
+    return allLines.slice(Math.max(0, startLine), endLine);
   }
   
   /**
@@ -425,6 +436,35 @@ class ScreenBuffer {
    */
   getScrollback(): TerminalCell[][] {
     return this.scrollback;
+  }
+  
+  /**
+   * Scroll view up (into scrollback history)
+   */
+  scrollViewUp(lines: number): void {
+    const maxOffset = this.scrollback.length;
+    this.viewOffset = Math.min(this.viewOffset + lines, maxOffset);
+  }
+  
+  /**
+   * Scroll view down (towards current)
+   */
+  scrollViewDown(lines: number): void {
+    this.viewOffset = Math.max(this.viewOffset - lines, 0);
+  }
+  
+  /**
+   * Reset view to current (scroll to bottom)
+   */
+  resetViewOffset(): void {
+    this.viewOffset = 0;
+  }
+  
+  /**
+   * Get current view offset
+   */
+  getViewOffset(): number {
+    return this.viewOffset;
   }
 }
 
@@ -630,7 +670,8 @@ export class PTY {
     };
     
     // Create screen buffer and ANSI parser
-    this.screen = new ScreenBuffer(this._cols, this._rows);
+    const scrollbackLimit = options.scrollback || 1000;
+    this.screen = new ScreenBuffer(this._cols, this._rows, scrollbackLimit);
     this.parser = new AnsiParser(this.screen);
   }
 
@@ -742,6 +783,27 @@ export class PTY {
    */
   getCursor(): { x: number; y: number } {
     return this.screen.getCursor();
+  }
+
+  /**
+   * Scroll view up (into scrollback history)
+   */
+  scrollViewUp(lines: number): void {
+    this.screen.scrollViewUp(lines);
+  }
+
+  /**
+   * Scroll view down (towards current)
+   */
+  scrollViewDown(lines: number): void {
+    this.screen.scrollViewDown(lines);
+  }
+
+  /**
+   * Reset view to bottom (current output)
+   */
+  resetViewOffset(): void {
+    this.screen.resetViewOffset();
   }
 
   /**

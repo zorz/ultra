@@ -426,8 +426,9 @@ export const defaultSettings: Record<string, any> = {
   "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}",
   "terminal.integrated.shell": "",
   "terminal.integrated.position": "bottom",
-  "terminal.integrated.defaultHeight": 12,
-  "terminal.integrated.defaultWidth": 60
+  "terminal.integrated.defaultHeight": 18,
+  "terminal.integrated.defaultWidth": 60,
+  "terminal.integrated.scrollback": 1000
 };
 
 export const defaultThemes: Record<string, Theme> = {

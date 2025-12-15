@@ -572,24 +572,20 @@ export class App {
       if (terminalPane.getFocused() && layoutManager.isTerminalVisible()) {
         // Allow Ctrl+` to toggle terminal even when focused
         if (event.ctrl && event.key === '`') {
-          layoutManager.toggleTerminal();
+          layoutManager.toggleTerminal(settings.get('terminal.integrated.defaultHeight'));
           terminalPane.setFocused(false);
           renderer.scheduleRender();
           return;
         }
         
-        // Pass key to terminal
+        // Pass key to terminal (with char for proper case)
         const handled = terminalPane.handleKeyEvent(
           event.key,
+          event.char,
           event.ctrl,
           event.alt,
           event.shift
         );
-        
-        // Also handle regular character input
-        if (!handled && event.char && event.char.length === 1 && !event.ctrl && !event.meta) {
-          terminalPane.write(event.char);
-        }
         
         renderer.scheduleRender();
         return;
@@ -1956,7 +1952,7 @@ export class App {
         title: 'Toggle Terminal',
         category: 'View',
         handler: async () => {
-          layoutManager.toggleTerminal();
+          layoutManager.toggleTerminal(settings.get('terminal.integrated.defaultHeight'));
           if (layoutManager.isTerminalVisible()) {
             // Create terminal if none exists
             if (terminalPane.getTerminalCount() === 0) {
@@ -1976,7 +1972,7 @@ export class App {
         category: 'Terminal',
         handler: async () => {
           if (!layoutManager.isTerminalVisible()) {
-            layoutManager.toggleTerminal();
+            layoutManager.toggleTerminal(settings.get('terminal.integrated.defaultHeight'));
           }
           await terminalPane.createTerminal();
           terminalPane.setFocused(true);
@@ -1990,7 +1986,7 @@ export class App {
         category: 'Terminal',
         handler: async () => {
           if (!layoutManager.isTerminalVisible()) {
-            layoutManager.toggleTerminal();
+            layoutManager.toggleTerminal(settings.get('terminal.integrated.defaultHeight'));
             if (terminalPane.getTerminalCount() === 0) {
               await terminalPane.createTerminal();
             }
