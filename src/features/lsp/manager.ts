@@ -16,44 +16,13 @@ interface ServerConfig {
   args: string[];
 }
 
-/**
- * Get the path to the bundled ultra-tsserver if available.
- * It should be in the same directory as the ultra binary.
- */
-function getBundledTsServer(): string | null {
-  // Check if we're running from a compiled binary
-  const execPath = process.execPath;
-  const execDir = path.dirname(execPath);
-  const bundledPath = path.join(execDir, 'ultra-tsserver');
-  
-  try {
-    if (fs.existsSync(bundledPath)) {
-      // Verify it's executable
-      fs.accessSync(bundledPath, fs.constants.X_OK);
-      return bundledPath;
-    }
-  } catch {
-    // Not found or not executable
-  }
-  
-  return null;
-}
-
-// Get the TypeScript server command - prefer bundled, fallback to system
-function getTsServerConfig(): ServerConfig {
-  const bundled = getBundledTsServer();
-  if (bundled) {
-    return { command: bundled, args: ['--stdio'] };
-  }
-  return { command: 'typescript-language-server', args: ['--stdio'] };
-}
-
 // Default server configurations
+// Requires: npm install -g typescript-language-server typescript
 const DEFAULT_SERVERS: Record<string, ServerConfig> = {
-  typescript: getTsServerConfig(),
-  javascript: getTsServerConfig(),
-  typescriptreact: getTsServerConfig(),
-  javascriptreact: getTsServerConfig(),
+  typescript: { command: 'typescript-language-server', args: ['--stdio'] },
+  javascript: { command: 'typescript-language-server', args: ['--stdio'] },
+  typescriptreact: { command: 'typescript-language-server', args: ['--stdio'] },
+  javascriptreact: { command: 'typescript-language-server', args: ['--stdio'] },
   rust: { command: 'rust-analyzer', args: [] },
   python: { command: 'pylsp', args: [] },
   go: { command: 'gopls', args: [] },
@@ -92,16 +61,31 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   '.less': 'css',
 };
 
+import { appendFileSync } from 'fs';
+
 // Diagnostics callback type
 export type DiagnosticsCallback = (uri: string, diagnostics: LSPDiagnostic[]) => void;
 
-// Debug log function
-let debugEnabled = false;
+// Debug log file path
+const DEBUG_LOG_PATH = './debug.log';
+
+// Debug log function - writes to file
+// Enable by default for now to debug LSP issues
+let debugEnabled = true;
 const debugLog = (...args: unknown[]) => {
   if (debugEnabled) {
-    console.error('[LSP]', ...args);
+    const timestamp = new Date().toISOString();
+    const message = `[${timestamp}] [LSP] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`;
+    try {
+      appendFileSync(DEBUG_LOG_PATH, message);
+    } catch {
+      // Ignore write errors
+    }
   }
 };
+
+// Export for use by client
+export { debugLog, DEBUG_LOG_PATH };
 
 /**
  * LSP Manager - singleton that manages all language servers
@@ -450,14 +434,27 @@ export class LSPManager {
    */
   async getHover(filePath: string, line: number, character: number): Promise<LSPHover | null> {
     const uri = `file://${filePath}`;
+    debugLog(`getHover: uri=${uri}, line=${line}, char=${character}`);
+    
     const languageId = this.documentLanguages.get(uri);
-    if (!languageId) return null;
+    debugLog(`getHover: languageId=${languageId}, registered docs:`, Array.from(this.documentLanguages.keys()));
+    
+    if (!languageId) {
+      debugLog('getHover: No languageId found for URI');
+      return null;
+    }
 
     const client = this.clients.get(languageId);
-    if (!client) return null;
+    if (!client) {
+      debugLog('getHover: No client found for languageId');
+      return null;
+    }
 
     const position: LSPPosition = { line, character };
-    return client.getHover(uri, position);
+    debugLog('getHover: Calling client.getHover...');
+    const result = await client.getHover(uri, position);
+    debugLog(`getHover: Result: ${result ? 'got hover' : 'null'}`);
+    return result;
   }
 
   /**

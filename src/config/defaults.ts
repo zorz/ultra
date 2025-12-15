@@ -319,11 +319,11 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.triggerCompletion"
   },
   {
-    "key": "ctrl+shift+k",
+    "key": "ctrl+k",
     "command": "ultra.showHover"
   },
   {
-    "key": "ctrl+shift+d",
+    "key": "ctrl+k d",
     "command": "ultra.lspDebug"
   },
   {

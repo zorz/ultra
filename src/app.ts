@@ -91,7 +91,8 @@ export class App {
       // Apply initial settings (sidebar visibility, etc.)
       this.applySettings();
 
-      // Initialize LSP manager
+      // Initialize LSP manager with workspace root
+      lspManager.setWorkspaceRoot(workspaceRoot);
       await this.initializeLSP();
 
       // Open file if provided
@@ -560,12 +561,11 @@ export class App {
 
     // Small delay to allow typing to settle
     this.completionTriggerTimer = setTimeout(async () => {
-      const uri = `file://${doc.filePath}`;
       const cursor = doc.primaryCursor;
       
       try {
         const completions = await lspManager.getCompletions(
-          uri,
+          doc.filePath,
           cursor.position.line,
           cursor.position.column
         );
@@ -593,12 +593,11 @@ export class App {
     const doc = this.getActiveDocument();
     if (!doc || !doc.filePath) return;
 
-    const uri = `file://${doc.filePath}`;
     const cursor = doc.primaryCursor;
 
     try {
       const result = await lspManager.getDefinition(
-        uri,
+        doc.filePath,
         cursor.position.line,
         cursor.position.column
       );
@@ -645,12 +644,11 @@ export class App {
     const doc = this.getActiveDocument();
     if (!doc || !doc.filePath) return;
 
-    const uri = `file://${doc.filePath}`;
     const cursor = doc.primaryCursor;
 
     try {
       const locations = await lspManager.getReferences(
-        uri,
+        doc.filePath,
         cursor.position.line,
         cursor.position.column
       );
@@ -693,18 +691,33 @@ export class App {
    * Show hover information at cursor
    */
   private async showHover(): Promise<void> {
+    const fs = require('fs');
+    const logDebug = (msg: string) => {
+      const timestamp = new Date().toISOString();
+      fs.appendFileSync('./debug.log', `[${timestamp}] [showHover] ${msg}\n`);
+    };
+    
+    logDebug('showHover called');
+    
     const doc = this.getActiveDocument();
-    if (!doc || !doc.filePath) return;
+    if (!doc || !doc.filePath) {
+      logDebug('No document or filePath');
+      statusBar.setMessage('No file open', 2000);
+      return;
+    }
 
-    const uri = `file://${doc.filePath}`;
+    logDebug(`Document: ${doc.filePath}, language: ${doc.language}`);
     const cursor = doc.primaryCursor;
+    logDebug(`Cursor: line ${cursor.position.line}, col ${cursor.position.column}`);
 
     try {
+      logDebug('Calling lspManager.getHover...');
       const hover = await lspManager.getHover(
-        uri,
+        doc.filePath,
         cursor.position.line,
         cursor.position.column
       );
+      logDebug(`Hover result: ${hover ? JSON.stringify(hover).substring(0, 200) : 'null'}`);
 
       if (hover) {
         // Calculate screen position for tooltip
@@ -715,10 +728,18 @@ export class App {
         
         hoverTooltip.show(hover, screenX, screenY);
       } else {
-        statusBar.setMessage('No hover information', 2000);
+        // Show more helpful message about LSP status
+        const debugInfo = lspManager.getDebugInfo();
+        const hasClient = debugInfo.includes(`${doc.language}:`);
+        if (!hasClient) {
+          statusBar.setMessage(`No LSP for ${doc.language} (Ctrl+Shift+D for debug)`, 3000);
+        } else {
+          statusBar.setMessage('No hover information at cursor', 2000);
+        }
       }
     } catch (err) {
-      statusBar.setMessage('Error getting hover info', 2000);
+      logDebug(`Error: ${err}`);
+      statusBar.setMessage(`Hover error: ${err}`, 3000);
     }
     
     renderer.scheduleRender();
@@ -757,11 +778,9 @@ export class App {
       onConfirm: async (newName: string) => {
         if (!newName || newName === currentWord) return;
         
-        const uri = `file://${doc.filePath}`;
-        
         try {
           const workspaceEdit = await lspManager.rename(
-            uri,
+            doc.filePath,
             cursor.position.line,
             cursor.position.column,
             newName
@@ -2031,8 +2050,16 @@ export class App {
         handler: () => {
           lspManager.setDebug(true);
           const info = lspManager.getDebugInfo();
-          statusBar.setMessage('LSP debug info in console', 3000);
-          console.error('\n=== LSP Debug Info ===\n' + info + '\n=====================\n');
+          // Write to debug.log file
+          const timestamp = new Date().toISOString();
+          const message = `\n=== LSP Debug Info (${timestamp}) ===\n${info}\n${'='.repeat(50)}\n`;
+          try {
+            const fs = require('fs');
+            fs.appendFileSync('./debug.log', message);
+            statusBar.setMessage('LSP debug enabled - see debug.log', 3000);
+          } catch {
+            statusBar.setMessage('Failed to write debug.log', 3000);
+          }
         }
       }
     ]);
@@ -2074,14 +2101,17 @@ export class App {
    */
   async openFile(filePath: string): Promise<void> {
     try {
+      // Resolve to absolute path for LSP compatibility
+      const absolutePath = path.resolve(filePath);
+      
       // Check if already open
-      const existing = this.documents.find(d => d.document.filePath === filePath);
+      const existing = this.documents.find(d => d.document.filePath === absolutePath);
       if (existing) {
         this.activateDocument(existing.id);
         return;
       }
 
-      const document = await Document.fromFile(filePath);
+      const document = await Document.fromFile(absolutePath);
       const id = this.generateId();
       
       this.documents.push({ id, document });

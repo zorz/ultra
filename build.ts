@@ -66,24 +66,8 @@ export const defaultThemes: Record<string, Theme> = ${JSON.stringify(themes, nul
 fs.writeFileSync(outputFile, generatedTs);
 console.log(`Generated ${outputFile}`);
 
-// Step 2: Patch typescript-language-server CLI for bundling
-console.log("Patching typescript-language-server CLI...");
-const tsServerVersion = '5.1.3';
-const cliSource = fs.readFileSync('./node_modules/typescript-language-server/lib/cli.mjs', 'utf-8');
-// Replace the package.json version read with a hardcoded version
-const patchedCli = cliSource.replace(
-  /const \{version: version\} = JSON\.parse\(readFileSync\(new URL\('\.\.\/package\.json', import\.meta\.url\), \{\s*encoding: 'utf8'\s*\}\)\);/,
-  `const version = '${tsServerVersion}'; // PATCHED for bundling`
-);
-fs.writeFileSync('./src/lsp-servers/tsserver-cli.mjs', patchedCli);
-console.log(`  Patched tsserver-cli.mjs (version ${tsServerVersion})`);
-
-// Step 3: Compile the binaries
+// Step 2: Compile the binary
 console.log("Compiling ultra binary...");
 await $`bun build --compile --target=bun-darwin-arm64 ./src/index.ts --outfile ultra`;
-
-// Step 4: Compile the bundled TypeScript language server
-console.log("Compiling ultra-tsserver binary...");
-await $`bun build --compile --target=bun-darwin-arm64 ./src/lsp-servers/tsserver-wrapper.ts --outfile ultra-tsserver`;
 
 console.log("Build complete!");

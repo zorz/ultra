@@ -96,6 +96,11 @@ export type NotificationHandler = (method: string, params: unknown) => void;
 /**
  * LSP Client for a single language server
  */
+import { appendFileSync } from 'fs';
+
+// Debug log file path (same as manager)
+const DEBUG_LOG_PATH = './debug.log';
+
 export class LSPClient {
   private process: Subprocess | null = null;
   private requestId = 0;
@@ -105,7 +110,7 @@ export class LSPClient {
   private workspaceRoot: string;
   private notificationHandler: NotificationHandler | null = null;
   private serverCapabilities: Record<string, unknown> = {};
-  public debugEnabled = false;
+  public debugEnabled = true;  // Enable by default for debugging
   
   constructor(
     private command: string,
@@ -117,7 +122,13 @@ export class LSPClient {
 
   private debugLog(msg: string): void {
     if (this.debugEnabled) {
-      console.log(`[LSPClient ${this.command}] ${msg}`);
+      const timestamp = new Date().toISOString();
+      const message = `[${timestamp}] [LSPClient ${this.command}] ${msg}\n`;
+      try {
+        appendFileSync(DEBUG_LOG_PATH, message);
+      } catch {
+        // Ignore write errors
+      }
     }
   }
 
@@ -316,6 +327,8 @@ export class LSPClient {
    * Handle incoming message
    */
   private handleMessage(msg: JSONRPCMessage): void {
+    this.debugLog(`handleMessage: ${JSON.stringify(msg).substring(0, 200)}`);
+    
     if ('id' in msg && msg.id !== undefined) {
       if ('method' in msg) {
         // Server request (we need to respond)
@@ -389,6 +402,7 @@ export class LSPClient {
    */
   async request<T>(method: string, params?: unknown): Promise<T> {
     const id = ++this.requestId;
+    this.debugLog(`request[${id}]: ${method}`);
     
     return new Promise((resolve, reject) => {
       this.pending.set(id, { 
@@ -409,6 +423,7 @@ export class LSPClient {
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
+          this.debugLog(`request[${id}]: TIMEOUT after 30s`);
           reject(new Error(`LSP request '${method}' timed out`));
         }
       }, 30000);

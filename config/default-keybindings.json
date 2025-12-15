@@ -102,8 +102,8 @@
   { "key": "shift+f12", "command": "ultra.findReferences" },
   { "key": "f2", "command": "ultra.rename" },
   { "key": "ctrl+space", "command": "ultra.triggerCompletion" },
-  { "key": "ctrl+shift+k", "command": "ultra.showHover" },
-  { "key": "ctrl+shift+d", "command": "ultra.lspDebug" },
+  { "key": "ctrl+k", "command": "ultra.showHover" },
+  { "key": "ctrl+k d", "command": "ultra.lspDebug" },
 
   { "key": "escape", "command": "ultra.escape" },
   { "key": "enter", "command": "ultra.enter" },
