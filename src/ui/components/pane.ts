@@ -741,7 +741,7 @@ export class Pane implements MouseHandler {
     debug('buffer done');
     
     // Render selection highlight
-    if (hasSelection(cursor)) {
+    if (hasSelection(cursor.selection)) {
       this.renderSelectionForLine(ctx, doc, lineNum, screenY, rect);
     }
     debug('complete');
