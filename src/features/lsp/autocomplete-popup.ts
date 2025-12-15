@@ -68,7 +68,8 @@ const COMPLETION_KIND_TEXT: Record<number, string> = {
 
 export class AutocompletePopup {
   private visible = false;
-  private items: LSPCompletionItem[] = [];
+  private allItems: LSPCompletionItem[] = [];  // All items from LSP
+  private items: LSPCompletionItem[] = [];      // Filtered items
   private selectedIndex = 0;
   private x = 0;
   private y = 0;
@@ -76,22 +77,93 @@ export class AutocompletePopup {
   private scrollOffset = 0;
   private onSelectCallback: ((item: LSPCompletionItem) => void) | null = null;
   private onDismissCallback: (() => void) | null = null;
+  private prefix = '';  // The word prefix being typed
+  private startColumn = 0;  // Column where the prefix started
 
   /**
    * Show the popup with completions
    */
-  show(items: LSPCompletionItem[], x: number, y: number): void {
+  show(items: LSPCompletionItem[], x: number, y: number, prefix: string = '', startColumn: number = 0): void {
     if (items.length === 0) {
       this.hide();
       return;
     }
     
-    this.items = items;
-    this.selectedIndex = 0;
-    this.scrollOffset = 0;
+    this.allItems = items;
+    this.prefix = prefix;
+    this.startColumn = startColumn;
     this.x = x;
     this.y = y;
     this.visible = true;
+    
+    // Filter and sort items based on prefix
+    this.filterItems();
+  }
+
+  /**
+   * Update the prefix and re-filter
+   */
+  updatePrefix(prefix: string): void {
+    this.prefix = prefix;
+    this.filterItems();
+    
+    // Hide if no matches
+    if (this.items.length === 0) {
+      this.hide();
+    }
+  }
+
+  /**
+   * Filter items based on current prefix
+   */
+  private filterItems(): void {
+    const lowerPrefix = this.prefix.toLowerCase();
+    
+    if (!lowerPrefix) {
+      this.items = [...this.allItems];
+    } else {
+      // Filter items that match the prefix
+      this.items = this.allItems.filter(item => {
+        const label = item.label.toLowerCase();
+        const filterText = (item.filterText || item.label).toLowerCase();
+        return label.startsWith(lowerPrefix) || 
+               filterText.startsWith(lowerPrefix) ||
+               label.includes(lowerPrefix) ||
+               filterText.includes(lowerPrefix);
+      });
+      
+      // Sort: exact prefix matches first, then starts-with, then contains
+      this.items.sort((a, b) => {
+        const aLabel = a.label.toLowerCase();
+        const bLabel = b.label.toLowerCase();
+        const aStartsWith = aLabel.startsWith(lowerPrefix);
+        const bStartsWith = bLabel.startsWith(lowerPrefix);
+        
+        if (aStartsWith && !bStartsWith) return -1;
+        if (!aStartsWith && bStartsWith) return 1;
+        
+        // Secondary sort by length (shorter = better match)
+        return a.label.length - b.label.length;
+      });
+    }
+    
+    // Reset selection to first item
+    this.selectedIndex = 0;
+    this.scrollOffset = 0;
+  }
+
+  /**
+   * Get the current prefix
+   */
+  getPrefix(): string {
+    return this.prefix;
+  }
+
+  /**
+   * Get the start column
+   */
+  getStartColumn(): number {
+    return this.startColumn;
   }
 
   /**
@@ -99,9 +171,12 @@ export class AutocompletePopup {
    */
   hide(): void {
     this.visible = false;
+    this.allItems = [];
     this.items = [];
     this.selectedIndex = 0;
     this.scrollOffset = 0;
+    this.prefix = '';
+    this.startColumn = 0;
   }
 
   /**

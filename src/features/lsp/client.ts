@@ -105,7 +105,7 @@ export class LSPClient {
   private process: Subprocess | null = null;
   private requestId = 0;
   private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-  private buffer = '';
+  private rawBuffer: Uint8Array = new Uint8Array(0);  // Byte buffer for proper Content-Length handling
   private initialized = false;
   private workspaceRoot: string;
   private notificationHandler: NotificationHandler | null = null;
@@ -269,14 +269,18 @@ export class LSPClient {
     if (typeof stdout === 'number') return;  // Not a readable stream
     
     const reader = (stdout as ReadableStream<Uint8Array>).getReader();
-    const decoder = new TextDecoder();
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        this.buffer += decoder.decode(value, { stream: true });
+        // Append to byte buffer
+        const newBuffer = new Uint8Array(this.rawBuffer.length + value.length);
+        newBuffer.set(this.rawBuffer);
+        newBuffer.set(value, this.rawBuffer.length);
+        this.rawBuffer = newBuffer;
+        
         this.processBuffer();
       }
     } catch (error) {
@@ -286,38 +290,63 @@ export class LSPClient {
   }
 
   /**
+   * Find byte sequence in buffer
+   */
+  private findInBuffer(needle: Uint8Array, start = 0): number {
+    outer: for (let i = start; i <= this.rawBuffer.length - needle.length; i++) {
+      for (let j = 0; j < needle.length; j++) {
+        if (this.rawBuffer[i + j] !== needle[j]) continue outer;
+      }
+      return i;
+    }
+    return -1;
+  }
+
+  /**
    * Process the buffer for complete messages
    */
   private processBuffer(): void {
+    const decoder = new TextDecoder();
+    const headerEnd = new TextEncoder().encode('\r\n\r\n');
+    
     while (true) {
-      // Look for Content-Length header
-      const headerEnd = this.buffer.indexOf('\r\n\r\n');
-      if (headerEnd === -1) return;
+      // Look for header end
+      const headerEndPos = this.findInBuffer(headerEnd);
+      if (headerEndPos === -1) return;
 
-      const header = this.buffer.substring(0, headerEnd);
+      // Parse header as string
+      const headerBytes = this.rawBuffer.slice(0, headerEndPos);
+      const header = decoder.decode(headerBytes);
+      
       const contentLengthMatch = header.match(/Content-Length:\s*(\d+)/i);
       if (!contentLengthMatch) {
-        // Invalid header, skip to next potential message
-        this.buffer = this.buffer.substring(headerEnd + 4);
+        // Invalid header, skip past it
+        this.rawBuffer = this.rawBuffer.slice(headerEndPos + 4);
         continue;
       }
 
       const contentLength = parseInt(contentLengthMatch[1]!, 10);
-      const messageStart = headerEnd + 4;
+      const messageStart = headerEndPos + 4;  // After \r\n\r\n
       const messageEnd = messageStart + contentLength;
 
-      if (this.buffer.length < messageEnd) {
+      if (this.rawBuffer.length < messageEnd) {
         // Not enough data yet
         return;
       }
 
-      const messageStr = this.buffer.substring(messageStart, messageEnd);
-      this.buffer = this.buffer.substring(messageEnd);
+      // Extract message bytes and decode
+      const messageBytes = this.rawBuffer.slice(messageStart, messageEnd);
+      const messageStr = decoder.decode(messageBytes);
+      
+      // Remove processed data from buffer
+      this.rawBuffer = this.rawBuffer.slice(messageEnd);
 
       try {
         const message = JSON.parse(messageStr) as JSONRPCMessage;
         this.handleMessage(message);
       } catch (error) {
+        this.debugLog(`Failed to parse message: ${error}`);
+        this.debugLog(`Raw message (first 500 chars): ${messageStr.substring(0, 500)}`);
         console.error('LSP: Failed to parse message:', error);
       }
     }
@@ -544,7 +573,8 @@ export class LSPClient {
       if (!result) return [];
       if (Array.isArray(result)) return result;
       return result.items || [];
-    } catch {
+    } catch (error) {
+      this.debugLog(`getCompletions error: ${error}`);
       return [];
     }
   }

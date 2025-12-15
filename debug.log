@@ -1,342 +1,81 @@
-[2025-12-15T03:46:47.887Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] request[3]: shutdown
-[2025-12-15T03:46:49.739Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:46:49.739Z] [LSP] Checking if /Users/keith/Development/ultra-editor/ultra-tsserver exists...
-[2025-12-15T03:46:49.742Z] [LSP] Starting /Users/keith/Development/ultra-editor/ultra-tsserver for typescript...
-[2025-12-15T03:46:49.742Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Starting: /Users/keith/Development/ultra-editor/ultra-tsserver --stdio
-[2025-12-15T03:46:49.742Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Workspace root: /Users/keith/Development/ultra-editor
-[2025-12-15T03:46:49.743Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Process spawned, PID: 50245
-[2025-12-15T03:46:49.743Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Sending initialize request...
-[2025-12-15T03:46:49.743Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] request[1]: initialize
-[2025-12-15T03:46:49.787Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
-[2025-12-15T03:46:49.787Z] [LSP] Notification from typescript: window/logMessage
-[2025-12-15T03:46:49.787Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
-[2025-12-15T03:46:49.787Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
-[2025-12-15T03:46:49.787Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] Initialization complete
-[2025-12-15T03:46:49.787Z] [LSP] Successfully started /Users/keith/Development/ultra-editor/ultra-tsserver for typescript
-[2025-12-15T03:46:49.787Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
-[2025-12-15T03:46:49.792Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
-[2025-12-15T03:46:49.792Z] [LSP] Notification from typescript: $/typescriptVersion
-[2025-12-15T03:46:49.823Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] stderr: 22817 |       locale,
-22818 |       plugins: plugins || [],
-22819 |       onEvent: this.onTsEvent.bind(this),
-22820 |       onExit: (exitCode, signal) => {
-22821 |         this.shutdown();
-22822 |           throw new Error(`tsserver process has exited (exit code: ${exitCode}, signal: ${signal}). Stopping the server.`);
-                        ^
-error: tsserver process has exited (exit code: 1, signal: null). Stopping the server.
-      at onExit (/$bunfs/root/ultra-tsserver:22822:17)
-      at <anonymous> (/$bunfs/root/ultra-tsserver:19034:20)
-      at forEach (1:11)
-      at <anonymous> (/$bunfs/root/ultra-tsserver:18273:33)
-      at forEach (1:11)
-      at <anonymous> (/$bunfs/root/ultra-tsserver:17993:33)
-      at emit (node:events:98:22)
-      at #handleOnExit (node:child_process:520:14)
-[2025-12-15T03:46:49.824Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":1,"message":"[lspserver] [tsclient] [tsserver] Exited. Code: 1. Signal: null"}}
-[2025-12-15T03:46:49.824Z] [LSP] Notification from typescript: window/logMessage
-[2025-12-15T03:46:49.824Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] stderr: Bun v1.3.4 (macOS arm64)
-[2025-12-15T03:47:53.481Z] [LSPClient /Users/keith/Development/ultra-editor/ultra-tsserver] request[2]: shutdown
-[2025-12-15T03:49:00.288Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:00.289Z] [LSP] Checking if typescript-language-server exists...
-[2025-12-15T03:49:00.292Z] [LSP] Starting typescript-language-server for typescript...
-[2025-12-15T03:49:00.292Z] [LSPClient typescript-language-server] Starting: typescript-language-server --stdio
-[2025-12-15T03:49:00.292Z] [LSPClient typescript-language-server] Workspace root: /Users/keith/Development/ultra-editor
-[2025-12-15T03:49:00.293Z] [LSPClient typescript-language-server] Process spawned, PID: 51492
-[2025-12-15T03:49:00.293Z] [LSPClient typescript-language-server] Sending initialize request...
-[2025-12-15T03:49:00.293Z] [LSPClient typescript-language-server] request[1]: initialize
-[2025-12-15T03:49:00.649Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
-[2025-12-15T03:49:00.649Z] [LSP] Notification from typescript: window/logMessage
-[2025-12-15T03:49:00.649Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
-[2025-12-15T03:49:00.649Z] [LSPClient typescript-language-server] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
-[2025-12-15T03:49:00.649Z] [LSPClient typescript-language-server] Initialization complete
-[2025-12-15T03:49:00.649Z] [LSP] Successfully started typescript-language-server for typescript
-[2025-12-15T03:49:00.649Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
-[2025-12-15T03:49:00.655Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
-[2025-12-15T03:49:00.655Z] [LSP] Notification from typescript: $/typescriptVersion
-[2025-12-15T03:49:01.723Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
-[2025-12-15T03:49:01.724Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:49:01.724Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
-[2025-12-15T03:49:02.611Z] [showHover] showHover called
-[2025-12-15T03:49:02.611Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:02.612Z] [showHover] Cursor: line 5, col 0
-[2025-12-15T03:49:02.612Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:02.612Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=5, char=0
-[2025-12-15T03:49:02.612Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:02.613Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:02.613Z] [LSPClient typescript-language-server] request[2]: textDocument/hover
-[2025-12-15T03:49:02.615Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":2,"result":null}
-[2025-12-15T03:49:02.616Z] [LSP] getHover: Result: null
-[2025-12-15T03:49:02.616Z] [showHover] Hover result: null
-[2025-12-15T03:49:11.348Z] [showHover] showHover called
-[2025-12-15T03:49:11.349Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:11.349Z] [showHover] Cursor: line 16, col 13
-[2025-12-15T03:49:11.349Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:11.349Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=16, char=13
-[2025-12-15T03:49:11.349Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:11.349Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:11.349Z] [LSPClient typescript-language-server] request[3]: textDocument/hover
-[2025-12-15T03:49:11.356Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":3,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nconstructor UserService(apiUrl: string): UserService\n```\n"},"range":{"start":{"line":16,"character":2},"end"
-[2025-12-15T03:49:11.356Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:11.356Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nconstructor UserService(apiUrl: string): UserService\n```\n"},"range":{"start":{"line":16,"character":2},"end":{"line":16,"character":13}}}
-[2025-12-15T03:49:15.201Z] [showHover] showHover called
-[2025-12-15T03:49:15.201Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:15.202Z] [showHover] Cursor: line 13, col 13
-[2025-12-15T03:49:15.202Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:15.203Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=13, char=13
-[2025-12-15T03:49:15.203Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:15.203Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:15.203Z] [LSPClient typescript-language-server] request[4]: textDocument/hover
-[2025-12-15T03:49:15.207Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":4,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}}
-[2025-12-15T03:49:15.207Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:15.207Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
-[2025-12-15T03:49:17.978Z] [showHover] showHover called
-[2025-12-15T03:49:17.978Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:17.978Z] [showHover] Cursor: line 13, col 13
-[2025-12-15T03:49:17.978Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:17.979Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=13, char=13
-[2025-12-15T03:49:17.979Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:17.979Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:17.979Z] [LSPClient typescript-language-server] request[5]: textDocument/hover
-[2025-12-15T03:49:17.980Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":5,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}}
-[2025-12-15T03:49:17.980Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:17.980Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
-[2025-12-15T03:49:19.924Z] [showHover] showHover called
-[2025-12-15T03:49:19.925Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:19.926Z] [showHover] Cursor: line 18, col 13
-[2025-12-15T03:49:19.926Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:19.926Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=18, char=13
-[2025-12-15T03:49:19.926Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:19.926Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:19.926Z] [LSPClient typescript-language-server] request[6]: textDocument/hover
-[2025-12-15T03:49:19.939Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":6,"result":{"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"charact
-[2025-12-15T03:49:19.939Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:19.939Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"character":8},"end":{"line":18,"characte
-[2025-12-15T03:49:22.411Z] [showHover] showHover called
-[2025-12-15T03:49:22.411Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:22.411Z] [showHover] Cursor: line 18, col 13
-[2025-12-15T03:49:22.411Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:22.411Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=18, char=13
-[2025-12-15T03:49:22.411Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:22.411Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:22.412Z] [LSPClient typescript-language-server] request[7]: textDocument/hover
-[2025-12-15T03:49:22.414Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":7,"result":{"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"charact
-[2025-12-15T03:49:22.414Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:22.414Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"character":8},"end":{"line":18,"characte
-
-=== LSP Debug Info (2025-12-15T03:49:27.086Z) ===
-Workspace: /Users/keith/Development/ultra-editor
-Enabled: true
-Active clients: 1
-  - typescript: ready
-Open documents: 1
-  - file:///Users/keith/Development/ultra-editor/test/test.ts (typescript) v1
-Failed servers: 0
-==================================================
-[2025-12-15T03:49:29.084Z] [showHover] showHover called
-[2025-12-15T03:49:29.085Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:49:29.086Z] [showHover] Cursor: line 18, col 13
-[2025-12-15T03:49:29.086Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:49:29.086Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=18, char=13
-[2025-12-15T03:49:29.086Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:49:29.086Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:49:29.086Z] [LSPClient typescript-language-server] request[8]: textDocument/hover
-[2025-12-15T03:49:29.091Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":8,"result":{"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"charact
-[2025-12-15T03:49:29.092Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:49:29.092Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.fetchUser(id: number): Promise<User | null>\n```\n"},"range":{"start":{"line":18,"character":8},"end":{"line":18,"characte
-[2025-12-15T03:50:41.279Z] [showHover] showHover called
-[2025-12-15T03:50:41.279Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:50:41.280Z] [showHover] Cursor: line 19, col 18
-[2025-12-15T03:50:41.280Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:50:41.280Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=19, char=18
-[2025-12-15T03:50:41.280Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:50:41.280Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:50:41.280Z] [LSPClient typescript-language-server] request[9]: textDocument/hover
-[2025-12-15T03:50:41.284Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":9,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nconst response: Response\n```\n"},"range":{"start":{"line":19,"character":10},"end":{"line":19,"character":18}
-[2025-12-15T03:50:41.284Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:50:41.284Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nconst response: Response\n```\n"},"range":{"start":{"line":19,"character":10},"end":{"line":19,"character":18}}}
-[2025-12-15T03:50:52.308Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":37,"character":0},"end"
-[2025-12-15T03:50:52.308Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:50:52.308Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:50:52.854Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":37,"character":0},"end"
-[2025-12-15T03:50:52.854Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:50:52.855Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:50:55.623Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":50,"character":6},"end"
-[2025-12-15T03:50:55.624Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:50:55.625Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
-[2025-12-15T03:50:55.875Z] [LSPClient typescript-language-server] request[10]: textDocument/completion
-[2025-12-15T03:50:55.924Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":10,"result":{"items":[{"label":"apply","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".apply","textEdit":{"range":{"start":{"line":37,"character":11},"end":{"line":3
-[2025-12-15T03:50:56.148Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":37,"character":12},"end
-[2025-12-15T03:50:56.148Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:50:56.149Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:51:03.528Z] [LSPClient typescript-language-server] request[11]: shutdown
-[2025-12-15T03:52:06.658Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:06.658Z] [LSP] Checking if typescript-language-server exists...
-[2025-12-15T03:52:06.661Z] [LSP] Starting typescript-language-server for typescript...
-[2025-12-15T03:52:06.662Z] [LSPClient typescript-language-server] Starting: typescript-language-server --stdio
-[2025-12-15T03:52:06.662Z] [LSPClient typescript-language-server] Workspace root: /Users/keith/Development/ultra-editor
-[2025-12-15T03:52:06.662Z] [LSPClient typescript-language-server] Process spawned, PID: 52999
-[2025-12-15T03:52:06.662Z] [LSPClient typescript-language-server] Sending initialize request...
-[2025-12-15T03:52:06.662Z] [LSPClient typescript-language-server] request[1]: initialize
-[2025-12-15T03:52:06.712Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
-[2025-12-15T03:52:06.712Z] [LSP] Notification from typescript: window/logMessage
-[2025-12-15T03:52:06.712Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
-[2025-12-15T03:52:06.712Z] [LSPClient typescript-language-server] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
-[2025-12-15T03:52:06.712Z] [LSPClient typescript-language-server] Initialization complete
-[2025-12-15T03:52:06.712Z] [LSP] Successfully started typescript-language-server for typescript
-[2025-12-15T03:52:06.712Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
-[2025-12-15T03:52:06.717Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
-[2025-12-15T03:52:06.717Z] [LSP] Notification from typescript: $/typescriptVersion
-[2025-12-15T03:52:07.640Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
-[2025-12-15T03:52:07.640Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:52:07.641Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
-[2025-12-15T03:52:08.412Z] [showHover] showHover called
-[2025-12-15T03:52:08.413Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:08.413Z] [showHover] Cursor: line 5, col 0
-[2025-12-15T03:52:08.413Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:52:08.413Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=5, char=0
-[2025-12-15T03:52:08.413Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:52:08.413Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:52:08.414Z] [LSPClient typescript-language-server] request[2]: textDocument/hover
-[2025-12-15T03:52:08.417Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":2,"result":null}
-[2025-12-15T03:52:08.417Z] [LSP] getHover: Result: null
-[2025-12-15T03:52:08.417Z] [showHover] Hover result: null
-[2025-12-15T03:52:11.189Z] [showHover] showHover called
-[2025-12-15T03:52:11.189Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:11.190Z] [showHover] Cursor: line 5, col 11
-[2025-12-15T03:52:11.190Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:52:11.190Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=5, char=11
-[2025-12-15T03:52:11.190Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:52:11.190Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:52:11.190Z] [LSPClient typescript-language-server] request[3]: textDocument/hover
-[2025-12-15T03:52:11.196Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":3,"result":{"contents":{"kind":"markdown","value":"\n```typescript\ninterface User\n```\nTypeScript Test File\nTests syntax highlighting for TypeScript"},"range":{"start":{"line"
-[2025-12-15T03:52:11.197Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:52:11.197Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\ninterface User\n```\nTypeScript Test File\nTests syntax highlighting for TypeScript"},"range":{"start":{"line":5,"character":10},"end":{"line":
-[2025-12-15T03:52:15.353Z] [showHover] showHover called
-[2025-12-15T03:52:15.353Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:15.354Z] [showHover] Cursor: line 13, col 11
-[2025-12-15T03:52:15.354Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:52:15.354Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=13, char=11
-[2025-12-15T03:52:15.354Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:52:15.354Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:52:15.354Z] [LSPClient typescript-language-server] request[4]: textDocument/hover
-[2025-12-15T03:52:15.356Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":4,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}}
-[2025-12-15T03:52:15.356Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:52:15.356Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
-[2025-12-15T03:52:17.815Z] [showHover] showHover called
-[2025-12-15T03:52:17.816Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:17.817Z] [showHover] Cursor: line 16, col 11
-[2025-12-15T03:52:17.817Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:52:17.817Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=16, char=11
-[2025-12-15T03:52:17.818Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:52:17.818Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:52:17.818Z] [LSPClient typescript-language-server] request[5]: textDocument/hover
-[2025-12-15T03:52:17.828Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":5,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nconstructor UserService(apiUrl: string): UserService\n```\n"},"range":{"start":{"line":16,"character":2},"end"
-[2025-12-15T03:52:17.828Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:52:17.828Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nconstructor UserService(apiUrl: string): UserService\n```\n"},"range":{"start":{"line":16,"character":2},"end":{"line":16,"character":13}}}
-[2025-12-15T03:52:27.088Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":0},"end"
-[2025-12-15T03:52:27.088Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:52:27.088Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:52:27.902Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":0},"end"
-[2025-12-15T03:52:27.902Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:52:27.903Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:52:28.362Z] [LSPClient typescript-language-server] request[6]: textDocument/completion
-[2025-12-15T03:52:28.405Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":6,"result":{"items":[{"label":"apply","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".apply","textEdit":{"range":{"start":{"line":35,"character":11},"end":{"line":35
-[2025-12-15T03:52:28.619Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:52:28.619Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:52:28.620Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:52:57.234Z] [showHover] showHover called
-[2025-12-15T03:52:57.234Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:52:57.234Z] [showHover] Cursor: line 35, col 11
-[2025-12-15T03:52:57.234Z] [showHover] Calling lspManager.getHover...
-[2025-12-15T03:52:57.234Z] [LSP] getHover: uri=file:///Users/keith/Development/ultra-editor/test/test.ts, line=35, char=11
-[2025-12-15T03:52:57.234Z] [LSP] getHover: languageId=typescript, registered docs: ["file:///Users/keith/Development/ultra-editor/test/test.ts"]
-[2025-12-15T03:52:57.235Z] [LSP] getHover: Calling client.getHover...
-[2025-12-15T03:52:57.235Z] [LSPClient typescript-language-server] request[7]: textDocument/hover
-[2025-12-15T03:52:57.236Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":7,"result":{"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":35,"character":0},"end":{"line":35,"character":11}}}}
-[2025-12-15T03:52:57.236Z] [LSP] getHover: Result: got hover
-[2025-12-15T03:52:57.237Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":35,"character":0},"end":{"line":35,"character":11}}}
-[2025-12-15T03:52:59.955Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:52:59.955Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:52:59.955Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:00.057Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:00.057Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:00.058Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:00.549Z] [LSPClient typescript-language-server] request[8]: textDocument/completion
-[2025-12-15T03:53:00.558Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":8,"result":{"items":[{"label":"apply","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".apply","textEdit":{"range":{"start":{"line":35,"character":11},"end":{"line":35
-[2025-12-15T03:53:00.813Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:00.813Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:00.814Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:07.000Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:07.000Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:07.001Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:07.105Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:07.105Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:07.105Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:11.945Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:11.946Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:11.946Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:12.047Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:12.048Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:12.048Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:17.559Z] [LSPClient typescript-language-server] request[9]: shutdown
-[2025-12-15T03:53:21.066Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
-[2025-12-15T03:53:21.067Z] [LSP] Checking if typescript-language-server exists...
-[2025-12-15T03:53:21.070Z] [LSP] Starting typescript-language-server for typescript...
-[2025-12-15T03:53:21.070Z] [LSPClient typescript-language-server] Starting: typescript-language-server --stdio
-[2025-12-15T03:53:21.070Z] [LSPClient typescript-language-server] Workspace root: /Users/keith/Development/ultra-editor
-[2025-12-15T03:53:21.070Z] [LSPClient typescript-language-server] Process spawned, PID: 53933
-[2025-12-15T03:53:21.071Z] [LSPClient typescript-language-server] Sending initialize request...
-[2025-12-15T03:53:21.071Z] [LSPClient typescript-language-server] request[1]: initialize
-[2025-12-15T03:53:21.123Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
-[2025-12-15T03:53:21.124Z] [LSP] Notification from typescript: window/logMessage
-[2025-12-15T03:53:21.124Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
-[2025-12-15T03:53:21.124Z] [LSPClient typescript-language-server] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
-[2025-12-15T03:53:21.124Z] [LSPClient typescript-language-server] Initialization complete
-[2025-12-15T03:53:21.124Z] [LSP] Successfully started typescript-language-server for typescript
-[2025-12-15T03:53:21.124Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
-[2025-12-15T03:53:21.129Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
-[2025-12-15T03:53:21.129Z] [LSP] Notification from typescript: $/typescriptVersion
-[2025-12-15T03:53:22.045Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
-[2025-12-15T03:53:22.045Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:22.046Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
-[2025-12-15T03:53:27.471Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":0},"end"
-[2025-12-15T03:53:27.471Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:27.471Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:27.740Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":0},"end"
-[2025-12-15T03:53:27.741Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:27.741Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:28.283Z] [LSPClient typescript-language-server] request[2]: textDocument/completion
-[2025-12-15T03:53:28.313Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":2,"result":{"items":[{"label":"apply","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".apply","textEdit":{"range":{"start":{"line":35,"character":11},"end":{"line":35
-[2025-12-15T03:53:28.546Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":12},"end
-[2025-12-15T03:53:28.547Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:28.547Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
-[2025-12-15T03:53:50.588Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":8},"end"
-[2025-12-15T03:53:50.588Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:50.589Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:51.556Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":53,"character":29},"end
-[2025-12-15T03:53:51.556Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:51.556Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:53.381Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
-[2025-12-15T03:53:53.381Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:53.382Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:54.370Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
-[2025-12-15T03:53:54.370Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:54.370Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:55.734Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
-[2025-12-15T03:53:55.734Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:55.734Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:56.683Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
-[2025-12-15T03:53:56.683Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:56.684Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:57.513Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
-[2025-12-15T03:53:57.513Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:57.514Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:53:58.344Z] [LSPClient typescript-language-server] request[3]: textDocument/completion
-[2025-12-15T03:53:58.349Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":3,"result":{"items":[{"label":"addUser","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".addUser","textEdit":{"range":{"start":{"line":35,"character":28},"end":{"line
-[2025-12-15T03:53:58.605Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":29},"end
-[2025-12-15T03:53:58.606Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:53:58.606Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:54:01.820Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
-[2025-12-15T03:54:01.820Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
-[2025-12-15T03:54:01.821Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
-[2025-12-15T03:54:06.105Z] [LSPClient typescript-language-server] request[4]: shutdown
+[2025-12-15T04:05:41.583Z] [LSP] openDocument: file:///Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:05:41.584Z] [LSP] Checking if typescript-language-server exists...
+[2025-12-15T04:05:41.588Z] [LSP] Starting typescript-language-server for typescript...
+[2025-12-15T04:05:41.588Z] [LSPClient typescript-language-server] Starting: typescript-language-server --stdio
+[2025-12-15T04:05:41.588Z] [LSPClient typescript-language-server] Workspace root: /Users/keith/Development/ultra-editor
+[2025-12-15T04:05:41.589Z] [LSPClient typescript-language-server] Process spawned, PID: 61953
+[2025-12-15T04:05:41.589Z] [LSPClient typescript-language-server] Sending initialize request...
+[2025-12-15T04:05:41.589Z] [LSPClient typescript-language-server] request[1]: initialize
+[2025-12-15T04:05:41.637Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"Using Typescript version (workspace) 5.9.3 from path \"/Users/keith/Development/ultra-editor/node_modules/typescript/lib/tss
+[2025-12-15T04:05:41.637Z] [LSP] Notification from typescript: window/logMessage
+[2025-12-15T04:05:41.637Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":1,"result":{"capabilities":{"textDocumentSync":2,"completionProvider":{"triggerCharacters":[".","\"","'","/","@","<"],"resolveProvider":true},"codeActionProvider":true,"codeLensP
+[2025-12-15T04:05:41.637Z] [LSPClient typescript-language-server] Server initialized with capabilities: textDocumentSync, completionProvider, codeActionProvider, codeLensProvider, definitionProvider, documentFormattingProvider, documentRangeFormattingProvider, documentHighlightProvider, documentSymbolProvider, executeCommandProvider, hoverProvider, inlayHintProvider, linkedEditingRangeProvider, renameProvider, referencesProvider, selectionRangeProvider, signatureHelpProvider, workspaceSymbolProvider, implementationProvider, typeDefinitionProvider, foldingRangeProvider, semanticTokensProvider, workspace
+[2025-12-15T04:05:41.637Z] [LSPClient typescript-language-server] Initialization complete
+[2025-12-15T04:05:41.637Z] [LSP] Successfully started typescript-language-server for typescript
+[2025-12-15T04:05:41.637Z] [LSP] Sending didOpen for file:///Users/keith/Development/ultra-editor/test/test.ts
+[2025-12-15T04:05:41.642Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"$/typescriptVersion","params":{"version":"5.9.3","source":"workspace"}}
+[2025-12-15T04:05:41.642Z] [LSP] Notification from typescript: $/typescriptVersion
+[2025-12-15T04:05:42.570Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:05:42.570Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:42.570Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:05:48.490Z] [LSPClient typescript-language-server] request[2]: textDocument/completion
+[2025-12-15T04:05:48.516Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":2,"result":{"items":[],"isIncomplete":false}}
+[2025-12-15T04:05:48.753Z] [LSPClient typescript-language-server] request[3]: textDocument/completion
+[2025-12-15T04:05:48.770Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":3,"result":{"items":[],"isIncomplete":false}}
+[2025-12-15T04:05:49.222Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":53,"character":29},"end
+[2025-12-15T04:05:49.222Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:49.222Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:05:50.122Z] [LSPClient typescript-language-server] request[4]: textDocument/completion
+[2025-12-15T04:05:50.269Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":4,"result":{"items":[{"label":"greet","kind":6,"sortText":"11","data":{"cacheId":1}},{"label":"isEnabled","kind":6,"sortText":"11","data":{"cacheId":2}},{"label":"MAX_USERS","kin
+[2025-12-15T04:05:50.389Z] [LSPClient typescript-language-server] request[5]: textDocument/completion
+[2025-12-15T04:05:50.408Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":5,"result":{"items":[{"label":"greet","kind":6,"sortText":"11","data":{"cacheId":1}},{"label":"identity","kind":3,"sortText":"11","data":{"cacheId":2}},{"label":"isEnabled","kind
+[2025-12-15T04:05:50.870Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
+[2025-12-15T04:05:50.870Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:50.870Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:05:51.259Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
+[2025-12-15T04:05:51.259Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:51.259Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:05:54.492Z] [LSPClient typescript-language-server] request[6]: textDocument/completion
+[2025-12-15T04:05:54.525Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":6,"result":{"items":[{"label":"greet","kind":6,"sortText":"11","data":{"cacheId":1}},{"label":"identity","kind":3,"sortText":"11","data":{"cacheId":2}},{"label":"isEnabled","kind
+[2025-12-15T04:05:54.603Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":14},"end
+[2025-12-15T04:05:54.604Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:54.604Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:05:55.509Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:05:55.510Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:55.510Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:05:55.868Z] [LSPClient typescript-language-server] request[7]: textDocument/completion
+[2025-12-15T04:05:55.883Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":7,"result":{"items":[{"label":"apply","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".apply","textEdit":{"range":{"start":{"line":35,"character":25},"end":{"line":35
+[2025-12-15T04:05:55.978Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":26},"end
+[2025-12-15T04:05:55.978Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:55.978Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
+[2025-12-15T04:05:59.235Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:05:59.236Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:05:59.236Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:06:00.426Z] [LSPClient typescript-language-server] request[8]: textDocument/completion
+[2025-12-15T04:06:00.453Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":8,"result":{"items":[{"label":"greet","kind":6,"sortText":"11","data":{"cacheId":1}},{"label":"identity","kind":3,"sortText":"11","data":{"cacheId":2}},{"label":"isEnabled","kind
+[2025-12-15T04:06:00.535Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:06:00.535Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:00.536Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 7 items
+[2025-12-15T04:06:00.756Z] [LSPClient typescript-language-server] request[9]: textDocument/completion
+[2025-12-15T04:06:00.785Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":9,"result":{"items":[{"label":"greet","kind":6,"sortText":"11","data":{"cacheId":1}},{"label":"identity","kind":3,"sortText":"11","data":{"cacheId":2}},{"label":"isEnabled","kind
+[2025-12-15T04:06:01.320Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:06:01.321Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:01.321Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:06:02.067Z] [LSPClient typescript-language-server] request[10]: textDocument/completion
+[2025-12-15T04:06:02.076Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","id":10,"result":{"items":[{"label":"addUser","kind":2,"sortText":"11","data":{"cacheId":1},"filterText":".addUser","textEdit":{"range":{"start":{"line":36,"character":1},"end":{"line
+[2025-12-15T04:06:02.178Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":36,"character":2},"end"
+[2025-12-15T04:06:02.178Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:02.178Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:06:03.581Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:06:03.581Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:03.582Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 5 items
+[2025-12-15T04:06:04.168Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":35,"character":10},"end
+[2025-12-15T04:06:04.168Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:04.168Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 6 items
+[2025-12-15T04:06:08.269Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":47,"character":6},"end"
+[2025-12-15T04:06:08.269Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:08.269Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:06:08.756Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:06:08.756Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:06:08.757Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:06:09.757Z] [LSPClient typescript-language-server] request[11]: shutdown

@@ -145,16 +145,37 @@ export class App {
       const doc = this.getActiveDocument();
       if (!doc) return;
 
-      // Insert the completion text
-      // TODO: Handle more complex completions (snippets, additional edits)
-      const textToInsert = item.insertText || item.label;
-      
-      // Delete the prefix that triggered completion
-      // For now, just insert the text
-      doc.insert(textToInsert);
-      this.editorPane.ensureCursorVisible();
-      this.updateStatusBar();
-      renderer.scheduleRender();
+      try {
+        // Insert the completion text
+        // TODO: Handle more complex completions (snippets, additional edits)
+        const textToInsert = item.insertText || item.label;
+        
+        // Get prefix info before any modifications
+        const startColumn = autocompletePopup.getStartColumn();
+        const cursor = doc.primaryCursor;
+        const currentColumn = cursor.position.column;
+        const prefixLength = currentColumn - startColumn;
+        
+        if (prefixLength > 0 && startColumn >= 0) {
+          // Move cursor to start of prefix and delete the prefix
+          for (let i = 0; i < prefixLength; i++) {
+            doc.moveLeft();
+          }
+          for (let i = 0; i < prefixLength; i++) {
+            doc.delete();
+          }
+        }
+        
+        // Insert the completion
+        doc.insert(textToInsert);
+        this.editorPane.ensureCursorVisible();
+        this.updateStatusBar();
+        this.notifyDocumentChange(doc);
+        renderer.scheduleRender();
+      } catch (error) {
+        console.error('Autocomplete error:', error);
+        statusBar.setMessage(`Autocomplete error: ${error}`, 3000);
+      }
     });
 
     autocompletePopup.onDismiss(() => {
@@ -240,8 +261,12 @@ export class App {
           renderer.scheduleRender();
           return;
         }
-        // Any other key dismisses autocomplete
-        autocompletePopup.hide();
+        // Let typing continue through to normal processing
+        // Character input and backspace will update the filter
+        // Only dismiss on movement keys (not up/down which are handled above)
+        if (['LEFT', 'RIGHT', 'HOME', 'END'].includes(event.key)) {
+          autocompletePopup.hide();
+        }
       }
 
       // Handle hover tooltip
@@ -531,10 +556,67 @@ export class App {
     this.updateStatusBar();
     this.notifyDocumentChange(doc);
     
-    // Trigger completion on certain characters
+    // Trigger completion on certain characters (immediate)
     if (char === '.' || char === ':' || char === '<' || char === '/' || char === '@') {
       this.triggerCompletion();
+    } else if (this.isIdentifierChar(char)) {
+      // Trigger completion while typing identifiers
+      this.triggerIdentifierCompletion();
+    } else {
+      // Non-identifier character dismisses autocomplete
+      autocompletePopup.hide();
     }
+  }
+
+  /**
+   * Check if character is valid in an identifier
+   */
+  private isIdentifierChar(char: string): boolean {
+    return /[a-zA-Z0-9_$]/.test(char);
+  }
+
+  /**
+   * Get the word prefix at the current cursor position
+   */
+  private getWordPrefixAtCursor(doc: Document): { prefix: string; startColumn: number } {
+    const cursor = doc.primaryCursor;
+    const line = doc.getLine(cursor.position.line);
+    const col = cursor.position.column;
+    
+    // Walk backwards to find the start of the identifier
+    let startCol = col;
+    while (startCol > 0 && this.isIdentifierChar(line[startCol - 1])) {
+      startCol--;
+    }
+    
+    const prefix = line.substring(startCol, col);
+    return { prefix, startColumn: startCol };
+  }
+
+  /**
+   * Trigger completion for identifier typing
+   */
+  private async triggerIdentifierCompletion(): Promise<void> {
+    const doc = this.getActiveDocument();
+    if (!doc || !doc.filePath) return;
+
+    const { prefix, startColumn } = this.getWordPrefixAtCursor(doc);
+    
+    // Need at least 1 character to trigger
+    if (prefix.length < 1) {
+      autocompletePopup.hide();
+      return;
+    }
+
+    // If autocomplete is already visible, just update the filter
+    if (autocompletePopup.isVisible()) {
+      autocompletePopup.updatePrefix(prefix);
+      renderer.scheduleRender();
+      return;
+    }
+
+    // Otherwise, trigger a new completion request
+    this.triggerCompletion(prefix, startColumn);
   }
 
   /**
@@ -550,7 +632,7 @@ export class App {
   /**
    * Trigger completion popup
    */
-  private async triggerCompletion(): Promise<void> {
+  private async triggerCompletion(prefix: string = '', startColumn?: number): Promise<void> {
     const doc = this.getActiveDocument();
     if (!doc || !doc.filePath) return;
 
@@ -559,7 +641,14 @@ export class App {
       clearTimeout(this.completionTriggerTimer);
     }
 
-    // Small delay to allow typing to settle
+    // Get prefix info if not provided
+    if (startColumn === undefined) {
+      const prefixInfo = this.getWordPrefixAtCursor(doc);
+      prefix = prefixInfo.prefix;
+      startColumn = prefixInfo.startColumn;
+    }
+
+    // Small delay to allow typing to settle (250ms to reduce request spam)
     this.completionTriggerTimer = setTimeout(async () => {
       const cursor = doc.primaryCursor;
       
@@ -571,19 +660,19 @@ export class App {
         );
 
         if (completions && completions.length > 0) {
-          // Calculate screen position for popup
+          // Calculate screen position for popup (at start of prefix)
           const editorRect = layoutManager.getEditorAreaRect();
           const gutterWidth = 5;  // Approximate
-          const screenX = editorRect.x + gutterWidth + cursor.position.column - this.editorPane.getScrollLeft();
+          const screenX = editorRect.x + gutterWidth + startColumn - this.editorPane.getScrollLeft();
           const screenY = editorRect.y + cursor.position.line - this.editorPane.getScrollTop();
           
-          autocompletePopup.show(completions, screenX, screenY);
+          autocompletePopup.show(completions, screenX, screenY, prefix, startColumn);
           renderer.scheduleRender();
         }
       } catch (err) {
         // Silently fail - completion is not critical
       }
-    }, 100);
+    }, 250);
   }
 
   /**
@@ -1553,6 +1642,18 @@ export class App {
             doc.backspace();
             this.editorPane.ensureCursorVisible();
             this.updateStatusBar();
+            this.notifyDocumentChange(doc);
+            
+            // Update autocomplete filter if visible
+            if (autocompletePopup.isVisible()) {
+              const { prefix, startColumn } = this.getWordPrefixAtCursor(doc);
+              if (prefix.length > 0 && startColumn === autocompletePopup.getStartColumn()) {
+                autocompletePopup.updatePrefix(prefix);
+              } else {
+                autocompletePopup.hide();
+              }
+              renderer.scheduleRender();
+            }
           }
         }
       },
