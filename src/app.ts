@@ -20,6 +20,7 @@ import { commandPalette } from './ui/components/command-palette.ts';
 import { fileTree } from './ui/components/file-tree.ts';
 import { searchWidget } from './ui/components/search-widget.ts';
 import { inputDialog } from './ui/components/input-dialog.ts';
+import { saveBrowser } from './ui/components/save-browser.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
 import { settings } from './config/settings.ts';
@@ -157,6 +158,13 @@ export class App {
   private setupKeyboardHandler(): void {
     renderer.onKey(async (event: KeyEvent) => {
       if (!this.isRunning) return;
+
+      // Handle save browser first if it's open
+      if (saveBrowser.isOpen()) {
+        saveBrowser.handleKey(event.key, event.char, event.ctrl, event.shift);
+        renderer.scheduleRender();
+        return;
+      }
 
       // Handle input dialog first if it's open
       if (inputDialog.isOpen()) {
@@ -773,6 +781,9 @@ export class App {
 
     // Render input dialog (on top of everything)
     inputDialog.render(ctx);
+
+    // Render save browser (on top of everything)
+    saveBrowser.render(ctx);
 
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
@@ -1636,30 +1647,23 @@ export class App {
    * Show Save As dialog
    */
   private showSaveAsDialog(doc: Document): void {
-    // Get suggested filename
+    // Get suggested filename and starting directory
     const existingPath = doc.filePath;
     const suggestedName = existingPath 
       ? path.basename(existingPath) 
       : 'untitled.txt';
+    const startDir = existingPath 
+      ? path.dirname(existingPath) 
+      : process.cwd();
 
-    statusBar.setMessage(`Opening Save As dialog with: ${suggestedName}`, 3000);
-
-    inputDialog.show({
-      title: 'Save As',
-      placeholder: 'filename',
-      initialValue: suggestedName,
+    saveBrowser.show({
+      startPath: startDir,
+      suggestedFilename: suggestedName,
       screenWidth: renderer.width,
       screenHeight: renderer.height,
-      onConfirm: async (filename: string) => {
-        // Resolve relative to cwd if not absolute
-        let filePath = filename;
-        if (!path.isAbsolute(filePath)) {
-          filePath = path.join(process.cwd(), filename);
-        }
-        
+      onSave: async (filePath: string) => {
         try {
           await doc.saveAs(filePath);
-          // Tab bar will update on next render since getTabs() reads from documents
           this.updateStatusBar();
           statusBar.setMessage(`Saved: ${filePath}`, 3000);
         } catch (error) {
