@@ -192,10 +192,10 @@ export class HoverTooltip {
       tooltipY = Math.max(1, screenHeight - height);
     }
 
-    // Colors
-    const bgColor = themeLoader.getColor('editorHoverWidget.background') || '#252526';
-    const fgColor = themeLoader.getColor('editorHoverWidget.foreground') || '#d4d4d4';
-    const borderColor = themeLoader.getColor('editorHoverWidget.border') || '#454545';
+    // Colors - use existing theme colors (sideBar.background is slightly darker than editor)
+    const bgColor = themeLoader.getColor('sideBar.background') || themeLoader.getColor('editor.background') || '#252526';
+    const fgColor = themeLoader.getColor('editor.foreground') || '#d4d4d4';
+    const borderColor = themeLoader.getColor('input.border') || themeLoader.getColor('focusBorder') || '#454545';
 
     // Draw background
     ctx.fill(tooltipX, tooltipY, width, height, ' ', fgColor, bgColor);

@@ -264,13 +264,14 @@ export class AutocompletePopup {
       popupY = Math.max(1, this.y - height);
     }
 
-    // Colors
-    const bgColor = themeLoader.getColor('editorSuggestWidget.background') || '#252526';
-    const fgColor = themeLoader.getColor('editorSuggestWidget.foreground') || '#d4d4d4';
-    const selectedBg = themeLoader.getColor('editorSuggestWidget.selectedBackground') || '#094771';
-    const selectedFg = themeLoader.getColor('editorSuggestWidget.selectedForeground') || '#ffffff';
-    const borderColor = themeLoader.getColor('editorSuggestWidget.border') || '#454545';
-    const kindColor = '#888888';
+    // Colors - use existing theme colors
+    const bgColor = themeLoader.getColor('sideBar.background') || themeLoader.getColor('editor.background') || '#252526';
+    const fgColor = themeLoader.getColor('editor.foreground') || '#d4d4d4';
+    const selectedBg = themeLoader.getColor('list.activeSelectionBackground') || '#094771';
+    const selectedFg = themeLoader.getColor('list.activeSelectionForeground') || '#ffffff';
+    const borderColor = themeLoader.getColor('input.border') || themeLoader.getColor('focusBorder') || '#454545';
+    const kindColor = themeLoader.getColor('editorLineNumber.foreground') || '#888888';
+    const detailColor = themeLoader.getColor('editorLineNumber.foreground') || '#666666';
 
     // Draw background and border
     ctx.fill(popupX, popupY, width, height, ' ', fgColor, bgColor);
@@ -333,7 +334,7 @@ export class AutocompletePopup {
       if (detail && labelText.length + 5 < contentWidth) {
         const detailStart = labelStart + labelText.length;
         const detailText = detail.substring(0, contentWidth - labelText.length - 5);
-        ctx.drawStyled(detailStart, itemY, detailText, isSelected ? selectedFg : '#666666', itemBg);
+        ctx.drawStyled(detailStart, itemY, detailText, isSelected ? selectedFg : detailColor, itemBg);
       }
 
       // Right border
