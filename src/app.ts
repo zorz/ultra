@@ -858,12 +858,17 @@ export class App {
 
     try {
       logDebug('Calling lspManager.getHover...');
-      const hover = await lspManager.getHover(
-        doc.filePath,
-        cursor.position.line,
-        cursor.position.column
-      );
+      // Fetch hover and document symbols in parallel
+      const [hover, symbols] = await Promise.all([
+        lspManager.getHover(
+          doc.filePath,
+          cursor.position.line,
+          cursor.position.column
+        ),
+        lspManager.getDocumentSymbols(doc.filePath)
+      ]);
       logDebug(`Hover result: ${hover ? JSON.stringify(hover).substring(0, 200) : 'null'}`);
+      logDebug(`Symbols count: ${symbols?.length || 0}`);
 
       if (hover) {
         // Calculate screen position for tooltip
@@ -872,7 +877,8 @@ export class App {
         const screenX = editorRect.x + gutterWidth + cursor.position.column - this.editorPane.getScrollLeft();
         const screenY = editorRect.y + cursor.position.line - this.editorPane.getScrollTop();
         
-        hoverTooltip.show(hover, screenX, screenY);
+        // Pass symbols for additional context
+        hoverTooltip.show(hover, screenX, screenY, symbols);
       } else {
         // Show more helpful message about LSP status
         const debugInfo = lspManager.getDebugInfo();

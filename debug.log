@@ -202,3 +202,133 @@
 [2025-12-15T04:15:38.666Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
 [2025-12-15T04:15:38.667Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
 [2025-12-15T04:15:38.667Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:15:45.438Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:15:45.439Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:15:45.439Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:15:45.543Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:15:45.543Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:15:45.544Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:15:49.621Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:15:49.621Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:15:49.622Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:15:49.724Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:15:49.724Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:15:49.725Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:16:08.776Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:16:08.777Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:16:08.777Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:16:08.875Z] [LSPClient typescript-language-server] handleMessage: {"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///Users/keith/Development/ultra-editor/test/test.ts","diagnostics":[{"range":{"start":{"line":46,"character":6},"end"
+[2025-12-15T04:16:08.876Z] [LSP] Notification from typescript: textDocument/publishDiagnostics
+[2025-12-15T04:16:08.876Z] [LSP] Diagnostics for file:///Users/keith/Development/ultra-editor/test/test.ts: 4 items
+[2025-12-15T04:16:19.120Z] [LSPClient typescript-language-server] request[19]: shutdown
+[2025-12-15T04:16:50.643Z] [showHover] showHover called
+[2025-12-15T04:16:50.643Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:16:50.644Z] [showHover] Cursor: line 13, col 7
+[2025-12-15T04:16:50.644Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:16:50.650Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
+[2025-12-15T04:16:57.505Z] [showHover] showHover called
+[2025-12-15T04:16:57.505Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:16:57.506Z] [showHover] Cursor: line 26, col 7
+[2025-12-15T04:16:57.506Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:16:57.515Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.addUser(user: User): void\n```\n"},"range":{"start":{"line":26,"character":2},"end":{"line":26,"character":9}}}
+[2025-12-15T04:19:40.664Z] [showHover] showHover called
+[2025-12-15T04:19:40.665Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:19:40.665Z] [showHover] Cursor: line 11, col 8
+[2025-12-15T04:19:40.666Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:19:40.679Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\ntype Status = \"active\" | \"inactive\" | \"pending\"\n```\n"},"range":{"start":{"line":11,"character":5},"end":{"line":11,"character":11}}}
+[2025-12-15T04:20:35.433Z] [showHover] showHover called
+[2025-12-15T04:20:35.434Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:20:35.434Z] [showHover] Cursor: line 5, col 11
+[2025-12-15T04:20:35.434Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:20:35.458Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\ninterface User\n```\nTypeScript Test File\nTests syntax highlighting for TypeScript"},"range":{"start":{"line":5,"character":10},"end":{"line":
+[2025-12-15T04:20:35.458Z] [showHover] Symbols count: 21
+[2025-12-15T04:20:39.219Z] [showHover] showHover called
+[2025-12-15T04:20:39.220Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:20:39.221Z] [showHover] Cursor: line 13, col 11
+[2025-12-15T04:20:39.221Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:20:39.225Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
+[2025-12-15T04:20:39.225Z] [showHover] Symbols count: 21
+[2025-12-15T04:20:52.399Z] [showHover] showHover called
+[2025-12-15T04:20:52.400Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:20:52.401Z] [showHover] Cursor: line 26, col 7
+[2025-12-15T04:20:52.401Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:20:52.418Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) UserService.addUser(user: User): void\n```\n"},"range":{"start":{"line":26,"character":2},"end":{"line":26,"character":9}}}
+[2025-12-15T04:20:52.419Z] [showHover] Symbols count: 21
+[2025-12-15T04:20:54.957Z] [showHover] showHover called
+[2025-12-15T04:20:54.957Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:20:54.958Z] [showHover] Cursor: line 26, col 12
+[2025-12-15T04:20:54.958Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:20:54.968Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(parameter) user: User\n```\n"},"range":{"start":{"line":26,"character":10},"end":{"line":26,"character":14}}}
+[2025-12-15T04:20:54.968Z] [showHover] Symbols count: 21
+[2025-12-15T04:20:56.773Z] [showHover] showHover called
+[2025-12-15T04:20:56.774Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:20:56.775Z] [showHover] Cursor: line 26, col 17
+[2025-12-15T04:20:56.775Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:20:56.779Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\ninterface User\n```\nTypeScript Test File\nTests syntax highlighting for TypeScript"},"range":{"start":{"line":26,"character":16},"end":{"line"
+[2025-12-15T04:20:56.779Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:03.328Z] [showHover] showHover called
+[2025-12-15T04:21:03.328Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:03.329Z] [showHover] Cursor: line 36, col 15
+[2025-12-15T04:21:03.330Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:03.336Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nfunction identity<T>(value: T): T\n```\n"},"range":{"start":{"line":36,"character":9},"end":{"line":36,"character":17}}}
+[2025-12-15T04:21:03.337Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:06.921Z] [showHover] showHover called
+[2025-12-15T04:21:06.922Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:06.922Z] [showHover] Cursor: line 41, col 9
+[2025-12-15T04:21:06.923Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:06.930Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nconst greet: ({ name, email }: User) => string\n```\n"},"range":{"start":{"line":41,"character":6},"end":{"line":41,"character":11}}}
+[2025-12-15T04:21:06.930Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:11.396Z] [showHover] showHover called
+[2025-12-15T04:21:11.396Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:11.397Z] [showHover] Cursor: line 42, col 7
+[2025-12-15T04:21:11.397Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:11.399Z] [showHover] Hover result: null
+[2025-12-15T04:21:11.399Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:14.956Z] [showHover] showHover called
+[2025-12-15T04:21:14.956Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:14.957Z] [showHover] Cursor: line 47, col 4
+[2025-12-15T04:21:14.957Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:14.961Z] [showHover] Hover result: null
+[2025-12-15T04:21:14.961Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:21.848Z] [showHover] showHover called
+[2025-12-15T04:21:21.849Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:21.850Z] [showHover] Cursor: line 13, col 10
+[2025-12-15T04:21:21.850Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:21.853Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
+[2025-12-15T04:21:21.854Z] [showHover] Symbols count: 21
+[2025-12-15T04:21:37.180Z] [showHover] showHover called
+[2025-12-15T04:21:37.181Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:21:37.182Z] [showHover] Cursor: line 35, col 23
+[2025-12-15T04:21:37.182Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:21:37.190Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nconstructor UserService(apiUrl: string): UserService\n```\n"},"range":{"start":{"line":35,"character":14},"end":{"line":35,"character":25}}}
+[2025-12-15T04:21:37.190Z] [showHover] Symbols count: 22
+[2025-12-15T04:22:02.876Z] [showHover] showHover called
+[2025-12-15T04:22:02.877Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:22:02.877Z] [showHover] Cursor: line 13, col 10
+[2025-12-15T04:22:02.877Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:22:02.887Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":13,"character":6},"end":{"line":13,"character":17}}}
+[2025-12-15T04:22:02.888Z] [showHover] Symbols count: 21
+[2025-12-15T04:22:14.599Z] [showHover] showHover called
+[2025-12-15T04:22:14.599Z] [showHover] Document: /Users/keith/Development/ultra-editor/src/app.ts, language: typescript
+[2025-12-15T04:22:14.600Z] [showHover] Cursor: line 37, col 14
+[2025-12-15T04:22:14.600Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:22:14.646Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass App\n```\n"},"range":{"start":{"line":37,"character":13},"end":{"line":37,"character":16}}}
+[2025-12-15T04:22:14.646Z] [showHover] Symbols count: 715
+[2025-12-15T04:22:17.373Z] [showHover] showHover called
+[2025-12-15T04:22:17.374Z] [showHover] Document: /Users/keith/Development/ultra-editor/src/app.ts, language: typescript
+[2025-12-15T04:22:17.375Z] [showHover] Cursor: line 38, col 21
+[2025-12-15T04:22:17.375Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:22:17.383Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\ninterface OpenDocument\n```\n"},"range":{"start":{"line":38,"character":21},"end":{"line":38,"character":33}}}
+[2025-12-15T04:22:17.383Z] [showHover] Symbols count: 715
+[2025-12-15T04:22:20.614Z] [showHover] showHover called
+[2025-12-15T04:22:20.615Z] [showHover] Document: /Users/keith/Development/ultra-editor/src/app.ts, language: typescript
+[2025-12-15T04:22:20.616Z] [showHover] Cursor: line 139, col 21
+[2025-12-15T04:22:20.616Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:22:20.626Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\n(method) App.initializeLSP(): Promise<void>\n```\nInitialize LSP support"},"range":{"start":{"line":139,"character":16},"end":{"line":139,"char
+[2025-12-15T04:22:20.627Z] [showHover] Symbols count: 715
+[2025-12-15T04:22:56.260Z] [showHover] showHover called
+[2025-12-15T04:22:56.261Z] [showHover] Document: /Users/keith/Development/ultra-editor/test/test.ts, language: typescript
+[2025-12-15T04:22:56.261Z] [showHover] Cursor: line 34, col 9
+[2025-12-15T04:22:56.261Z] [showHover] Calling lspManager.getHover...
+[2025-12-15T04:22:56.267Z] [showHover] Hover result: {"contents":{"kind":"markdown","value":"\n```typescript\nclass UserService\n```\n"},"range":{"start":{"line":34,"character":0},"end":{"line":34,"character":11}}}
+[2025-12-15T04:22:56.267Z] [showHover] Symbols count: 21

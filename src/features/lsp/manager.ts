@@ -5,7 +5,7 @@
  * Handles server detection, lifecycle, and document routing.
  */
 
-import { LSPClient, type LSPDiagnostic, type LSPPosition, type LSPCompletionItem, type LSPHover, type LSPLocation, type LSPSignatureHelp } from './client.ts';
+import { LSPClient, type LSPDiagnostic, type LSPPosition, type LSPCompletionItem, type LSPHover, type LSPLocation, type LSPSignatureHelp, type LSPDocumentSymbol, type LSPSymbolInformation } from './client.ts';
 import { settings } from '../../config/settings.ts';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -535,6 +535,20 @@ export class LSPManager {
    */
   async shutdown(): Promise<void> {
     return this.shutdownAll();
+  }
+
+  /**
+   * Get document symbols (classes, methods, functions, etc.)
+   */
+  async getDocumentSymbols(filePath: string): Promise<LSPDocumentSymbol[] | LSPSymbolInformation[]> {
+    const uri = `file://${filePath}`;
+    const languageId = this.documentLanguages.get(uri);
+    if (!languageId) return [];
+
+    const client = this.clients.get(languageId);
+    if (!client) return [];
+
+    return client.getDocumentSymbols(uri);
   }
 
   /**
