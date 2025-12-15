@@ -142,30 +142,18 @@ export class PTY {
     }
 
     try {
-      // Run shell directly - Bun doesn't have native PTY support
-      // Use /bin/bash or /bin/sh which handle non-TTY better than zsh
-      // Determine which shell to use - prefer bash for better non-TTY support
-      let shellCmd: string[];
-      if (this.shell.includes('zsh')) {
-        // For zsh, use bash instead since zsh requires a real TTY
-        shellCmd = ['/bin/bash', '--norc', '--noprofile'];
-      } else if (this.shell.includes('bash')) {
-        shellCmd = [this.shell, '--norc', '--noprofile'];
-      } else {
-        shellCmd = [this.shell];
-      }
-      
+      // Use /bin/sh in non-interactive mode
+      // We'll manually handle prompts
       this.process = spawn({
-        cmd: shellCmd,
+        cmd: ['/bin/sh'],
         cwd: this.cwd,
         env: {
           PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
           HOME: process.env.HOME || '',
           USER: process.env.USER || '',
           TERM: 'dumb',
-          COLUMNS: String(this._cols),
-          LINES: String(this._rows),
-          PS1: '$ ',
+          // Prevent any rc file loading
+          ENV: '',
         },
         stdin: 'pipe',
         stdout: 'pipe',
@@ -175,8 +163,8 @@ export class PTY {
       // Read stdout
       this.readStream(this.process.stdout);
       
-      // Also read stderr and merge it
-      this.readStream(this.process.stderr);
+      // Read stderr but filter out TTY-related errors
+      this.readStreamFiltered(this.process.stderr);
       
       // Handle process exit
       this.process.exited.then((code) => {
@@ -185,10 +173,59 @@ export class PTY {
           this.onExitCallback(code);
         }
       });
+      
+      // Show initial prompt and working directory
+      setTimeout(() => {
+        const cwd = this.cwd.replace(process.env.HOME || '', '~');
+        this.processOutput(`${cwd}\n$ `);
+        if (this.onUpdateCallback) {
+          this.onUpdateCallback();
+        }
+      }, 50);
 
     } catch (error) {
       console.error('Failed to start PTY:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Read from stderr, filtering out TTY-related noise
+   */
+  private async readStreamFiltered(stream: ReadableStream<Uint8Array>): Promise<void> {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        let data = decoder.decode(value, { stream: true });
+        
+        // Filter out common TTY-related error messages
+        const lines = data.split('\n');
+        const filtered = lines.filter(line => {
+          const lower = line.toLowerCase();
+          return !lower.includes('stty') && 
+                 !lower.includes('not a terminal') &&
+                 !lower.includes('not a tty') &&
+                 !lower.includes('stdin') &&
+                 !lower.includes('tcsetattr') &&
+                 !lower.includes('ioctl');
+        });
+        
+        data = filtered.join('\n');
+        if (data.trim()) {
+          this.processOutput(data);
+          
+          if (this.onDataCallback) {
+            this.onDataCallback(data);
+          }
+        }
+      }
+    } catch (error) {
+      // Stream closed
     }
   }
 
@@ -782,17 +819,58 @@ export class PTY {
     this.currentInverse = false;
   }
 
+  // Track if we're waiting for command output
+  private pendingPrompt: boolean = false;
+  private promptTimeout: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Write data to the PTY
    */
   write(data: string): void {
     if (this.process?.stdin) {
       try {
+        // Echo the input to the terminal buffer
+        if (data === '\r' || data === '\n') {
+          // Enter pressed - execute command
+          this.processOutput('\n');
+          this.pendingPrompt = true;
+          
+          // Clear any existing timeout
+          if (this.promptTimeout) {
+            clearTimeout(this.promptTimeout);
+          }
+          
+          // Show prompt after a delay (to allow output to come through)
+          this.promptTimeout = setTimeout(() => {
+            if (this.pendingPrompt) {
+              this.processOutput('$ ');
+              this.pendingPrompt = false;
+              if (this.onUpdateCallback) {
+                this.onUpdateCallback();
+              }
+            }
+          }, 100);
+        } else if (data === '\x7f') {
+          // Backspace - remove last character visually
+          if (this.cursorX > 2) {  // Don't delete past prompt
+            this.cursorX--;
+            this.putChar(' ');
+            this.cursorX--;
+          }
+        } else {
+          // Echo regular characters
+          this.processOutput(data);
+        }
+        
         // Bun's stdin is a FileSink, which has write() and flush()
         // Write the data as bytes
         const bytes = new TextEncoder().encode(data);
         this.process.stdin.write(bytes);
         this.process.stdin.flush();
+        
+        if (this.onUpdateCallback) {
+          this.onUpdateCallback();
+        }
       } catch (error) {
         // Silently ignore write errors (process may have exited)
       }
