@@ -6,7 +6,5 @@ bun.lockb
 .dev.vars
 dist/
 ultra
-
-# Generated/bundled files
-ultra-tsserver
-src/lsp-servers/tsserver-cli.mjs
+debug.log
+debug_stderr.log
