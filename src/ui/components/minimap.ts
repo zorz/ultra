@@ -1,8 +1,8 @@
 /**
  * Minimap Component
  * 
- * VS Code-style minimap showing a compressed bird's-eye view of the file
- * using Braille characters for sub-character precision.
+ * VS Code-style minimap showing a compressed bird's-eye view of the file.
+ * Multiple source lines are grouped per minimap row for a compact display.
  */
 
 import type { Document } from '../../core/document.ts';
@@ -13,50 +13,26 @@ import { highlighter as shikiHighlighter } from '../../features/syntax/shiki-hig
 import { themeLoader } from '../themes/theme-loader.ts';
 import { settings } from '../../config/settings.ts';
 
-// Braille dot positions (2x4 matrix per character)
-// Dots are numbered:
-// [0,0] [0,1]    1  4
-// [1,0] [1,1]    2  5
-// [2,0] [2,1]    3  6
-// [3,0] [3,1]    7  8
-const BRAILLE_DOT_BITS = [
-  [0x01, 0x08],  // Row 0: dots 1,4
-  [0x02, 0x10],  // Row 1: dots 2,5
-  [0x04, 0x20],  // Row 2: dots 3,6
-  [0x40, 0x80],  // Row 3: dots 7,8
-];
-
-/**
- * Convert a 2x4 boolean matrix to a braille character
- */
-function toBraille(dots: boolean[][]): string {
-  let code = 0x2800; // Base braille character (empty)
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 2; col++) {
-      if (dots[row]?.[col]) {
-        code |= BRAILLE_DOT_BITS[row]![col]!;
-      }
-    }
-  }
-  return String.fromCharCode(code);
-}
+// Block characters for representing code density (from empty to full)
+const DENSITY_CHARS = [' ', '░', '▒', '▓', '█'];
 
 interface MinimapCache {
   content: string;
   lineCount: number;
-  chars: string[];  // Cached braille characters per minimap row
-  colors: string[]; // Dominant color per minimap row
+  linesPerRow: number;
+  rows: { chars: string; colors: string[] }[];
 }
 
 export class Minimap implements MouseHandler {
   private document: Document | null = null;
   private rect: Rect = { x: 1, y: 1, width: 10, height: 24 };
-  private scrollTop: number = 0;
+  private scrollTop: number = 0;  // In minimap rows, not source lines
   private editorScrollTop: number = 0;
   private editorVisibleLines: number = 24;
   private enabled: boolean = true;
   private width: number = 10;
   private maxColumn: number = 120;
+  private scale: number = 3;  // How many source lines per minimap row
   
   // Cache for performance
   private cache: MinimapCache | null = null;
@@ -81,6 +57,7 @@ export class Minimap implements MouseHandler {
     this.enabled = settings.get('editor.minimap.enabled') ?? true;
     this.width = settings.get('editor.minimap.width') ?? 10;
     this.maxColumn = settings.get('editor.minimap.maxColumn') ?? 120;
+    this.scale = settings.get('editor.minimap.scale') ?? 3;
   }
 
   /**
@@ -182,39 +159,29 @@ export class Minimap implements MouseHandler {
   private updateDirtyRegions(): void {
     if (!this.cache || !this.document) return;
     
-    // Calculate which minimap rows need updating
-    const linesPerRow = this.getLinesPerRow();
+    const linesPerRow = this.cache.linesPerRow;
     const dirtyRows = new Set<number>();
     
     for (const line of this.dirtyLines) {
-      const row = Math.floor(line / linesPerRow);
-      dirtyRows.add(row);
+      dirtyRows.add(Math.floor(line / linesPerRow));
     }
     
-    // Update those rows
     for (const row of dirtyRows) {
-      const startLine = row * linesPerRow;
-      const endLine = Math.min(startLine + linesPerRow, this.document.lineCount);
-      const { char, color } = this.renderMinimapRow(startLine, endLine);
-      this.cache.chars[row] = char;
-      this.cache.colors[row] = color;
+      if (row < this.cache.rows.length) {
+        const startLine = row * linesPerRow;
+        const endLine = Math.min(startLine + linesPerRow, this.document.lineCount);
+        this.cache.rows[row] = this.renderMinimapRow(startLine, endLine);
+      }
     }
     
     this.dirtyLines.clear();
   }
 
   /**
-   * Calculate how many source lines fit in one minimap row
+   * Get number of source lines per minimap row
    */
   private getLinesPerRow(): number {
-    if (!this.document) return 1;
-    const totalLines = this.document.lineCount;
-    const availableRows = this.rect.height;
-    
-    // Each braille char represents 4 vertical dots
-    // We want to fit the whole file if possible, or scroll if too large
-    const linesPerRow = Math.max(1, Math.ceil(totalLines / (availableRows * 4)));
-    return linesPerRow;
+    return Math.max(1, this.scale);
   }
 
   /**
@@ -223,9 +190,8 @@ export class Minimap implements MouseHandler {
   private updateMinimapScroll(): void {
     if (!this.document) return;
     
-    const totalLines = this.document.lineCount;
     const linesPerRow = this.getLinesPerRow();
-    const totalMinimapRows = Math.ceil(totalLines / linesPerRow);
+    const totalMinimapRows = Math.ceil(this.document.lineCount / linesPerRow);
     
     // If the whole file fits, no scrolling needed
     if (totalMinimapRows <= this.rect.height) {
@@ -233,8 +199,8 @@ export class Minimap implements MouseHandler {
       return;
     }
     
-    // Otherwise, scroll proportionally
-    const scrollRatio = this.editorScrollTop / Math.max(1, totalLines - this.editorVisibleLines);
+    // Scroll proportionally
+    const scrollRatio = this.editorScrollTop / Math.max(1, this.document.lineCount - this.editorVisibleLines);
     const maxScroll = totalMinimapRows - this.rect.height;
     this.scrollTop = Math.floor(scrollRatio * maxScroll);
   }
@@ -245,8 +211,10 @@ export class Minimap implements MouseHandler {
   render(ctx: RenderContext): void {
     if (!this.enabled || !this.document) return;
 
+    const linesPerRow = this.getLinesPerRow();
+    
     // Build cache if needed
-    if (!this.cache || this.cache.lineCount !== this.document.lineCount) {
+    if (!this.cache || this.cache.lineCount !== this.document.lineCount || this.cache.linesPerRow !== linesPerRow) {
       this.buildCache();
     }
 
@@ -255,16 +223,16 @@ export class Minimap implements MouseHandler {
     const fgRgb = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
     const reset = '\x1b[0m';
 
-    // Get colors from theme - use editor background as base
+    // Get colors from theme
     const editorBgHex = themeLoader.getColor('editor.background');
     const editorBg = this.hexToRgb(editorBgHex);
     
-    // Minimap background is slightly darker/different than editor
+    // Minimap background is slightly darker than editor
     const minimapBg = editorBg 
       ? { r: Math.max(0, editorBg.r - 10), g: Math.max(0, editorBg.g - 10), b: Math.max(0, editorBg.b - 10) }
       : { r: 30, g: 30, b: 46 };
     
-    // Slider background is a semi-transparent overlay effect - lighten the background
+    // Slider background is lighter
     const sliderBg = editorBg
       ? { 
           r: Math.min(255, editorBg.r + (this.isDragging ? 60 : this.isHovering ? 45 : 30)), 
@@ -275,10 +243,9 @@ export class Minimap implements MouseHandler {
 
     let output = '';
     
-    // Calculate viewport indicator position
-    const linesPerRow = this.getLinesPerRow();
-    const viewportStartRow = Math.floor(this.editorScrollTop / linesPerRow) - this.scrollTop;
-    const viewportEndRow = Math.floor((this.editorScrollTop + this.editorVisibleLines) / linesPerRow) - this.scrollTop;
+    // Calculate viewport indicator position (in minimap rows)
+    const viewportStartRow = Math.floor(this.editorScrollTop / linesPerRow);
+    const viewportEndRow = Math.ceil((this.editorScrollTop + this.editorVisibleLines) / linesPerRow);
 
     // Render each row
     for (let screenRow = 0; screenRow < this.rect.height; screenRow++) {
@@ -289,26 +256,28 @@ export class Minimap implements MouseHandler {
       output += moveTo(screenX, screenY);
       
       // Check if this row is in the viewport
-      const isInViewport = screenRow >= viewportStartRow && screenRow <= viewportEndRow;
+      const isInViewport = cacheRow >= viewportStartRow && cacheRow < viewportEndRow;
       
       // Background
       const bg = isInViewport ? sliderBg : minimapBg;
       output += bgRgb(bg.r, bg.g, bg.b);
       
-      if (this.cache && cacheRow < this.cache.chars.length) {
-        const char = this.cache.chars[cacheRow] || ' ';
-        const color = this.cache.colors[cacheRow];
+      if (this.cache && cacheRow < this.cache.rows.length) {
+        const row = this.cache.rows[cacheRow]!;
         
-        if (color) {
-          const rgb = this.hexToRgb(color);
-          if (rgb) {
-            output += fgRgb(rgb.r, rgb.g, rgb.b);
+        // Render each character with its color
+        for (let i = 0; i < this.width; i++) {
+          const char = row.chars[i] || ' ';
+          const color = row.colors[i];
+          
+          if (color && char !== ' ') {
+            const rgb = this.hexToRgb(color);
+            if (rgb) {
+              output += fgRgb(rgb.r, rgb.g, rgb.b);
+            }
           }
+          output += char;
         }
-        
-        // Render the braille character(s) to fill width
-        const chars = this.cache.chars[cacheRow] || '';
-        output += chars.padEnd(this.width, ' ');
       } else {
         output += ' '.repeat(this.width);
       }
@@ -329,112 +298,77 @@ export class Minimap implements MouseHandler {
 
     const linesPerRow = this.getLinesPerRow();
     const totalRows = Math.ceil(this.document.lineCount / linesPerRow);
-    
-    const chars: string[] = [];
-    const colors: string[] = [];
+    const rows: { chars: string; colors: string[] }[] = [];
     
     for (let row = 0; row < totalRows; row++) {
       const startLine = row * linesPerRow;
       const endLine = Math.min(startLine + linesPerRow, this.document.lineCount);
-      const { char, color } = this.renderMinimapRow(startLine, endLine);
-      chars.push(char);
-      colors.push(color);
+      rows.push(this.renderMinimapRow(startLine, endLine));
     }
     
     this.cache = {
       content: this.document.content,
       lineCount: this.document.lineCount,
-      chars,
-      colors
+      linesPerRow,
+      rows
     };
   }
 
   /**
-   * Render a single minimap row (may represent multiple source lines)
+   * Render a minimap row (may represent multiple source lines)
    */
-  private renderMinimapRow(startLine: number, endLine: number): { char: string; color: string } {
-    if (!this.document) return { char: ' '.repeat(this.width), color: '' };
+  private renderMinimapRow(startLine: number, endLine: number): { chars: string; colors: string[] } {
+    if (!this.document || startLine >= this.document.lineCount) {
+      return { chars: ' '.repeat(this.width), colors: [] };
+    }
     
-    // Number of braille characters to render horizontally
-    const brailleWidth = this.width;
-    // Each braille char is 2 columns wide
-    const columnsPerChar = Math.ceil(this.maxColumn / brailleWidth / 2);
-    // Each braille char is 4 rows tall
-    const linesPerBraille = Math.max(1, Math.ceil((endLine - startLine) / 4));
+    // How many source columns per minimap column
+    const colsPerChar = Math.ceil(this.maxColumn / this.width);
     
-    let result = '';
-    const colorCounts = new Map<string, number>();
+    let chars = '';
+    const colors: string[] = [];
+    const defaultColor = themeLoader.getColor('editor.foreground') || '#c6d0f5';
     
-    for (let charIndex = 0; charIndex < brailleWidth; charIndex++) {
-      const colStart = charIndex * columnsPerChar * 2;
-      const colEnd = colStart + columnsPerChar * 2;
+    for (let i = 0; i < this.width; i++) {
+      const colStart = i * colsPerChar;
+      const colEnd = colStart + colsPerChar;
       
-      // Build 4x2 dot matrix for this braille char
-      const dots: boolean[][] = [
-        [false, false],
-        [false, false],
-        [false, false],
-        [false, false],
-      ];
+      // Aggregate density across all lines in this row
+      let totalDensity = 0;
+      let segmentColor = '';
       
-      // Sample lines for this braille character
-      for (let dotRow = 0; dotRow < 4; dotRow++) {
-        const lineOffset = Math.floor(dotRow * linesPerBraille / 4);
-        const lineNum = startLine + lineOffset;
-        
-        if (lineNum >= endLine || lineNum >= this.document.lineCount) continue;
-        
+      for (let lineNum = startLine; lineNum < endLine && lineNum < this.document.lineCount; lineNum++) {
         const line = this.document.getLine(lineNum);
         const tokens = shikiHighlighter.highlightLine(lineNum);
         
-        // Left dot (col 0)
-        for (let col = colStart; col < colStart + columnsPerChar && col < line.length; col++) {
-          if (line[col] && line[col] !== ' ' && line[col] !== '\t') {
-            dots[dotRow]![0] = true;
-            
-            // Sample color from token
-            const token = tokens.find(t => col >= t.start && col < t.end);
-            if (token?.color) {
-              colorCounts.set(token.color, (colorCounts.get(token.color) || 0) + 1);
+        for (let col = colStart; col < colEnd && col < line.length; col++) {
+          const char = line[col];
+          if (char && char !== ' ' && char !== '\t') {
+            totalDensity++;
+            // Get color from token if we don't have one yet
+            if (!segmentColor) {
+              const token = tokens.find(t => col >= t.start && col < t.end);
+              segmentColor = token?.color || defaultColor;
             }
-            break;
-          }
-        }
-        
-        // Right dot (col 1)
-        for (let col = colStart + columnsPerChar; col < colEnd && col < line.length; col++) {
-          if (line[col] && line[col] !== ' ' && line[col] !== '\t') {
-            dots[dotRow]![1] = true;
-            
-            // Sample color from token
-            const token = tokens.find(t => col >= t.start && col < t.end);
-            if (token?.color) {
-              colorCounts.set(token.color, (colorCounts.get(token.color) || 0) + 1);
-            }
-            break;
           }
         }
       }
       
-      result += toBraille(dots);
-    }
-    
-    // Find dominant color
-    let dominantColor = '';
-    let maxCount = 0;
-    for (const [color, count] of colorCounts) {
-      if (count > maxCount) {
-        maxCount = count;
-        dominantColor = color;
+      // Convert density to block character
+      if (totalDensity === 0) {
+        chars += ' ';
+        colors.push('');
+      } else {
+        // Normalize density based on how many lines are combined
+        const numLines = endLine - startLine;
+        const normalizedDensity = totalDensity / numLines;
+        const densityIndex = Math.min(4, Math.ceil(normalizedDensity / Math.max(1, colsPerChar / 4)));
+        chars += DENSITY_CHARS[densityIndex] || '░';
+        colors.push(segmentColor || defaultColor);
       }
     }
     
-    // Default to foreground color if no tokens
-    if (!dominantColor) {
-      dominantColor = themeLoader.getColor('editor.foreground') || '#c6d0f5';
-    }
-    
-    return { char: result, color: dominantColor };
+    return { chars, colors };
   }
 
   /**
@@ -442,10 +376,9 @@ export class Minimap implements MouseHandler {
    */
   private screenYToLine(screenY: number): number {
     if (!this.document) return 0;
-    
-    const row = screenY - this.rect.y + this.scrollTop;
     const linesPerRow = this.getLinesPerRow();
-    return Math.floor(row * linesPerRow);
+    const row = screenY - this.rect.y + this.scrollTop;
+    return row * linesPerRow;
   }
 
   /**
