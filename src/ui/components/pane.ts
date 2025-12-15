@@ -955,7 +955,10 @@ export class Pane implements MouseHandler {
       doc.lineCount - 1
     ));
     
-    const column = Math.max(0, this.scrollLeft + (screenX - editorRect.x - this.gutterWidth));
+    // Get the actual line content to clamp column to line length
+    const lineContent = doc.getLine(line);
+    const rawColumn = Math.max(0, this.scrollLeft + (screenX - editorRect.x - this.gutterWidth));
+    const column = Math.min(rawColumn, lineContent.length);
     
     return { line, column };
   }
