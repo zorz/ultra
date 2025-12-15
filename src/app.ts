@@ -29,6 +29,7 @@ import { type KeyEvent, type MouseEventData } from './terminal/index.ts';
 import { themeLoader } from './ui/themes/theme-loader.ts';
 import { shouldAutoPair, shouldSkipClosing, shouldDeletePair } from './core/auto-pair.ts';
 import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnosticsRenderer } from './features/lsp/index.ts';
+import { paneManager } from './ui/components/pane-manager.ts';
 
 interface OpenDocument {
   id: string;
@@ -64,8 +65,26 @@ export class App {
   } = { isOpen: false, documentId: null, fileName: '' };
 
   constructor() {
-    this.editorPane = new EditorPane();
+    this.editorPane = paneManager.getPane('main');
     this.setupEditorCallbacks();
+    this.setupPaneManagerCallbacks();
+  }
+
+  /**
+   * Setup pane manager callbacks
+   */
+  private setupPaneManagerCallbacks(): void {
+    paneManager.onFocus((paneId) => {
+      // Update editorPane reference when focus changes
+      this.editorPane = paneManager.getPane(paneId);
+      // Update active document based on pane's document
+      const docId = paneManager.getPaneDocumentId(paneId);
+      if (docId && docId !== this.activeDocumentId) {
+        this.activeDocumentId = docId;
+        this.updateStatusBar();
+      }
+      renderer.scheduleRender();
+    });
   }
 
   /**
@@ -1143,8 +1162,8 @@ export class App {
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(searchWidget);
     mouseManager.registerHandler(tabBar);
-    mouseManager.registerHandler(this.editorPane);
-    mouseManager.registerHandler(this.editorPane.getMinimap());
+    mouseManager.registerHandler(paneManager);
+    mouseManager.registerHandler(paneManager.getMinimap());
     mouseManager.registerHandler(fileTree);
   }
   
@@ -1342,9 +1361,9 @@ export class App {
     tabBar.setTabs(this.getTabs());
     tabBar.render(ctx);
 
-    // Render editor pane
-    this.editorPane.setRect(editorRect);
-    this.editorPane.render(ctx);
+    // Render editor panes using pane manager
+    // The pane manager handles splits and renders all panes
+    paneManager.render(ctx);
 
     // Render search widget (positioned in editor area)
     if (searchWidget.visible) {
@@ -2213,10 +2232,83 @@ export class App {
       },
       {
         id: 'ultra.splitVertical',
-        title: 'Split Editor Vertical',
+        title: 'Split Editor Right',
         category: 'View',
         handler: () => {
-          // TODO: Implement split view
+          const newPaneId = paneManager.splitVertical();
+          if (newPaneId) {
+            // Update editorPane reference to the new active pane
+            this.editorPane = paneManager.getActivePane();
+            statusBar.setMessage('Split editor right', 2000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.splitHorizontal',
+        title: 'Split Editor Down',
+        category: 'View',
+        handler: () => {
+          const newPaneId = paneManager.splitHorizontal();
+          if (newPaneId) {
+            // Update editorPane reference to the new active pane
+            this.editorPane = paneManager.getActivePane();
+            statusBar.setMessage('Split editor down', 2000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.focusNextPane',
+        title: 'Focus Next Editor Group',
+        category: 'View',
+        handler: () => {
+          paneManager.focusNextPane();
+          this.editorPane = paneManager.getActivePane();
+          // Update active document
+          const docId = paneManager.getActiveDocumentId();
+          if (docId) {
+            this.activeDocumentId = docId;
+          }
+          this.updateStatusBar();
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.focusPreviousPane',
+        title: 'Focus Previous Editor Group',
+        category: 'View',
+        handler: () => {
+          paneManager.focusPreviousPane();
+          this.editorPane = paneManager.getActivePane();
+          // Update active document
+          const docId = paneManager.getActiveDocumentId();
+          if (docId) {
+            this.activeDocumentId = docId;
+          }
+          this.updateStatusBar();
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.closePane',
+        title: 'Close Editor Group',
+        category: 'View',
+        handler: () => {
+          if (paneManager.getPaneCount() > 1) {
+            paneManager.closeActivePane();
+            this.editorPane = paneManager.getActivePane();
+            // Update active document
+            const docId = paneManager.getActiveDocumentId();
+            if (docId) {
+              this.activeDocumentId = docId;
+            }
+            this.updateStatusBar();
+            statusBar.setMessage('Closed editor group', 2000);
+          } else {
+            statusBar.setMessage('Cannot close the last editor group', 2000);
+          }
+          renderer.scheduleRender();
         }
       },
 
@@ -2400,6 +2492,11 @@ export class App {
 
     this.activeDocumentId = id;
     this.editorPane.setDocument(doc.document);
+    
+    // Sync with pane manager - register document and set it for active pane
+    paneManager.registerDocument(id, doc.document);
+    paneManager.setPaneDocument(paneManager.getActivePaneId(), id);
+    
     this.updateStatusBar();
   }
 

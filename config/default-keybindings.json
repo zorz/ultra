@@ -82,6 +82,10 @@
 
   { "key": "ctrl+b", "command": "ultra.toggleSidebar" },
   { "key": "ctrl+\\", "command": "ultra.splitVertical" },
+  { "key": "ctrl+shift+\\", "command": "ultra.splitHorizontal" },
+  { "key": "ctrl+k right", "command": "ultra.focusNextPane" },
+  { "key": "ctrl+k left", "command": "ultra.focusPreviousPane" },
+  { "key": "ctrl+shift+w", "command": "ultra.closePane" },
 
   { "key": "ctrl+1", "command": "ultra.goToTab1" },
   { "key": "ctrl+2", "command": "ultra.goToTab2" },
@@ -92,8 +96,8 @@
   { "key": "ctrl+7", "command": "ultra.goToTab7" },
   { "key": "ctrl+8", "command": "ultra.goToTab8" },
   { "key": "ctrl+9", "command": "ultra.goToTab9" },
-  { "key": "ctrl+alt+right", "command": "ultra.nextTab" },
-  { "key": "ctrl+alt+left", "command": "ultra.previousTab" },
+  { "key": "ctrl+tab", "command": "ultra.nextTab" },
+  { "key": "ctrl+shift+tab", "command": "ultra.previousTab" },
 
   { "key": "ctrl+`", "command": "ultra.toggleTerminal" },
   { "key": "ctrl+i", "command": "ultra.toggleAIPanel" },

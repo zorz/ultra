@@ -251,6 +251,22 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.splitVertical"
   },
   {
+    "key": "ctrl+shift+\\",
+    "command": "ultra.splitHorizontal"
+  },
+  {
+    "key": "ctrl+k right",
+    "command": "ultra.focusNextPane"
+  },
+  {
+    "key": "ctrl+k left",
+    "command": "ultra.focusPreviousPane"
+  },
+  {
+    "key": "ctrl+shift+w",
+    "command": "ultra.closePane"
+  },
+  {
     "key": "ctrl+1",
     "command": "ultra.goToTab1"
   },
@@ -287,11 +303,11 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.goToTab9"
   },
   {
-    "key": "ctrl+alt+right",
+    "key": "ctrl+tab",
     "command": "ultra.nextTab"
   },
   {
-    "key": "ctrl+alt+left",
+    "key": "ctrl+shift+tab",
     "command": "ultra.previousTab"
   },
   {

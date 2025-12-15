@@ -23,6 +23,8 @@ export class LayoutManager {
   private root: LayoutNode;
   private _screenWidth: number = 80;
   private _screenHeight: number = 24;
+  private activePaneId: string = 'main';
+  private paneCounter: number = 0;
   
   // Reserved areas
   private tabBarHeight: number = 1;
@@ -41,6 +43,308 @@ export class LayoutManager {
       rect: { x: 1, y: 2, width: 80, height: 22 },
       id: 'main'
     };
+  }
+
+  /**
+   * Generate a unique pane ID
+   */
+  private generatePaneId(): string {
+    return `pane_${++this.paneCounter}`;
+  }
+
+  /**
+   * Get the active pane ID
+   */
+  getActivePaneId(): string {
+    return this.activePaneId;
+  }
+
+  /**
+   * Set the active pane ID
+   */
+  setActivePaneId(id: string): void {
+    this.activePaneId = id;
+  }
+
+  /**
+   * Get all pane IDs in the layout
+   */
+  getAllPaneIds(): string[] {
+    const ids: string[] = [];
+    this.collectPaneIds(this.root, ids);
+    return ids;
+  }
+
+  private collectPaneIds(node: LayoutNode, ids: string[]): void {
+    if (node.type === 'leaf' && node.id) {
+      ids.push(node.id);
+    } else if (node.children) {
+      for (const child of node.children) {
+        this.collectPaneIds(child, ids);
+      }
+    }
+  }
+
+  /**
+   * Find a node by pane ID
+   */
+  private findNode(id: string, node: LayoutNode = this.root): LayoutNode | null {
+    if (node.type === 'leaf' && node.id === id) {
+      return node;
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        const found = this.findNode(id, child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find the parent of a node
+   */
+  private findParent(id: string, node: LayoutNode = this.root, parent: LayoutNode | null = null): { parent: LayoutNode; index: number } | null {
+    if (node.type === 'leaf' && node.id === id) {
+      return parent ? { parent, index: parent.children?.indexOf(node) ?? -1 } : null;
+    }
+    if (node.children) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i]!;
+        if (child.type === 'leaf' && child.id === id) {
+          return { parent: node, index: i };
+        }
+        const found = this.findParent(id, child, node);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Split a pane vertically (side by side)
+   * Returns the ID of the new pane
+   */
+  splitVertical(paneId: string = this.activePaneId): string | null {
+    return this.splitPane(paneId, 'horizontal'); // horizontal split = side by side (vertical divider)
+  }
+
+  /**
+   * Split a pane horizontally (stacked)
+   * Returns the ID of the new pane
+   */
+  splitHorizontal(paneId: string = this.activePaneId): string | null {
+    return this.splitPane(paneId, 'vertical'); // vertical split = stacked (horizontal divider)
+  }
+
+  /**
+   * Split a pane in the given direction
+   */
+  private splitPane(paneId: string, direction: 'horizontal' | 'vertical'): string | null {
+    const newPaneId = this.generatePaneId();
+    
+    // Handle root node special case
+    if (this.root.type === 'leaf' && this.root.id === paneId) {
+      const oldRect = { ...this.root.rect };
+      this.root = {
+        type: direction,
+        rect: oldRect,
+        children: [
+          { type: 'leaf', rect: { ...oldRect }, id: paneId },
+          { type: 'leaf', rect: { ...oldRect }, id: newPaneId }
+        ],
+        ratio: [0.5, 0.5]
+      };
+      this.recalculateLayout();
+      return newPaneId;
+    }
+
+    // Find the node to split
+    const targetNode = this.findNode(paneId);
+    if (!targetNode || targetNode.type !== 'leaf') {
+      return null;
+    }
+
+    // Find the parent
+    const parentInfo = this.findParent(paneId);
+    
+    if (!parentInfo) {
+      // This shouldn't happen if the node exists
+      return null;
+    }
+
+    const { parent, index } = parentInfo;
+
+    if (parent.type === direction) {
+      // Same direction - just add a new child
+      const newRatio = 1 / (parent.children!.length + 1);
+      const scaleFactor = 1 - newRatio;
+      parent.ratio = parent.ratio!.map(r => r * scaleFactor);
+      parent.ratio!.splice(index + 1, 0, newRatio);
+      parent.children!.splice(index + 1, 0, {
+        type: 'leaf',
+        rect: { ...targetNode.rect },
+        id: newPaneId
+      });
+    } else {
+      // Different direction - wrap in new container
+      const newContainer: LayoutNode = {
+        type: direction,
+        rect: { ...targetNode.rect },
+        children: [
+          { type: 'leaf', rect: { ...targetNode.rect }, id: paneId },
+          { type: 'leaf', rect: { ...targetNode.rect }, id: newPaneId }
+        ],
+        ratio: [0.5, 0.5]
+      };
+      parent.children![index] = newContainer;
+    }
+
+    this.recalculateLayout();
+    return newPaneId;
+  }
+
+  /**
+   * Close a pane and remove it from the layout
+   * Returns the ID of the pane that should become active, or null if it was the last pane
+   */
+  closePane(paneId: string): string | null {
+    const allPanes = this.getAllPaneIds();
+    if (allPanes.length <= 1) {
+      return null; // Can't close the last pane
+    }
+
+    // Find the adjacent pane to activate
+    const currentIndex = allPanes.indexOf(paneId);
+    const nextActiveId = allPanes[currentIndex === 0 ? 1 : currentIndex - 1] || allPanes[0];
+
+    // Handle root being a split
+    if (this.root.type !== 'leaf' && this.root.children) {
+      this.removeFromNode(this.root, paneId);
+      
+      // If root now has only one child, promote it
+      if (this.root.children.length === 1) {
+        const child = this.root.children[0]!;
+        child.rect = this.root.rect;
+        this.root = child;
+      }
+    }
+
+    this.recalculateLayout();
+    
+    if (nextActiveId && this.findNode(nextActiveId)) {
+      this.activePaneId = nextActiveId;
+      return nextActiveId;
+    }
+    
+    return allPanes.find(id => id !== paneId) || null;
+  }
+
+  /**
+   * Remove a pane from a node
+   */
+  private removeFromNode(node: LayoutNode, paneId: string): boolean {
+    if (!node.children) return false;
+
+    for (let i = 0; i < node.children.length; i++) {
+      const child = node.children[i]!;
+      
+      if (child.type === 'leaf' && child.id === paneId) {
+        // Remove this child
+        node.children.splice(i, 1);
+        if (node.ratio) {
+          const removedRatio = node.ratio[i]!;
+          node.ratio.splice(i, 1);
+          // Redistribute the ratio
+          if (node.ratio.length > 0) {
+            const scale = 1 / (1 - removedRatio);
+            node.ratio = node.ratio.map(r => r * scale);
+          }
+        }
+        return true;
+      }
+      
+      if (child.type !== 'leaf') {
+        if (this.removeFromNode(child, paneId)) {
+          // If the child now has only one child, unwrap it
+          if (child.children && child.children.length === 1) {
+            const grandchild = child.children[0]!;
+            grandchild.rect = child.rect;
+            node.children[i] = grandchild;
+          }
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Get the rect for a specific pane
+   */
+  getPaneRect(paneId: string): Rect | null {
+    const node = this.findNode(paneId);
+    return node?.rect || null;
+  }
+
+  /**
+   * Get all pane rects
+   */
+  getAllPaneRects(): Map<string, Rect> {
+    const rects = new Map<string, Rect>();
+    this.collectPaneRects(this.root, rects);
+    return rects;
+  }
+
+  private collectPaneRects(node: LayoutNode, rects: Map<string, Rect>): void {
+    if (node.type === 'leaf' && node.id) {
+      rects.set(node.id, node.rect);
+    } else if (node.children) {
+      for (const child of node.children) {
+        this.collectPaneRects(child, rects);
+      }
+    }
+  }
+
+  /**
+   * Navigate to the next pane
+   */
+  focusNextPane(): string | null {
+    const panes = this.getAllPaneIds();
+    if (panes.length <= 1) return null;
+    
+    const currentIndex = panes.indexOf(this.activePaneId);
+    const nextIndex = (currentIndex + 1) % panes.length;
+    this.activePaneId = panes[nextIndex]!;
+    return this.activePaneId;
+  }
+
+  /**
+   * Navigate to the previous pane
+   */
+  focusPreviousPane(): string | null {
+    const panes = this.getAllPaneIds();
+    if (panes.length <= 1) return null;
+    
+    const currentIndex = panes.indexOf(this.activePaneId);
+    const prevIndex = currentIndex === 0 ? panes.length - 1 : currentIndex - 1;
+    this.activePaneId = panes[prevIndex]!;
+    return this.activePaneId;
+  }
+
+  /**
+   * Check if the layout has multiple panes
+   */
+  hasSplits(): boolean {
+    return this.root.type !== 'leaf';
+  }
+
+  /**
+   * Get the number of panes
+   */
+  getPaneCount(): number {
+    return this.getAllPaneIds().length;
   }
 
   /**
