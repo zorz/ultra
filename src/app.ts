@@ -43,6 +43,13 @@ export class App {
   private lastClickPosition: Position | null = null;
   private lastClickTime: number = 0;
   private clickCount: number = 0;
+  
+  // Close confirmation dialog state
+  private closeConfirmDialog: {
+    isOpen: boolean;
+    documentId: string | null;
+    fileName: string;
+  } = { isOpen: false, documentId: null, fileName: '' };
 
   constructor() {
     this.editorPane = new EditorPane();
@@ -162,6 +169,25 @@ export class App {
       // Handle save browser first if it's open
       if (saveBrowser.isOpen()) {
         saveBrowser.handleKey(event.key, event.char, event.ctrl, event.shift);
+        renderer.scheduleRender();
+        return;
+      }
+
+      // Handle close confirmation dialog
+      if (this.closeConfirmDialog.isOpen) {
+        if (event.key === 'S') {
+          await this.handleCloseConfirmResponse('save');
+          return;
+        }
+        if (event.key === 'D') {
+          await this.handleCloseConfirmResponse('discard');
+          return;
+        }
+        if (event.key === 'C' || event.key === 'ESCAPE') {
+          await this.handleCloseConfirmResponse('cancel');
+          return;
+        }
+        // Consume all other keys while dialog is open
         renderer.scheduleRender();
         return;
       }
@@ -646,7 +672,7 @@ export class App {
     });
 
     tabBar.onTabClose((tabId) => {
-      this.closeDocument(tabId);
+      this.requestCloseDocument(tabId);
       renderer.scheduleRender();
     });
   }
@@ -785,6 +811,9 @@ export class App {
     // Render save browser (on top of everything)
     saveBrowser.render(ctx);
 
+    // Render close confirmation dialog (on top of everything)
+    this.renderCloseConfirmDialog(ctx);
+
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
     // need to move the terminal cursor out of the way
@@ -874,7 +903,7 @@ export class App {
         category: 'File',
         handler: () => {
           if (this.activeDocumentId) {
-            this.closeDocument(this.activeDocumentId);
+            this.requestCloseDocument(this.activeDocumentId);
           }
         }
       },
@@ -1702,7 +1731,29 @@ export class App {
   }
 
   /**
-   * Close a document
+   * Request to close a document (may show confirmation dialog)
+   */
+  requestCloseDocument(id: string): void {
+    const docEntry = this.documents.find(d => d.id === id);
+    if (!docEntry) return;
+    
+    const doc = docEntry.document;
+    if (doc.isDirty) {
+      // Show confirmation dialog
+      this.closeConfirmDialog = {
+        isOpen: true,
+        documentId: id,
+        fileName: doc.fileName
+      };
+      renderer.scheduleRender();
+    } else {
+      // No unsaved changes, close directly
+      this.closeDocument(id);
+    }
+  }
+
+  /**
+   * Close a document (internal - no confirmation)
    */
   closeDocument(id: string): void {
     const index = this.documents.findIndex(d => d.id === id);
@@ -1720,6 +1771,97 @@ export class App {
         this.updateStatusBar();
       }
     }
+  }
+  
+  /**
+   * Handle close confirmation dialog response
+   */
+  private async handleCloseConfirmResponse(response: 'save' | 'discard' | 'cancel'): Promise<void> {
+    const docId = this.closeConfirmDialog.documentId;
+    this.closeConfirmDialog = { isOpen: false, documentId: null, fileName: '' };
+    
+    if (!docId) return;
+    
+    switch (response) {
+      case 'save':
+        // Save then close
+        const docEntry = this.documents.find(d => d.id === docId);
+        if (docEntry) {
+          const doc = docEntry.document;
+          if (doc.filePath) {
+            await doc.save();
+            this.closeDocument(docId);
+          } else {
+            // No file path, need save-as first
+            saveBrowser.show({
+              startPath: process.cwd(),
+              suggestedFilename: doc.fileName,
+              screenWidth: renderer.width,
+              screenHeight: renderer.height,
+              onSave: async (filePath: string) => {
+                await doc.saveAs(filePath);
+                this.closeDocument(docId);
+                renderer.scheduleRender();
+              },
+              onCancel: () => {
+                renderer.scheduleRender();
+              }
+            });
+          }
+        }
+        break;
+      case 'discard':
+        // Close without saving
+        this.closeDocument(docId);
+        break;
+      case 'cancel':
+        // Do nothing
+        break;
+    }
+    renderer.scheduleRender();
+  }
+
+  /**
+   * Render close confirmation dialog
+   */
+  private renderCloseConfirmDialog(ctx: RenderContext): void {
+    if (!this.closeConfirmDialog.isOpen) return;
+    
+    const dialogWidth = 50;
+    const dialogHeight = 7;
+    const dialogX = Math.floor((renderer.width - dialogWidth) / 2);
+    const dialogY = Math.floor((renderer.height - dialogHeight) / 2);
+
+    const bgColor = '#2d2d2d';
+    const borderColor = '#e5c07b';
+
+    // Background
+    ctx.fill(dialogX, dialogY, dialogWidth, dialogHeight, ' ', undefined, bgColor);
+
+    // Border
+    ctx.drawStyled(dialogX, dialogY, '╭' + '─'.repeat(dialogWidth - 2) + '╮', borderColor, bgColor);
+    for (let y = dialogY + 1; y < dialogY + dialogHeight - 1; y++) {
+      ctx.drawStyled(dialogX, y, '│', borderColor, bgColor);
+      ctx.drawStyled(dialogX + dialogWidth - 1, y, '│', borderColor, bgColor);
+    }
+    ctx.drawStyled(dialogX, dialogY + dialogHeight - 1, '╰' + '─'.repeat(dialogWidth - 2) + '╯', borderColor, bgColor);
+
+    // Title
+    const title = ' Unsaved Changes ';
+    const titleX = dialogX + Math.floor((dialogWidth - title.length) / 2);
+    ctx.drawStyled(titleX, dialogY, title, '#e5c07b', bgColor);
+
+    // Message
+    const filename = this.closeConfirmDialog.fileName;
+    const truncatedName = filename.length > dialogWidth - 6 ? filename.slice(0, dialogWidth - 9) + '...' : filename;
+    const msg = `Save changes to ${truncatedName}?`;
+    const msgTruncated = msg.length > dialogWidth - 4 ? msg.slice(0, dialogWidth - 7) + '...' : msg;
+    ctx.drawStyled(dialogX + 2, dialogY + 2, msgTruncated, '#d4d4d4', bgColor);
+
+    // Options
+    const options = '(S)ave  (D)iscard  (C)ancel';
+    const optX = dialogX + Math.floor((dialogWidth - options.length) / 2);
+    ctx.drawStyled(optX, dialogY + 4, options, '#98c379', bgColor);
   }
 
   /**

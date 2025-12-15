@@ -1,0 +1,15 @@
+[0m[1m20680 |[0m     [0m[35mconst[0m inputY = [0m[33mthis[0m.y + [0m[33m2[0m[0m[2m;[0m
+[0m[1m20681 |[0m     [0m[35mconst[0m inputBg = [0m[33mthis[0m.inputFocused ? [0m[32m"#3e5f8a"[0m : [0m[32m"#3e3e3e"[0m[0m[2m;[0m
+[0m[1m20682 |[0m     [0m[35mconst[0m inputLabel = [0m[32m"Name: "[0m[0m[2m;[0m
+[0m[1m20683 |[0m     ctx[0m[3m[1m.fill[0m([0m[33mthis[0m.x + [0m[33m1[0m, inputY, [0m[33mthis[0m.width - [0m[33m2[0m, [0m[33m1[0m, [0m[32m" "[0m, [0m[32m"#d0d0d0"[0m, inputBg)[0m[2m;[0m
+[0m[1m20684 |[0m     ctx[0m[3m[1m.drawStyled[0m([0m[33mthis[0m.x + [0m[33m2[0m, inputY, inputLabel, [0m[32m"#888888"[0m, inputBg)[0m[2m;[0m
+[0m[1m20685 |[0m     [0m[35mconst[0m displayFilename = [0m[33mthis[0m.filename[0m[3m[1m.slice[0m(-(inputWidth - [0m[33m1[0m))[0m[2m;[0m
+                                                 [31m[1m^[0m
+[0m[31mTypeError[0m[2m:[0m [1mundefined is not an object (evaluating 'this.filename.slice')[0m
+[0m      [2mat [0m[0m[1m[3mrender[0m[2m ([0m[0m[36m/$bunfs/root/ultra[0m[2m:[0m[33m20685[0m[2m:[33m42[0m[2m)[0m
+[0m      [2mat [0m[0m[1m[3mrender[0m[2m ([0m[0m[36m/$bunfs/root/ultra[0m[2m:[0m[33m24104[0m[2m:[33m23[0m[2m)[0m
+[0m      [2mat [0m[0m[2m<anonymous>[0m[2m ([0m[0m[36m/$bunfs/root/ultra[0m[2m:[0m[33m24071[0m[2m:[33m18[0m[2m)[0m
+[0m      [2mat [0m[0m[1m[3mrender[0m[2m ([0m[0m[36m/$bunfs/root/ultra[0m[2m:[0m[33m6591[0m[2m:[33m15[0m[2m)[0m
+[0m      [2mat [0m[0m[2m<anonymous>[0m[2m ([0m[0m[36m/$bunfs/root/ultra[0m[2m:[0m[33m6581[0m[2m:[33m22[0m[2m)[0m
+[0m
+[2mBun v1.3.4 (macOS arm64)[0m
