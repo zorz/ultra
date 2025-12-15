@@ -797,9 +797,10 @@ export class Pane implements MouseHandler {
     screenY: number,
     rect: Rect
   ): void {
-    const selection = getSelectionRange(doc.primaryCursor);
-    if (!selection) return;
+    const cursor = doc.primaryCursor;
+    if (!cursor.selection) return;
     
+    const selection = getSelectionRange(cursor.selection);
     const { start, end } = selection;
     if (lineNum < start.line || lineNum > end.line) return;
     
@@ -822,9 +823,12 @@ export class Pane implements MouseHandler {
   }
 
   private renderCursor(ctx: RenderContext, doc: Document, rect: Rect): void {
+    // Only render cursor in focused pane
+    if (!this.isFocused) return;
+    
     const cursor = doc.primaryCursor;
-    const screenLine = cursor.line - this.scrollTop;
-    const screenCol = cursor.column - this.scrollLeft;
+    const screenLine = cursor.position.line - this.scrollTop;
+    const screenCol = cursor.position.column - this.scrollLeft;
     
     if (screenLine < 0 || screenLine >= rect.height) return;
     if (screenCol < 0 || screenCol >= rect.width - this.gutterWidth) return;

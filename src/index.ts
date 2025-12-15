@@ -44,6 +44,22 @@ const debugMode = args.includes('--debug');
 // Filter out any remaining flags and get file paths
 const filePath = args.filter(arg => !arg.startsWith('-'))[0];
 
+// Global error handler - write to debug.log
+const fs = require('fs');
+process.on('uncaughtException', (error: Error) => {
+  const msg = `[CRASH] Uncaught Exception:\n${error.stack || error.message}\n`;
+  fs.appendFileSync('debug.log', msg);
+  console.error(msg);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  const msg = `[CRASH] Unhandled Rejection:\n${reason?.stack || reason}\n`;
+  fs.appendFileSync('debug.log', msg);
+  console.error(msg);
+  process.exit(1);
+});
+
 // Handle graceful shutdown
 process.on('SIGINT', () => {
   app.stop();
