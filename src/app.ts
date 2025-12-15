@@ -28,6 +28,7 @@ import { type KeyEvent, type MouseEventData } from './terminal/index.ts';
 import { themeLoader } from './ui/themes/theme-loader.ts';
 import { shouldAutoPair, shouldSkipClosing, shouldDeletePair } from './core/auto-pair.ts';
 import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnosticsRenderer } from './features/lsp/index.ts';
+import { terminalPane } from './ui/components/terminal-pane.ts';
 
 interface OpenDocument {
   id: string;
@@ -73,6 +74,7 @@ export class App {
 
   constructor() {
     this.setupPaneManagerCallbacks();
+    this.setupTerminalCallbacks();
   }
 
   /**
@@ -564,6 +566,33 @@ export class App {
           renderer.scheduleRender();
           return;
         }
+      }
+
+      // Handle terminal input if it's focused
+      if (terminalPane.getFocused() && layoutManager.isTerminalVisible()) {
+        // Allow Ctrl+` to toggle terminal even when focused
+        if (event.ctrl && event.key === '`') {
+          layoutManager.toggleTerminal();
+          terminalPane.setFocused(false);
+          renderer.scheduleRender();
+          return;
+        }
+        
+        // Pass key to terminal
+        const handled = terminalPane.handleKeyEvent(
+          event.key,
+          event.ctrl,
+          event.alt,
+          event.shift
+        );
+        
+        // Also handle regular character input
+        if (!handled && event.char && event.char.length === 1 && !event.ctrl && !event.meta) {
+          terminalPane.write(event.char);
+        }
+        
+        renderer.scheduleRender();
+        return;
       }
 
       // Convert our KeyEvent to ParsedKey format
@@ -1167,6 +1196,7 @@ export class App {
     mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(searchWidget);
+    mouseManager.registerHandler(terminalPane);  // Terminal pane for embedded terminal
     mouseManager.registerHandler(paneManager);  // Pane manager handles tab bars and editor panes
     mouseManager.registerHandler(fileTree);
   }
@@ -1230,6 +1260,10 @@ export class App {
 
     // Handle mouse clicks in documents
     paneManager.onDocumentClick((doc, position, clickCount, event) => {
+      // Clicking in editor unfocuses terminal and file tree
+      terminalPane.setFocused(false);
+      fileTree.setFocused(false);
+      
       if (event.meta) {
         // Cmd+Click adds cursor
         doc.cursorManager.addCursor(position);
@@ -1281,6 +1315,16 @@ export class App {
       if (docEntry) {
         this.requestCloseDocumentInPane(docEntry.id, pane.id);
       }
+    });
+  }
+
+  /**
+   * Setup terminal pane callbacks
+   */
+  private setupTerminalCallbacks(): void {
+    // Re-render when terminal output changes
+    terminalPane.onUpdate(() => {
+      renderer.scheduleRender();
     });
   }
 
@@ -1370,6 +1414,7 @@ export class App {
     const statusBarRect = layoutManager.getStatusBarRect();
     const editorRect = layoutManager.getEditorAreaRect();
     const sidebarRect = layoutManager.getSidebarRect();
+    const terminalRect = layoutManager.getTerminalRect();
     
     this.debugLog(`render: editorRect=${JSON.stringify(editorRect)}, sidebarRect=${sidebarRect ? JSON.stringify(sidebarRect) : 'null'}`);
 
@@ -1380,6 +1425,12 @@ export class App {
       fileTree.render(ctx);
     } else {
       fileTree.setVisible(false);
+    }
+
+    // Render terminal pane (if visible)
+    if (terminalRect) {
+      terminalPane.setRect(terminalRect);
+      terminalPane.render(ctx);
     }
 
     // Render panes (each pane has its own tab bar)
@@ -1897,13 +1948,73 @@ export class App {
         category: 'View',
         handler: () => {
           fileTree.setFocused(false);
+          terminalPane.setFocused(false);
         }
       },
       {
         id: 'ultra.toggleTerminal',
         title: 'Toggle Terminal',
         category: 'View',
-        handler: () => layoutManager.toggleTerminal()
+        handler: async () => {
+          layoutManager.toggleTerminal();
+          if (layoutManager.isTerminalVisible()) {
+            // Create terminal if none exists
+            if (terminalPane.getTerminalCount() === 0) {
+              await terminalPane.createTerminal();
+            }
+            terminalPane.setFocused(true);
+            fileTree.setFocused(false);
+          } else {
+            terminalPane.setFocused(false);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.newTerminal',
+        title: 'New Terminal',
+        category: 'Terminal',
+        handler: async () => {
+          if (!layoutManager.isTerminalVisible()) {
+            layoutManager.toggleTerminal();
+          }
+          await terminalPane.createTerminal();
+          terminalPane.setFocused(true);
+          fileTree.setFocused(false);
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.focusTerminal',
+        title: 'Focus Terminal',
+        category: 'Terminal',
+        handler: async () => {
+          if (!layoutManager.isTerminalVisible()) {
+            layoutManager.toggleTerminal();
+            if (terminalPane.getTerminalCount() === 0) {
+              await terminalPane.createTerminal();
+            }
+          }
+          terminalPane.setFocused(true);
+          fileTree.setFocused(false);
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.nextTerminal',
+        title: 'Next Terminal',
+        category: 'Terminal',
+        handler: () => {
+          terminalPane.nextTerminal();
+        }
+      },
+      {
+        id: 'ultra.previousTerminal',
+        title: 'Previous Terminal',
+        category: 'Terminal',
+        handler: () => {
+          terminalPane.previousTerminal();
+        }
       },
       {
         id: 'ultra.toggleAIPanel',

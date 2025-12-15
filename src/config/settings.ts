@@ -30,6 +30,10 @@ export interface EditorSettings {
   'ultra.sidebar.width': number;
   'ultra.ai.model': string;
   'ultra.ai.apiKey': string;
+  'terminal.integrated.shell': string;
+  'terminal.integrated.position': 'bottom' | 'top' | 'left' | 'right';
+  'terminal.integrated.defaultHeight': number;
+  'terminal.integrated.defaultWidth': number;
 }
 
 const defaultSettings: EditorSettings = {
@@ -61,7 +65,11 @@ const defaultSettings: EditorSettings = {
   'workbench.sideBar.location': 'left',
   'ultra.sidebar.width': 30,
   'ultra.ai.model': 'claude-sonnet-4-20250514',
-  'ultra.ai.apiKey': '${env:ANTHROPIC_API_KEY}'
+  'ultra.ai.apiKey': '${env:ANTHROPIC_API_KEY}',
+  'terminal.integrated.shell': process.env.SHELL || '/bin/zsh',
+  'terminal.integrated.position': 'bottom',
+  'terminal.integrated.defaultHeight': 12,
+  'terminal.integrated.defaultWidth': 40
 };
 
 export class Settings {

@@ -30,8 +30,9 @@ export class LayoutManager {
   private sidebarWidth: number = 0;
   private sidebarVisible: boolean = false;
   private sidebarLocation: 'left' | 'right' = 'left';
-  private terminalHeight: number = 0;
+  private terminalSize: number = 0;  // Height or width depending on position
   private terminalVisible: boolean = false;
+  private terminalPosition: 'bottom' | 'top' | 'left' | 'right' = 'bottom';
   private aiPanelWidth: number = 0;
   private aiPanelVisible: boolean = false;
 
@@ -115,21 +116,63 @@ export class LayoutManager {
    */
   getTerminalRect(): Rect | null {
     if (!this.terminalVisible) return null;
+    
     const sidebarOnLeft = this.sidebarLocation === 'left';
-    const x = (this.sidebarVisible && sidebarOnLeft) ? this.sidebarWidth + 1 : 1;
-    let width = this._screenWidth - x + 1;
-    if (this.aiPanelVisible) {
-      width -= this.aiPanelWidth;
+    const sidebarOffset = this.sidebarVisible ? this.sidebarWidth : 0;
+    const aiOffset = this.aiPanelVisible ? this.aiPanelWidth : 0;
+    
+    switch (this.terminalPosition) {
+      case 'bottom': {
+        const x = sidebarOnLeft ? sidebarOffset + 1 : 1;
+        let width = this._screenWidth - x + 1;
+        if (this.aiPanelVisible) width -= aiOffset;
+        if (this.sidebarVisible && !sidebarOnLeft) width -= sidebarOffset;
+        
+        return {
+          x,
+          y: this._screenHeight - this.statusBarHeight - this.terminalSize + 1,
+          width,
+          height: this.terminalSize
+        };
+      }
+      
+      case 'top': {
+        const x = sidebarOnLeft ? sidebarOffset + 1 : 1;
+        let width = this._screenWidth - x + 1;
+        if (this.aiPanelVisible) width -= aiOffset;
+        if (this.sidebarVisible && !sidebarOnLeft) width -= sidebarOffset;
+        
+        return {
+          x,
+          y: 1,
+          width,
+          height: this.terminalSize
+        };
+      }
+      
+      case 'left': {
+        const x = sidebarOnLeft ? sidebarOffset + 1 : 1;
+        return {
+          x,
+          y: 1,
+          width: this.terminalSize,
+          height: this._screenHeight - this.statusBarHeight
+        };
+      }
+      
+      case 'right': {
+        let x = this._screenWidth - this.terminalSize + 1;
+        if (this.aiPanelVisible) x -= aiOffset;
+        if (this.sidebarVisible && !sidebarOnLeft) x -= sidebarOffset;
+        
+        return {
+          x,
+          y: 1,
+          width: this.terminalSize,
+          height: this._screenHeight - this.statusBarHeight
+        };
+      }
     }
-    if (this.sidebarVisible && !sidebarOnLeft) {
-      width -= this.sidebarWidth;
-    }
-    return {
-      x,
-      y: this._screenHeight - this.statusBarHeight - this.terminalHeight + 1,
-      width,
-      height: this.terminalHeight
-    };
   }
 
   /**
@@ -150,8 +193,8 @@ export class LayoutManager {
    */
   getEditorAreaRect(): Rect {
     const sidebarOnLeft = this.sidebarLocation === 'left';
-    const x = (this.sidebarVisible && sidebarOnLeft) ? this.sidebarWidth + 1 : 1;
-    const y = 1;  // Start at top since panes have their own tab bars
+    let x = (this.sidebarVisible && sidebarOnLeft) ? this.sidebarWidth + 1 : 1;
+    let y = 1;  // Start at top since panes have their own tab bars
     let width = this._screenWidth - x + 1;
     let height = this._screenHeight - this.statusBarHeight;
 
@@ -163,8 +206,24 @@ export class LayoutManager {
       width -= this.sidebarWidth;
     }
 
+    // Adjust for terminal position
     if (this.terminalVisible) {
-      height -= this.terminalHeight;
+      switch (this.terminalPosition) {
+        case 'bottom':
+          height -= this.terminalSize;
+          break;
+        case 'top':
+          y += this.terminalSize;
+          height -= this.terminalSize;
+          break;
+        case 'left':
+          x += this.terminalSize;
+          width -= this.terminalSize;
+          break;
+        case 'right':
+          width -= this.terminalSize;
+          break;
+      }
     }
 
     return { x, y, width, height };
@@ -187,15 +246,40 @@ export class LayoutManager {
   /**
    * Toggle terminal
    */
-  toggleTerminal(height: number = 10): void {
+  toggleTerminal(size?: number): void {
     if (this.terminalVisible) {
       this.terminalVisible = false;
-      this.terminalHeight = 0;
+      this.terminalSize = 0;
     } else {
       this.terminalVisible = true;
-      this.terminalHeight = Math.min(height, Math.floor(this._screenHeight * 0.4));
+      const isVertical = this.terminalPosition === 'left' || this.terminalPosition === 'right';
+      const defaultSize = isVertical ? 40 : 12;
+      const maxSize = isVertical ? this._screenWidth * 0.4 : this._screenHeight * 0.4;
+      this.terminalSize = Math.min(size || defaultSize, Math.floor(maxSize));
     }
     this.recalculateLayout();
+  }
+
+  /**
+   * Set terminal position
+   */
+  setTerminalPosition(position: 'bottom' | 'top' | 'left' | 'right'): void {
+    this.terminalPosition = position;
+    // Re-calculate appropriate size for new position
+    if (this.terminalVisible) {
+      const isVertical = position === 'left' || position === 'right';
+      const defaultSize = isVertical ? 40 : 12;
+      const maxSize = isVertical ? this._screenWidth * 0.4 : this._screenHeight * 0.4;
+      this.terminalSize = Math.min(defaultSize, Math.floor(maxSize));
+    }
+    this.recalculateLayout();
+  }
+
+  /**
+   * Get terminal position
+   */
+  getTerminalPosition(): 'bottom' | 'top' | 'left' | 'right' {
+    return this.terminalPosition;
   }
 
   /**
@@ -238,11 +322,14 @@ export class LayoutManager {
   }
 
   /**
-   * Set terminal height
+   * Set terminal size (height for top/bottom, width for left/right)
    */
-  setTerminalHeight(height: number): void {
+  setTerminalSize(size: number): void {
     if (this.terminalVisible) {
-      this.terminalHeight = Math.max(3, Math.min(height, Math.floor(this._screenHeight * 0.6)));
+      const isVertical = this.terminalPosition === 'left' || this.terminalPosition === 'right';
+      const maxSize = isVertical ? this._screenWidth * 0.6 : this._screenHeight * 0.6;
+      const minSize = isVertical ? 20 : 3;
+      this.terminalSize = Math.max(minSize, Math.min(size, Math.floor(maxSize)));
       this.recalculateLayout();
     }
   }
@@ -272,10 +359,21 @@ export class LayoutManager {
   /**
    * Check if point is on terminal divider
    */
-  isOnTerminalDivider(y: number): boolean {
+  isOnTerminalDivider(x: number, y: number): boolean {
     if (!this.terminalVisible) return false;
     const termRect = this.getTerminalRect();
-    return termRect !== null && y === termRect.y - 1;
+    if (!termRect) return false;
+    
+    switch (this.terminalPosition) {
+      case 'bottom':
+        return y === termRect.y - 1 && x >= termRect.x && x < termRect.x + termRect.width;
+      case 'top':
+        return y === termRect.y + termRect.height && x >= termRect.x && x < termRect.x + termRect.width;
+      case 'left':
+        return x === termRect.x + termRect.width && y >= termRect.y && y < termRect.y + termRect.height;
+      case 'right':
+        return x === termRect.x - 1 && y >= termRect.y && y < termRect.y + termRect.height;
+    }
   }
 
   /**

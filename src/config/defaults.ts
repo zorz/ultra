@@ -327,6 +327,18 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.toggleTerminal"
   },
   {
+    "key": "ctrl+shift+`",
+    "command": "ultra.newTerminal"
+  },
+  {
+    "key": "ctrl+shift+]",
+    "command": "ultra.nextTerminal"
+  },
+  {
+    "key": "ctrl+shift+[",
+    "command": "ultra.previousTerminal"
+  },
+  {
     "key": "ctrl+i",
     "command": "ultra.toggleAIPanel"
   },
@@ -411,7 +423,11 @@ export const defaultSettings: Record<string, any> = {
   "workbench.sideBar.location": "left",
   "ultra.sidebar.width": 30,
   "ultra.ai.model": "claude-sonnet-4-20250514",
-  "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}"
+  "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}",
+  "terminal.integrated.shell": "",
+  "terminal.integrated.position": "bottom",
+  "terminal.integrated.defaultHeight": 12,
+  "terminal.integrated.defaultWidth": 60
 };
 
 export const defaultThemes: Record<string, Theme> = {

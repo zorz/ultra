@@ -112,6 +112,9 @@
   { "key": "ctrl+alt+left", "command": "ultra.previousTab" },
 
   { "key": "ctrl+`", "command": "ultra.toggleTerminal" },
+  { "key": "ctrl+shift+`", "command": "ultra.newTerminal" },
+  { "key": "ctrl+shift+]", "command": "ultra.nextTerminal" },
+  { "key": "ctrl+shift+[", "command": "ultra.previousTerminal" },
   { "key": "ctrl+i", "command": "ultra.toggleAIPanel" },
 
   { "key": "f12", "command": "ultra.goToDefinition" },
