@@ -807,6 +807,13 @@ export class PTY {
   }
 
   /**
+   * Get current view offset
+   */
+  getViewOffset(): number {
+    return this.screen.getViewOffset();
+  }
+
+  /**
    * Set callback for data events
    */
   onData(callback: (data: string) => void): void {

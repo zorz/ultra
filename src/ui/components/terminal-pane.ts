@@ -418,6 +418,7 @@ export class TerminalPane implements MouseHandler {
     const contentRect = this.getTerminalContentRect();
     const buffer = terminal.pty.getBuffer();
     const cursor = terminal.pty.getCursor();
+    const viewOffset = terminal.pty.getViewOffset();
     
     const defaultBg = this.hexToRgb(this.bgColor);
     const defaultFg = this.hexToRgb(this.fgColor);
@@ -438,7 +439,8 @@ export class TerminalPane implements MouseHandler {
       
       for (let x = 0; x < Math.min(line.length, contentRect.width); x++) {
         const cell = line[x]!;
-        const isCursor = this.isFocused && y === cursor.y && x === cursor.x;
+        // Only show cursor when not scrolled back
+        const isCursor = this.isFocused && viewOffset === 0 && y === cursor.y && x === cursor.x;
         
         // Determine colors
         let fg = cell.fg ? this.hexToRgb(cell.fg) : defaultFg;

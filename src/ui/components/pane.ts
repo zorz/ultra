@@ -78,7 +78,7 @@ export class Pane implements MouseHandler {
   // Editor state
   private scrollTop: number = 0;
   private scrollLeft: number = 0;
-  private gutterWidth: number = 6;  // Extra space for fold indicator
+  private gutterWidth: number = 5;  // digits(3) + fold indicator + space
   private theme: EditorTheme = defaultTheme;
   private isFocused: boolean = false;
   private minimapEnabled: boolean = true;
@@ -579,12 +579,12 @@ export class Pane implements MouseHandler {
   private updateGutterWidth(): void {
     const doc = this.getActiveDocument();
     if (!doc) {
-      this.gutterWidth = 6;
+      this.gutterWidth = 5;  // default: 3 digits + fold indicator + space
       return;
     }
     const lineCount = doc.lineCount;
     const digits = Math.max(3, String(lineCount).length);
-    this.gutterWidth = digits + 3;  // digits + fold indicator + space + margin
+    this.gutterWidth = digits + 2;  // digits + fold indicator + space
   }
 
   private setupHighlighting(doc: Document): void {
