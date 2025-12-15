@@ -51,6 +51,7 @@ const defaultTheme: EditorTheme = {
 
 interface PaneTab {
   id: string;           // Unique tab ID within this pane
+  documentId: string;   // App's document ID (for cross-pane tracking)
   document: Document;   // Reference to shared document
   filePath: string | null;
 }
@@ -148,7 +149,7 @@ export class Pane implements MouseHandler {
   /**
    * Open a document in this pane (creates a new tab or activates existing)
    */
-  openDocument(document: Document): string {
+  openDocument(document: Document, documentId?: string): string {
     // Check if document is already open in this pane
     const existingTab = this.tabs.find(t => t.document === document);
     if (existingTab) {
@@ -156,10 +157,12 @@ export class Pane implements MouseHandler {
       return existingTab.id;
     }
     
-    // Create new tab
+    // Create new tab - use provided documentId or generate one
     const tabId = this.generateTabId();
+    const docId = documentId || tabId;  // Fall back to tabId if no documentId provided
     const tab: PaneTab = {
       id: tabId,
+      documentId: docId,
       document,
       filePath: document.filePath
     };
@@ -264,18 +267,20 @@ export class Pane implements MouseHandler {
    * Check if document with given ID is open in this pane
    */
   hasDocumentById(id: string): boolean {
-    return this.tabs.some(t => t.id === id);
+    return this.tabs.some(t => t.documentId === id);
   }
 
   /**
    * Add a document with a specific ID (for app.ts integration)
    */
   addDocument(id: string, document: Document): void {
-    // Check if already exists
-    if (this.tabs.some(t => t.id === id)) return;
+    // Check if already exists by documentId
+    if (this.tabs.some(t => t.documentId === id)) return;
     
+    const tabId = this.generateTabId();
     const tab: PaneTab = {
-      id,
+      id: tabId,
+      documentId: id,
       document,
       filePath: document.filePath
     };
@@ -288,11 +293,13 @@ export class Pane implements MouseHandler {
    */
   setActiveDocument(id: string, document: Document): void {
     // Ensure the document is in our tabs
-    if (!this.tabs.some(t => t.id === id)) {
+    let tab = this.tabs.find(t => t.documentId === id);
+    if (!tab) {
       this.addDocument(id, document);
+      tab = this.tabs.find(t => t.documentId === id);
     }
     
-    this.activeTabId = id;
+    this.activeTabId = tab?.id || null;
     this.scrollTop = 0;
     this.scrollLeft = 0;
     this.updateGutterWidth();
@@ -309,23 +316,26 @@ export class Pane implements MouseHandler {
   }
 
   /**
-   * Get active document ID
+   * Get the active document ID (the app's document ID)
    */
   getActiveDocumentId(): string | null {
-    return this.activeTabId;
+    if (!this.activeTabId) return null;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    return tab?.documentId || null;
   }
 
   /**
    * Remove a document by ID (for app.ts integration)
    */
   removeDocument(id: string): void {
-    const index = this.tabs.findIndex(t => t.id === id);
+    const index = this.tabs.findIndex(t => t.documentId === id);
     if (index === -1) return;
     
+    const closedTab = this.tabs[index]!;
     this.tabs.splice(index, 1);
     
     // If we closed the active tab, activate another
-    if (this.activeTabId === id) {
+    if (this.activeTabId === closedTab.id) {
       if (this.tabs.length > 0) {
         const newIndex = Math.min(index, this.tabs.length - 1);
         const newTab = this.tabs[newIndex]!;

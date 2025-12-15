@@ -420,19 +420,19 @@ export class PaneManager implements MouseHandler {
   /**
    * Open a document in the last focused pane
    */
-  openDocument(document: Document): void {
+  openDocument(document: Document, documentId?: string): void {
     const pane = this.getLastFocusedPane();
-    pane.openDocument(document);
+    pane.openDocument(document, documentId);
     this.setActivePane(pane.id);
   }
 
   /**
    * Open a document in a specific pane
    */
-  openDocumentInPane(document: Document, paneId: string): void {
+  openDocumentInPane(document: Document, paneId: string, documentId?: string): void {
     const pane = this.panes.get(paneId);
     if (pane) {
-      pane.openDocument(document);
+      pane.openDocument(document, documentId);
       this.setActivePane(paneId);
     }
   }
@@ -440,8 +440,8 @@ export class PaneManager implements MouseHandler {
   /**
    * Open a document in the active pane
    */
-  openDocumentInActivePane(document: Document): void {
-    this.getActivePane().openDocument(document);
+  openDocumentInActivePane(document: Document, documentId?: string): void {
+    this.getActivePane().openDocument(document, documentId);
   }
 
   /**

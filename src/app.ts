@@ -2416,7 +2416,7 @@ export class App {
       const existing = this.documents.find(d => d.document.filePath === absolutePath);
       if (existing) {
         // Open in the last focused pane (may already be open there, or adds a new tab)
-        paneManager.openDocument(existing.document);
+        paneManager.openDocument(existing.document, existing.id);
         this.activeDocumentId = existing.id;
         return;
       }
@@ -2427,7 +2427,7 @@ export class App {
       this.documents.push({ id, document });
       
       // Open in the last focused pane
-      paneManager.openDocument(document);
+      paneManager.openDocument(document, id);
       this.activeDocumentId = id;
 
       // Notify LSP of document open
