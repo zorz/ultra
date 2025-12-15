@@ -1153,8 +1153,11 @@ export class App {
         meta: false
       });
       
-      // Only render for meaningful events
-      if (event.type !== 'wheel') {
+      // Only render for meaningful events - not pure motion without drag
+      const needsRender = event.type === 'press' || 
+                          event.type === 'release' || 
+                          (event.type === 'move' && event.button !== 'none');  // Only render drag, not pure motion
+      if (needsRender) {
         renderer.scheduleRender();
       }
     });
