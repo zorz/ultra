@@ -75,6 +75,18 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.toggleMinimap"
   },
   {
+    "key": "ctrl+shift+[",
+    "command": "ultra.toggleFold"
+  },
+  {
+    "key": "ctrl+k ctrl+0",
+    "command": "ultra.foldAll"
+  },
+  {
+    "key": "ctrl+k ctrl+j",
+    "command": "ultra.unfoldAll"
+  },
+  {
     "key": "home",
     "command": "ultra.cursorLineStart"
   },
@@ -378,6 +390,7 @@ export const defaultSettings: Record<string, any> = {
   "editor.insertSpaces": true,
   "editor.wordWrap": "on",
   "editor.lineNumbers": "on",
+  "editor.folding": true,
   "editor.minimap.enabled": true,
   "editor.minimap.width": 10,
   "editor.minimap.showSlider": "always",

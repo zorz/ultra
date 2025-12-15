@@ -1919,6 +1919,32 @@ export class App {
           paneManager.toggleMinimap();
         }
       },
+      
+      // Folding commands
+      {
+        id: 'ultra.toggleFold',
+        title: 'Toggle Fold',
+        category: 'View',
+        handler: () => {
+          paneManager.toggleFoldAtCursor();
+        }
+      },
+      {
+        id: 'ultra.foldAll',
+        title: 'Fold All',
+        category: 'View',
+        handler: () => {
+          paneManager.foldAll();
+        }
+      },
+      {
+        id: 'ultra.unfoldAll',
+        title: 'Unfold All',
+        category: 'View',
+        handler: () => {
+          paneManager.unfoldAll();
+        }
+      },
 
       // Split pane commands
       {

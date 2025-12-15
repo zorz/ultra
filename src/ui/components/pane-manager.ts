@@ -618,6 +618,29 @@ export class PaneManager implements MouseHandler {
     this.getActivePane().toggleMinimap();
   }
 
+  // ==================== Folding ====================
+
+  /**
+   * Toggle fold at cursor in active pane
+   */
+  toggleFoldAtCursor(): boolean {
+    return this.getActivePane().toggleFoldAtCursor();
+  }
+
+  /**
+   * Fold all regions in active pane's document
+   */
+  foldAll(): void {
+    this.getActivePane().foldAll();
+  }
+
+  /**
+   * Unfold all regions in active pane's document
+   */
+  unfoldAll(): void {
+    this.getActivePane().unfoldAll();
+  }
+
   /**
    * Get scroll position from active pane
    */

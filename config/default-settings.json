@@ -4,6 +4,7 @@
   "editor.insertSpaces": true,
   "editor.wordWrap": "on",
   "editor.lineNumbers": "on",
+  "editor.folding": true,
   "editor.minimap.enabled": true,
   "editor.minimap.width": 10,
   "editor.minimap.showSlider": "always",

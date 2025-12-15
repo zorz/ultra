@@ -8,6 +8,7 @@
 import { Document } from '../../core/document.ts';
 import { TabBar, type Tab } from './tab-bar.ts';
 import { Minimap } from './minimap.ts';
+import { FoldManager } from '../../core/fold.ts';
 import type { RenderContext } from '../renderer.ts';
 import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
@@ -63,6 +64,7 @@ export class Pane implements MouseHandler {
   // Sub-components
   private tabBar: TabBar;
   private minimap: Minimap;
+  private foldManager: FoldManager;
   
   // Tab management
   private tabs: PaneTab[] = [];
@@ -76,10 +78,12 @@ export class Pane implements MouseHandler {
   // Editor state
   private scrollTop: number = 0;
   private scrollLeft: number = 0;
-  private gutterWidth: number = 5;
+  private gutterWidth: number = 6;  // Extra space for fold indicator
   private theme: EditorTheme = defaultTheme;
   private isFocused: boolean = false;
   private minimapEnabled: boolean = true;
+  private foldingEnabled: boolean = true;
+  private lastFoldContent: string = '';  // Track content changes for fold recomputation
   
   // Word wrap state
   private wrappedLines: WrappedLine[] = [];
@@ -101,11 +105,13 @@ export class Pane implements MouseHandler {
   private onFocusCallback?: () => void;
   private onTabSelectCallback?: (document: Document) => void;
   private onTabCloseCallback?: (document: Document, tabId: string) => void;
+  private onFoldToggleCallback?: (line: number) => void;
 
   constructor(id: string) {
     this.id = id;
     this.tabBar = new TabBar();
     this.minimap = new Minimap();
+    this.foldManager = new FoldManager();
     
     this.setupTabBarCallbacks();
     this.setupMinimapCallbacks();
@@ -136,6 +142,7 @@ export class Pane implements MouseHandler {
 
   private loadSettings(): void {
     this.minimapEnabled = settings.get('editor.minimap.enabled') ?? true;
+    this.foldingEnabled = settings.get('editor.folding') ?? true;
   }
 
   // ==================== Tab Management ====================
@@ -310,6 +317,11 @@ export class Pane implements MouseHandler {
     
     // Setup syntax highlighting
     this.setupHighlighting(document);
+    
+    // Compute foldable regions
+    if (this.foldingEnabled) {
+      this.updateFoldRegions(document);
+    }
     
     if (this.onTabSelectCallback) {
       this.onTabSelectCallback(document);
@@ -567,12 +579,12 @@ export class Pane implements MouseHandler {
   private updateGutterWidth(): void {
     const doc = this.getActiveDocument();
     if (!doc) {
-      this.gutterWidth = 5;
+      this.gutterWidth = 6;
       return;
     }
     const lineCount = doc.lineCount;
     const digits = Math.max(3, String(lineCount).length);
-    this.gutterWidth = digits + 2;
+    this.gutterWidth = digits + 3;  // digits + fold indicator + space + margin
   }
 
   private setupHighlighting(doc: Document): void {
@@ -587,6 +599,14 @@ export class Pane implements MouseHandler {
     } else {
       this.highlighterReady = false;
     }
+  }
+
+  private updateFoldRegions(doc: Document): void {
+    const lines: string[] = [];
+    for (let i = 0; i < doc.lineCount; i++) {
+      lines.push(doc.getLine(i));
+    }
+    this.foldManager.computeRegions(lines);
   }
 
   // ==================== Editor Rendering (simplified from EditorPane) ====================
@@ -632,13 +652,18 @@ export class Pane implements MouseHandler {
 
   private renderContent(ctx: RenderContext, doc: Document, rect: Rect): void {
     const visibleLines = rect.height;
-    const startLine = this.scrollTop;
-    const endLine = Math.min(startLine + visibleLines, doc.lineCount);
     
-    debugLog(`[Pane ${this.id}] renderContent: visibleLines=${visibleLines}, startLine=${startLine}, docLineCount=${doc.lineCount}`);
+    debugLog(`[Pane ${this.id}] renderContent: visibleLines=${visibleLines}, scrollTop=${this.scrollTop}, docLineCount=${doc.lineCount}`);
+    
+    // Recompute fold regions if content changed
+    const content = doc.content;
+    if (content !== this.lastFoldContent) {
+      const lines = content.split('\n');
+      this.foldManager.computeRegions(lines);
+      this.lastFoldContent = content;
+    }
     
     // Parse content for syntax highlighting
-    const content = doc.content;
     debugLog(`[Pane ${this.id}] renderContent: content.length=${content.length}`);
     if (this.highlighterReady && content !== this.lastParsedContent) {
       debugLog(`[Pane ${this.id}] renderContent: parsing new content`);
@@ -646,17 +671,24 @@ export class Pane implements MouseHandler {
       this.lastParsedContent = content;
     }
     
-    // Render each visible line
+    // Render visible lines, skipping folded ones
     debugLog(`[Pane ${this.id}] renderContent: rendering lines...`);
-    for (let screenLine = 0; screenLine < visibleLines; screenLine++) {
-      const bufferLine = startLine + screenLine;
-      const screenY = rect.y + screenLine;
-      
-      if (bufferLine < doc.lineCount) {
-        // Get tokens for this line from the highlighter
-        const lineTokens = this.highlighterReady ? shikiHighlighter.highlightLine(bufferLine) : [];
-        this.renderLine(ctx, doc, bufferLine, screenY, rect, lineTokens);
+    let screenLine = 0;
+    let bufferLine = this.scrollTop;
+    
+    while (screenLine < visibleLines && bufferLine < doc.lineCount) {
+      // Skip hidden (folded) lines
+      if (this.foldManager.isHidden(bufferLine)) {
+        bufferLine++;
+        continue;
       }
+      
+      const screenY = rect.y + screenLine;
+      const lineTokens = this.highlighterReady ? shikiHighlighter.highlightLine(bufferLine) : [];
+      this.renderLine(ctx, doc, bufferLine, screenY, rect, lineTokens);
+      
+      screenLine++;
+      bufferLine++;
     }
     debugLog(`[Pane ${this.id}] renderContent: lines done`);
     
@@ -680,8 +712,10 @@ export class Pane implements MouseHandler {
     const cursor = doc.primaryCursor;
     const isCurrentLine = lineNum === cursor.position.line;
     
-    // Line number
-    const lineNumStr = String(lineNum + 1).padStart(this.gutterWidth - 1, ' ');
+    // Calculate gutter parts
+    const digits = Math.max(3, String(doc.lineCount).length);
+    const lineNumStr = String(lineNum + 1).padStart(digits, ' ');
+    
     const lnColor = isCurrentLine 
       ? this.hexToRgb(this.theme.lineNumberActiveForeground)
       : this.hexToRgb(this.theme.lineNumberForeground);
@@ -690,7 +724,87 @@ export class Pane implements MouseHandler {
     let output = `\x1b[${screenY};${rect.x}H`;
     if (gutterBg) output += `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m`;
     if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
-    output += lineNumStr + ' \x1b[0m';
+    output += lineNumStr;
+    
+    // Fold indicator
+    const canFold = this.foldManager.canFold(lineNum);
+    const isFolded = this.foldManager.isFolded(lineNum);
+    
+    if (canFold) {
+      // Use line number color for fold indicator to blend with theme
+      const foldColor = themeLoader.getColor('editorLineNumber.foreground') || 
+                        this.theme.lineNumberForeground || '#626880';
+      const foldRgb = this.hexToRgb(foldColor);
+      if (foldRgb) {
+        output += `\x1b[38;2;${foldRgb.r};${foldRgb.g};${foldRgb.b}m`;
+      }
+      output += isFolded ? '▶' : '▼';
+    } else {
+      output += ' ';
+    }
+    
+    // Reset after gutter
+    output += ' \x1b[0m';
+    
+    // If this line is folded, show fold indicator and skip content
+    if (isFolded) {
+      const foldedCount = this.foldManager.getFoldedLineCount(lineNum);
+      const foldIndicator = ` ⋯ ${foldedCount} lines `;
+      
+      // Use a subtle background for folded indicator - blend with line highlight or use comment color
+      const foldBgColor = themeLoader.getColor('editor.lineHighlightBackground') || 
+                          themeLoader.getColor('editor.background') || '#2c313c';
+      const foldBgRgb = this.hexToRgb(foldBgColor);
+      // Use a muted foreground color (comment color or dimmed foreground)
+      const foldFgColor = themeLoader.getColor('editorLineNumber.foreground') || 
+                          themeLoader.getColor('editor.foreground') || '#626880';
+      const foldFgRgb = this.hexToRgb(foldFgColor);
+      
+      // Render the first part of the line content
+      const contentWidth = rect.width - this.gutterWidth;
+      const startCol = this.scrollLeft;
+      const truncatedText = line.substring(startCol, Math.min(line.length, startCol + contentWidth - foldIndicator.length - 1));
+      
+      // Apply line highlight if current line
+      let lineBg: { r: number; g: number; b: number } | null = null;
+      if (isCurrentLine && this.isFocused) {
+        lineBg = this.hexToRgb(this.theme.lineHighlightBackground);
+      }
+      
+      if (lineBg) {
+        output += `\x1b[48;2;${lineBg.r};${lineBg.g};${lineBg.b}m`;
+      }
+      
+      // Render truncated text with syntax highlighting
+      if (lineTokens.length > 0) {
+        output += this.renderTextWithSelection(truncatedText, lineTokens, startCol, truncatedText.length, -1, -1, lineBg, null);
+      } else {
+        const fgColor = this.hexToRgb(this.theme.foreground);
+        if (fgColor) output += `\x1b[38;2;${fgColor.r};${fgColor.g};${fgColor.b}m`;
+        output += truncatedText;
+      }
+      
+      // Fold count indicator
+      if (foldBgRgb) output += `\x1b[48;2;${foldBgRgb.r};${foldBgRgb.g};${foldBgRgb.b}m`;
+      if (foldFgRgb) output += `\x1b[38;2;${foldFgRgb.r};${foldFgRgb.g};${foldFgRgb.b}m`;
+      output += foldIndicator;
+      
+      // Pad rest of line
+      const usedWidth = truncatedText.length + foldIndicator.length;
+      const padding = contentWidth - usedWidth;
+      if (padding > 0) {
+        if (lineBg) {
+          output += `\x1b[48;2;${lineBg.r};${lineBg.g};${lineBg.b}m`;
+        } else {
+          output += '\x1b[49m';
+        }
+        output += ' '.repeat(padding);
+      }
+      
+      output += '\x1b[0m';
+      ctx.buffer(output);
+      return;
+    }
     
     // Determine background color for line
     let lineBg: { r: number; g: number; b: number } | null = null;
@@ -915,6 +1029,20 @@ export class Pane implements MouseHandler {
       case 'MOUSE_LEFT_BUTTON_PRESSED':
       case 'MOUSE_LEFT_BUTTON_PRESSED_DOUBLE':
       case 'MOUSE_LEFT_BUTTON_PRESSED_TRIPLE': {
+        // Check if click is in the gutter area (line numbers or fold indicator)
+        const gutterEnd = editorRect.x + this.gutterWidth;
+        if (this.foldingEnabled && event.x >= editorRect.x && event.x < gutterEnd) {
+          const screenLine = event.y - editorRect.y;
+          const bufferLine = this.screenLineToBufferLine(screenLine);
+          if (bufferLine !== -1 && this.foldManager.isFoldableAt(bufferLine)) {
+            this.foldManager.toggleFold(bufferLine);
+            if (this.onFoldToggleCallback) {
+              this.onFoldToggleCallback(bufferLine);
+            }
+            return true;
+          }
+        }
+        
         const position = this.screenToBuffer(event.x, event.y, editorRect);
         const clickCount = event.name === 'MOUSE_LEFT_BUTTON_PRESSED' ? 1 :
                           event.name === 'MOUSE_LEFT_BUTTON_PRESSED_DOUBLE' ? 2 : 3;
@@ -946,21 +1074,52 @@ export class Pane implements MouseHandler {
     return false;
   }
 
+  /**
+   * Convert a screen line (relative to editor top) to a buffer line number.
+   * Accounts for folded lines when folding is enabled.
+   * Returns -1 if the screen line doesn't map to a valid buffer line.
+   */
+  private screenLineToBufferLine(screenLine: number): number {
+    const doc = this.getActiveDocument();
+    if (!doc) return -1;
+    
+    if (!this.foldingEnabled) {
+      // Simple case: no folding, direct mapping
+      const bufferLine = this.scrollTop + screenLine;
+      return bufferLine < doc.lineCount ? bufferLine : -1;
+    }
+    
+    // With folding: count visible lines from scrollTop
+    let visibleCount = 0;
+    let bufferLine = this.scrollTop;
+    
+    while (bufferLine < doc.lineCount && visibleCount <= screenLine) {
+      if (!this.foldManager.isLineHidden(bufferLine)) {
+        if (visibleCount === screenLine) {
+          return bufferLine;
+        }
+        visibleCount++;
+      }
+      bufferLine++;
+    }
+    
+    return -1;
+  }
+
   private screenToBuffer(screenX: number, screenY: number, editorRect: Rect): Position {
     const doc = this.getActiveDocument();
     if (!doc) return { line: 0, column: 0 };
     
-    const line = Math.max(0, Math.min(
-      this.scrollTop + (screenY - editorRect.y),
-      doc.lineCount - 1
-    ));
+    const screenLine = screenY - editorRect.y;
+    const line = this.screenLineToBufferLine(screenLine);
+    const actualLine = line === -1 ? Math.max(0, doc.lineCount - 1) : line;
     
     // Get the actual line content to clamp column to line length
-    const lineContent = doc.getLine(line);
+    const lineContent = doc.getLine(actualLine);
     const rawColumn = Math.max(0, this.scrollLeft + (screenX - editorRect.x - this.gutterWidth));
     const column = Math.min(rawColumn, lineContent.length);
     
-    return { line, column };
+    return { line: actualLine, column };
   }
 
   // ==================== Callbacks ====================
@@ -987,6 +1146,67 @@ export class Pane implements MouseHandler {
 
   onTabClose(callback: (document: Document, tabId: string) => void): void {
     this.onTabCloseCallback = callback;
+  }
+
+  onFoldToggle(callback: (line: number) => void): void {
+    this.onFoldToggleCallback = callback;
+  }
+
+  // ==================== Folding ====================
+
+  /**
+   * Toggle fold at the cursor's current line (or the block containing it)
+   */
+  toggleFoldAtCursor(): boolean {
+    const doc = this.getActiveDocument();
+    if (!doc || !this.foldingEnabled) return false;
+    
+    const cursorLine = doc.primaryCursor.position.line;
+    
+    // First try to toggle fold that starts at cursor line
+    if (this.foldManager.isFoldableAt(cursorLine)) {
+      return this.foldManager.toggleFold(cursorLine);
+    }
+    
+    // Otherwise, fold the containing block
+    return this.foldManager.foldContaining(cursorLine);
+  }
+
+  /**
+   * Fold all regions in the document
+   */
+  foldAll(): void {
+    if (!this.foldingEnabled) return;
+    this.foldManager.foldAll();
+  }
+
+  /**
+   * Unfold all regions in the document
+   */
+  unfoldAll(): void {
+    if (!this.foldingEnabled) return;
+    this.foldManager.unfoldAll();
+  }
+
+  /**
+   * Check if folding is enabled
+   */
+  isFoldingEnabled(): boolean {
+    return this.foldingEnabled;
+  }
+
+  /**
+   * Set folding enabled state
+   */
+  setFoldingEnabled(enabled: boolean): void {
+    this.foldingEnabled = enabled;
+    if (enabled) {
+      const doc = this.getActiveDocument();
+      if (doc) this.updateFoldRegions(doc);
+    } else {
+      this.foldManager.clear();
+    }
+    this.updateGutterWidth();
   }
 
   // ==================== Minimap ====================

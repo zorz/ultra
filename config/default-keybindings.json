@@ -29,6 +29,18 @@
     "key": "ctrl+shift+m",
     "command": "ultra.toggleMinimap"
   },
+  {
+    "key": "ctrl+shift+[",
+    "command": "ultra.toggleFold"
+  },
+  {
+    "key": "ctrl+k ctrl+0",
+    "command": "ultra.foldAll"
+  },
+  {
+    "key": "ctrl+k ctrl+j",
+    "command": "ultra.unfoldAll"
+  },
 
   { "key": "home", "command": "ultra.cursorLineStart" },
   { "key": "end", "command": "ultra.cursorLineEnd" },

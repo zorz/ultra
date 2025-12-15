@@ -12,6 +12,7 @@ export interface EditorSettings {
   'editor.autoClosingBrackets': 'always' | 'languageDefined' | 'beforeWhitespace' | 'never';
   'editor.wordWrap': 'off' | 'on' | 'wordWrapColumn' | 'bounded';
   'editor.lineNumbers': 'on' | 'off' | 'relative';
+  'editor.folding': boolean;
   'editor.minimap.enabled': boolean;
   'editor.minimap.width': number;
   'editor.minimap.showSlider': 'always' | 'mouseover';
@@ -39,6 +40,7 @@ const defaultSettings: EditorSettings = {
   'editor.autoClosingBrackets': 'always',
   'editor.wordWrap': 'off',
   'editor.lineNumbers': 'on',
+  'editor.folding': true,
   'editor.minimap.enabled': true,
   'editor.minimap.width': 10,
   'editor.minimap.showSlider': 'always',
