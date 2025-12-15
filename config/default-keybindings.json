@@ -1,5 +1,7 @@
 [
   { "key": "ctrl+s", "command": "ultra.save" },
+  { "key": "ctrl+shift+s", "command": "ultra.saveAs" },
+  { "key": "f4", "command": "ultra.saveAs" },
   { "key": "ctrl+z", "command": "ultra.undo" },
   { "key": "ctrl+shift+z", "command": "ultra.redo" },
   { "key": "ctrl+y", "command": "ultra.redo" },

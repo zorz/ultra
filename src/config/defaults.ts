@@ -19,6 +19,14 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.save"
   },
   {
+    "key": "ctrl+shift+s",
+    "command": "ultra.saveAs"
+  },
+  {
+    "key": "f4",
+    "command": "ultra.saveAs"
+  },
+  {
     "key": "ctrl+z",
     "command": "ultra.undo"
   },
@@ -1046,7 +1054,7 @@ export const defaultThemes: Record<string, Theme> = {
       "editor.selectionBackground": "#626880",
       "editor.findMatchBackground": "#51576d",
       "editor.findMatchHighlightBackground": "#ef9f7680",
-      "editorBracketMatch.background": "#414559",
+      "editorBracketMatch.background": "#9da2b8",
       "editorCursor.foreground": "#f2d5cf",
       "editorLineNumber.foreground": "#626880",
       "editorLineNumber.activeForeground": "#c6d0f5",

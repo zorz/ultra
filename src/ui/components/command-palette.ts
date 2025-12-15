@@ -163,16 +163,16 @@ export class CommandPalette implements MouseHandler {
     }
   }
 
-  confirm(): void {
+  async confirm(): Promise<void> {
     if (this.isCustomMode) {
       const item = this.getSelectedItem();
       if (item) {
-        item.handler();
+        await item.handler();
       }
     } else {
       const command = this.getSelectedCommand();
       if (command && this.onSelectCallback) {
-        this.onSelectCallback(command);
+        await this.onSelectCallback(command);
       }
     }
     this.hide();

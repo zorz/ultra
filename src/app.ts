@@ -4,6 +4,7 @@
  * Coordinates all components and handles the main application lifecycle.
  */
 
+import * as path from 'path';
 import { Document } from './core/document.ts';
 import { type Position } from './core/buffer.ts';
 import { clonePosition, hasSelection, getSelectionRange } from './core/cursor.ts';
@@ -18,6 +19,7 @@ import { fileBrowser } from './ui/components/file-browser.ts';
 import { commandPalette } from './ui/components/command-palette.ts';
 import { fileTree } from './ui/components/file-tree.ts';
 import { searchWidget } from './ui/components/search-widget.ts';
+import { inputDialog } from './ui/components/input-dialog.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
 import { settings } from './config/settings.ts';
@@ -156,6 +158,39 @@ export class App {
     renderer.onKey(async (event: KeyEvent) => {
       if (!this.isRunning) return;
 
+      // Handle input dialog first if it's open
+      if (inputDialog.isOpen()) {
+        if (event.key === 'ESCAPE') {
+          inputDialog.cancel();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'ENTER') {
+          inputDialog.confirm();
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key === 'BACKSPACE') {
+          inputDialog.backspace();
+          renderer.scheduleRender();
+          return;
+        }
+        // Type into input
+        if (event.char && event.char.length === 1 && !event.ctrl && !event.meta) {
+          inputDialog.appendChar(event.char);
+          renderer.scheduleRender();
+          return;
+        }
+        if (event.key.length === 1 && !event.ctrl && !event.meta && !event.alt) {
+          inputDialog.appendChar(event.key.toLowerCase());
+          renderer.scheduleRender();
+          return;
+        }
+        // Consume all other keys while dialog is open
+        renderer.scheduleRender();
+        return;
+      }
+
       // Handle file picker input first if it's open
       if (filePicker.isOpen()) {
         if (event.key === 'ESCAPE') {
@@ -207,7 +242,7 @@ export class App {
           return;
         }
         if (event.key === 'ENTER') {
-          commandPalette.confirm();
+          await commandPalette.confirm();
           renderer.scheduleRender();
           return;
         }
@@ -327,7 +362,8 @@ export class App {
       const commandId = keymap.getCommand(parsed);
       
       // DEBUG: Show in status bar what key was pressed
-      statusBar.setMessage(`Key: ${event.key} | Parsed: ${keyStr} -> ${commandId || 'none'}`, 2000);
+      const debugInfo = `${event.ctrl?'C':''}${event.shift?'S':''}${event.alt?'A':''}${event.meta?'M':''}+${event.key}`;
+      statusBar.setMessage(`Key: ${debugInfo} | Parsed: ${keyStr} -> ${commandId || 'none'}`, 2000);
       
       if (commandId) {
         await commandRegistry.execute(commandId);
@@ -735,6 +771,9 @@ export class App {
     // Render command palette (on top of everything)
     commandPalette.render(ctx);
 
+    // Render input dialog (on top of everything)
+    inputDialog.render(ctx);
+
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
     // need to move the terminal cursor out of the way
@@ -785,8 +824,24 @@ export class App {
         handler: async () => {
           const doc = this.getActiveDocument();
           if (doc) {
+            // If no path, show Save As dialog
+            if (!doc.filePath) {
+              this.showSaveAsDialog(doc);
+              return;
+            }
             await doc.save();
             this.updateStatusBar();
+          }
+        }
+      },
+      {
+        id: 'ultra.saveAs',
+        title: 'Save As...',
+        category: 'File',
+        handler: async () => {
+          const doc = this.getActiveDocument();
+          if (doc) {
+            this.showSaveAsDialog(doc);
           }
         }
       },
@@ -1575,6 +1630,48 @@ export class App {
     } catch (error) {
       console.error('Failed to open file:', error);
     }
+  }
+
+  /**
+   * Show Save As dialog
+   */
+  private showSaveAsDialog(doc: Document): void {
+    // Get suggested filename
+    const existingPath = doc.filePath;
+    const suggestedName = existingPath 
+      ? path.basename(existingPath) 
+      : 'untitled.txt';
+
+    statusBar.setMessage(`Opening Save As dialog with: ${suggestedName}`, 3000);
+
+    inputDialog.show({
+      title: 'Save As',
+      placeholder: 'filename',
+      initialValue: suggestedName,
+      screenWidth: renderer.width,
+      screenHeight: renderer.height,
+      onConfirm: async (filename: string) => {
+        // Resolve relative to cwd if not absolute
+        let filePath = filename;
+        if (!path.isAbsolute(filePath)) {
+          filePath = path.join(process.cwd(), filename);
+        }
+        
+        try {
+          await doc.saveAs(filePath);
+          // Tab bar will update on next render since getTabs() reads from documents
+          this.updateStatusBar();
+          statusBar.setMessage(`Saved: ${filePath}`, 3000);
+        } catch (error) {
+          statusBar.setMessage(`Error saving: ${error}`, 5000);
+        }
+        renderer.scheduleRender();
+      },
+      onCancel: () => {
+        renderer.scheduleRender();
+      }
+    });
+    renderer.scheduleRender();
   }
 
   /**
