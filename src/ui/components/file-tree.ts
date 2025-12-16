@@ -561,6 +561,18 @@ export class FileTree implements MouseHandler {
     const gitUntrackedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
     const gitConflictFg = this.hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || { r: 255, g: 123, b: 114 };
     
+    // Subtle background tints for git status (blend with sidebar background)
+    const blendBg = (color: { r: number; g: number; b: number }, amount: number) => ({
+      r: Math.round(sidebarBg.r + (color.r - sidebarBg.r) * amount),
+      g: Math.round(sidebarBg.g + (color.g - sidebarBg.g) * amount),
+      b: Math.round(sidebarBg.b + (color.b - sidebarBg.b) * amount)
+    });
+    const gitAddedBg = blendBg(gitAddedFg, 0.1);
+    const gitModifiedBg = blendBg(gitModifiedFg, 0.1);
+    const gitDeletedBg = blendBg(gitDeletedFg, 0.1);
+    const gitUntrackedBg = blendBg(gitUntrackedFg, 0.1);
+    const gitConflictBg = blendBg(gitConflictFg, 0.15);
+    
     for (let i = 0; i < visibleCount; i++) {
       const nodeIndex = this.scrollTop + i;
       const screenY = this.rect.y + 1 + i;
@@ -571,20 +583,26 @@ export class FileTree implements MouseHandler {
         const node = this.flatList[nodeIndex]!;
         const isSelected = nodeIndex === this.selectedIndex;
         
-        // Determine foreground color based on git status, then hidden status
+        // Determine foreground and background color based on git status
         let fg = sidebarFg;
+        let lineBg = sidebarBg;
         const gitState = this.getGitStatus(node.path);
         
         if (gitState === 'added') {
           fg = gitAddedFg;
+          lineBg = gitAddedBg;
         } else if (gitState === 'modified') {
           fg = gitModifiedFg;
+          lineBg = gitModifiedBg;
         } else if (gitState === 'deleted') {
           fg = gitDeletedFg;
+          lineBg = gitDeletedBg;
         } else if (gitState === 'untracked') {
           fg = gitUntrackedFg;
+          lineBg = gitUntrackedBg;
         } else if (gitState === 'conflict') {
           fg = gitConflictFg;
+          lineBg = gitConflictBg;
         } else if (node.isHidden) {
           fg = dimFg;
         }
@@ -599,7 +617,7 @@ export class FileTree implements MouseHandler {
           output += bgRgb(hoverBg.r, hoverBg.g, hoverBg.b);
           output += fgRgb(fg.r, fg.g, fg.b);
         } else {
-          output += bgRgb(sidebarBg.r, sidebarBg.g, sidebarBg.b);
+          output += bgRgb(lineBg.r, lineBg.g, lineBg.b);
           output += fgRgb(fg.r, fg.g, fg.b);
         }
         

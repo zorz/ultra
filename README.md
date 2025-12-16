@@ -2,7 +2,7 @@
 
 _v0.6.0_
 
-A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities.
+A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities. Also includes git.
 
 ## Features
 
