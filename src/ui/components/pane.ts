@@ -1544,34 +1544,38 @@ export class Pane implements MouseHandler {
   handleInlineDiffKey(key: string, ctrl: boolean, _shift: boolean): boolean {
     if (!this.inlineDiff.visible) return false;
 
-    switch (key) {
+    // Normalize key to uppercase for consistent matching
+    const upperKey = key.toUpperCase();
+
+    switch (upperKey) {
       case 'ESCAPE':
-      case 'c':
+      case 'C':
         this.hideInlineDiff();
         return true;
-      case 's':
+      case 'S':
         if (this.onInlineDiffStageCallback) {
           this.onInlineDiffStageCallback(this.inlineDiff.filePath, this.inlineDiff.line);
         }
         return true;
-      case 'r':
+      case 'R':
         if (this.onInlineDiffRevertCallback) {
           this.onInlineDiffRevertCallback(this.inlineDiff.filePath, this.inlineDiff.line);
         }
         return true;
-      case 'j':
+      case 'J':
       case 'DOWN':
         this.inlineDiff.scrollTop = Math.min(
           this.inlineDiff.scrollTop + 1,
           Math.max(0, this.inlineDiff.diffLines.length - this.inlineDiff.height + 2)
         );
         return true;
-      case 'k':
+      case 'K':
       case 'UP':
         this.inlineDiff.scrollTop = Math.max(0, this.inlineDiff.scrollTop - 1);
         return true;
       default:
-        return false;
+        // Capture all keys while inline diff is visible to prevent editor input
+        return true;
     }
   }
 
