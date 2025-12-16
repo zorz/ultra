@@ -407,26 +407,30 @@ export class PaneManager implements MouseHandler {
       node.pane.setRect(rect);
       return;
     }
-    
+
     if (!node.children || !node.ratio) return;
-    
+
     const isHorizontal = node.type === 'horizontal';
     let offset = isHorizontal ? rect.x : rect.y;
     const totalSize = isHorizontal ? rect.width : rect.height;
-    
+
     for (let i = 0; i < node.children.length; i++) {
       const ratio = node.ratio[i]!;
       const size = Math.floor(totalSize * ratio);
-      
+
       // Adjust last child to fill remaining space
       const actualSize = i === node.children.length - 1
         ? (isHorizontal ? rect.x + rect.width - offset : rect.y + rect.height - offset)
         : size;
-      
+
+      // Reserve 1 column/row for separator between panes (except for last pane)
+      const hasSeparator = i < node.children.length - 1;
+      const paneSize = hasSeparator ? actualSize - 1 : actualSize;
+
       const childRect: Rect = isHorizontal
-        ? { x: offset, y: rect.y, width: actualSize, height: rect.height }
-        : { x: rect.x, y: offset, width: rect.width, height: actualSize };
-      
+        ? { x: offset, y: rect.y, width: paneSize, height: rect.height }
+        : { x: rect.x, y: offset, width: rect.width, height: paneSize };
+
       this.calculateNodeRect(node.children[i]!, childRect);
       offset += actualSize;
     }
