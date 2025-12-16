@@ -747,10 +747,15 @@ export class Pane implements MouseHandler {
     const bgColor = colors['editor.background'] || '#1e1e1e';
     const borderColor = colors['editorWidget.border'] || '#454545';
     const fgColor = colors['editor.foreground'] || '#d4d4d4';
-    const addedBg = '#2ea04326';
-    const deletedBg = '#f8514926';
-    const addedFg = colors['gitDecoration.addedResourceForeground'] || '#89d185';
-    const deletedFg = colors['gitDecoration.deletedResourceForeground'] || '#f14c4c';
+    
+    // For diff lines, use a subtle blend of the gutter color with the background
+    // We'll darken the gutter colors to create subtle background highlights
+    const addedGutterColor = colors['editorGutter.addedBackground'] || '#a6e3a1';
+    const deletedGutterColor = colors['editorGutter.deletedBackground'] || '#f38ba8';
+    const addedBg = this.blendColor(bgColor, addedGutterColor, 0.15);
+    const deletedBg = this.blendColor(bgColor, deletedGutterColor, 0.15);
+    const addedFg = colors['gitDecoration.addedResourceForeground'] || addedGutterColor;
+    const deletedFg = colors['gitDecoration.deletedResourceForeground'] || deletedGutterColor;
     const headerBg = colors['editorWidget.background'] || '#252526';
     
     // Draw header with title and buttons
@@ -1257,25 +1262,33 @@ export class Pane implements MouseHandler {
           const width = editorRect.width;
           const relX = event.x - editorRect.x;
           
-          // Buttons are at the end: " 󰐕 Stage  󰜺 Revert  󰅖 Close "
-          // Close button is last
-          if (relX >= width - 8) {
-            this.hideInlineDiff();
-            return true;
-          }
-          // Revert button
-          else if (relX >= width - 18) {
-            if (this.onInlineDiffRevertCallback) {
-              this.onInlineDiffRevertCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+          // Buttons string: " 󰐕 Stage  󰜺 Revert  󰅖 Close " (30 chars)
+          // Rendered at: width - 31
+          // Position of each button within the string:
+          // Stage: chars 1-8, Revert: chars 10-17, Close: chars 20-27
+          const buttonsStart = width - 31;
+          const buttonRelX = relX - buttonsStart;
+          
+          if (buttonRelX >= 0 && buttonRelX < 30) {
+            // Close button (chars 20-28)
+            if (buttonRelX >= 20) {
+              this.hideInlineDiff();
+              return true;
             }
-            return true;
-          }
-          // Stage button
-          else if (relX >= width - 28) {
-            if (this.onInlineDiffStageCallback) {
-              this.onInlineDiffStageCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+            // Revert button (chars 10-18)
+            else if (buttonRelX >= 10) {
+              if (this.onInlineDiffRevertCallback) {
+                this.onInlineDiffRevertCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+              }
+              return true;
             }
-            return true;
+            // Stage button (chars 0-9)
+            else {
+              if (this.onInlineDiffStageCallback) {
+                this.onInlineDiffStageCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+              }
+              return true;
+            }
           }
         }
         return true;  // Consume click within diff area
@@ -1586,5 +1599,23 @@ export class Pane implements MouseHandler {
       g: parseInt(result[2]!, 16),
       b: parseInt(result[3]!, 16)
     } : null;
+  }
+
+  /**
+   * Blend two hex colors together
+   * @param base - Base color (hex)
+   * @param blend - Color to blend in (hex)
+   * @param amount - Blend amount (0-1, where 0 is all base, 1 is all blend)
+   */
+  private blendColor(base: string, blend: string, amount: number): string {
+    const baseRgb = this.hexToRgb(base);
+    const blendRgb = this.hexToRgb(blend);
+    if (!baseRgb || !blendRgb) return base;
+    
+    const r = Math.round(baseRgb.r + (blendRgb.r - baseRgb.r) * amount);
+    const g = Math.round(baseRgb.g + (blendRgb.g - baseRgb.g) * amount);
+    const b = Math.round(baseRgb.b + (blendRgb.b - baseRgb.b) * amount);
+    
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 }

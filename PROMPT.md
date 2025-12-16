@@ -8,6 +8,9 @@
 
 Ultra is a lightweight, terminal-based code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities. Target: fast startup (<500ms), low memory footprint, single binary distribution via Bun.
 
+
+
+
 ### Tech Stack
 
 - **Runtime**: Bun
