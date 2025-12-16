@@ -255,6 +255,134 @@ export class GitIntegration {
   }
 
   /**
+   * Compare buffer content against HEAD to get line changes for gutter indicators.
+   * This is used to show diff indicators for in-memory changes that haven't been saved yet.
+   */
+  async diffBufferLines(filePath: string, bufferContent: string): Promise<GitLineChange[]> {
+    if (!this.workspaceRoot) return [];
+
+    try {
+      // Get the file content at HEAD
+      const headContent = await this.show(filePath, 'HEAD');
+      if (headContent === null) {
+        // File is not tracked - all lines are "added"
+        const lineCount = bufferContent.split('\n').length;
+        const changes: GitLineChange[] = [];
+        for (let i = 1; i <= lineCount; i++) {
+          changes.push({ line: i, type: 'added' });
+        }
+        return changes;
+      }
+
+      // Compare line by line using a simple diff algorithm
+      const oldLines = headContent.split('\n');
+      const newLines = bufferContent.split('\n');
+      
+      return this.computeLineDiff(oldLines, newLines);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Simple line-by-line diff computation using Myers' diff algorithm (LCS-based)
+   */
+  private computeLineDiff(oldLines: string[], newLines: string[]): GitLineChange[] {
+    const changes: GitLineChange[] = [];
+    
+    // Build LCS table
+    const m = oldLines.length;
+    const n = newLines.length;
+    
+    // Use a more memory-efficient approach for large files
+    // Simple O(mn) LCS for now
+    const lcs: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+    
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (oldLines[i - 1] === newLines[j - 1]) {
+          lcs[i][j] = lcs[i - 1][j - 1] + 1;
+        } else {
+          lcs[i][j] = Math.max(lcs[i - 1][j], lcs[i][j - 1]);
+        }
+      }
+    }
+
+    // Backtrack to find which lines are added/deleted/modified
+    const matchedOld = new Set<number>();
+    const matchedNew = new Set<number>();
+    
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+      if (oldLines[i - 1] === newLines[j - 1]) {
+        matchedOld.add(i - 1);
+        matchedNew.add(j - 1);
+        i--;
+        j--;
+      } else if (lcs[i - 1][j] > lcs[i][j - 1]) {
+        i--;
+      } else {
+        j--;
+      }
+    }
+
+    // Lines not in LCS on new side are additions
+    // Lines not in LCS on old side are deletions
+    // We mark new lines as added or modified
+    
+    // Track which old lines were deleted (for showing delete markers)
+    const deletedOldLines: number[] = [];
+    for (let k = 0; k < m; k++) {
+      if (!matchedOld.has(k)) {
+        deletedOldLines.push(k);
+      }
+    }
+
+    // For each new line not in LCS, it's either added or modified
+    for (let k = 0; k < n; k++) {
+      if (!matchedNew.has(k)) {
+        // Check if there's a corresponding deleted line nearby (modification)
+        // Simple heuristic: if same position had a deletion, it's modified
+        const hasCorrespondingDeletion = deletedOldLines.some(oldIdx => {
+          // Check if this old line roughly corresponds to this new line position
+          const oldRatio = oldIdx / Math.max(m, 1);
+          const newRatio = k / Math.max(n, 1);
+          return Math.abs(oldRatio - newRatio) < 0.1 || oldIdx === k;
+        });
+        
+        changes.push({
+          line: k + 1,  // 1-based line numbers
+          type: hasCorrespondingDeletion ? 'modified' : 'added'
+        });
+      }
+    }
+
+    // Add delete markers at positions where content was removed
+    // Show on the line after the deletion (or line 1 if at start)
+    let newLineIdx = 0;
+    for (const oldIdx of deletedOldLines) {
+      // Find where in the new file this deletion would appear
+      // Count matched old lines before this one
+      let matchedBefore = 0;
+      for (let k = 0; k < oldIdx; k++) {
+        if (matchedOld.has(k)) matchedBefore++;
+      }
+      // The deletion appears after this many matched lines in the new file
+      const deletionLine = matchedBefore + 1;  // 1-based
+      
+      // Only add if we don't already have a change at this line
+      if (!changes.some(c => c.line === deletionLine)) {
+        changes.push({ line: Math.max(1, deletionLine), type: 'deleted' });
+      }
+    }
+
+    // Sort by line number
+    changes.sort((a, b) => a.line - b.line);
+    
+    return changes;
+  }
+
+  /**
    * Get file content at HEAD
    */
   async show(filePath: string, ref: string = 'HEAD'): Promise<string | null> {

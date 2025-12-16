@@ -2846,6 +2846,9 @@ export class App {
     }
     
     this.updateStatusBar();
+    
+    // Update git gutter indicators for the new document
+    this.updateGitGutterIndicators();
   }
 
   /**
@@ -3181,7 +3184,13 @@ export class App {
       return;
     }
     
-    const lineChanges = await gitIntegration.diffLines(doc.filePath);
+    // Compare current buffer content against HEAD (not disk content)
+    const bufferContent = doc.content;
+    const lineChanges = await gitIntegration.diffBufferLines(doc.filePath, bufferContent);
+    debug.log(`[Git Gutter] File: ${doc.filePath}, Changes: ${lineChanges.length}`);
+    if (lineChanges.length > 0) {
+      debug.log(`[Git Gutter] First few changes: ${JSON.stringify(lineChanges.slice(0, 5))}`);
+    }
     paneManager.getActivePane().setGitLineChanges(lineChanges);
   }
 
