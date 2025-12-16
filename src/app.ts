@@ -2540,20 +2540,22 @@ export class App {
             return;
           }
 
-          // Show command palette with branches
-          const branchNames = branches.map(b => b.name);
+          const currentBranch = branches.find(b => b.current);
           const editorRect = layoutManager.getEditorAreaRect();
-          commandPalette.show({
-            items: branchNames.map(name => ({
-              id: `switch-${name}`,
-              title: name,
-              category: 'Branch'
-            })),
-            onSelect: async (item) => {
-              const branchName = item.title;
-              const success = await gitIntegration.switchBranch(branchName);
+
+          // Create palette items with handlers
+          const items = branches.map(b => ({
+            id: b.name,
+            title: b.name,
+            category: b.current ? 'Current' : undefined,
+            handler: async () => {
+              if (b.current) {
+                statusBar.setMessage('Already on this branch', 2000);
+                return;
+              }
+              const success = await gitIntegration.switchBranch(b.name);
               if (success) {
-                statusBar.setMessage(`Switched to branch: ${branchName}`, 2000);
+                statusBar.setMessage(`Switched to branch: ${b.name}`, 2000);
                 await this.updateGitStatus();
                 // Reload all open documents
                 for (const doc of this.documents.values()) {
@@ -2565,11 +2567,59 @@ export class App {
                 statusBar.setMessage('Failed to switch branch', 3000);
               }
               renderer.scheduleRender();
-            },
-            editorX: editorRect.x,
-            editorWidth: editorRect.width
-          });
+            }
+          }));
+
+          commandPalette.showWithItems(
+            items,
+            'Switch to Branch',
+            currentBranch?.name || '',
+            editorRect.x,
+            editorRect.width
+          );
           renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitListBranches',
+        title: 'Git: List Branches',
+        category: 'Git',
+        handler: async () => {
+          this.debugLog('Git: List Branches - Starting');
+          const branches = await gitIntegration.getBranches();
+          this.debugLog(`Git: List Branches - Found ${branches.length} branches: ${JSON.stringify(branches)}`);
+
+          if (branches.length === 0) {
+            statusBar.setMessage('No branches found', 2000);
+            return;
+          }
+
+          const currentBranch = branches.find(b => b.current);
+          const editorRect = layoutManager.getEditorAreaRect();
+          this.debugLog(`Git: List Branches - editorRect: ${JSON.stringify(editorRect)}, currentBranch: ${currentBranch?.name}`);
+
+          // Create palette items (just for viewing, no action)
+          const items = branches.map(b => ({
+            id: b.name,
+            title: b.name,
+            category: b.current ? 'Current' : undefined,
+            handler: () => {
+              // Just close the palette when selected
+              statusBar.setMessage(`Branch: ${b.name}${b.current ? ' (current)' : ''}`, 2000);
+            }
+          }));
+
+          this.debugLog(`Git: List Branches - Created ${items.length} items, about to call showWithItems`);
+          commandPalette.showWithItems(
+            items,
+            'Branches',
+            currentBranch?.name || '',
+            editorRect.x,
+            editorRect.width
+          );
+          this.debugLog('Git: List Branches - Called showWithItems, calling scheduleRender');
+          renderer.scheduleRender();
+          this.debugLog('Git: List Branches - Done');
         }
       },
       {
@@ -2586,26 +2636,31 @@ export class App {
           }
 
           const editorRect = layoutManager.getEditorAreaRect();
-          commandPalette.show({
-            items: nonCurrentBranches.map(b => ({
-              id: `delete-${b.name}`,
-              title: b.name,
-              category: 'Branch'
-            })),
-            onSelect: async (item) => {
-              const branchName = item.title;
-              const success = await gitIntegration.deleteBranch(branchName);
+
+          // Create palette items with handlers
+          const items = nonCurrentBranches.map(b => ({
+            id: b.name,
+            title: b.name,
+            category: undefined,
+            handler: async () => {
+              const success = await gitIntegration.deleteBranch(b.name);
               if (success) {
-                statusBar.setMessage(`Deleted branch: ${branchName}`, 2000);
+                statusBar.setMessage(`Deleted branch: ${b.name}`, 2000);
                 await this.updateGitStatus();
               } else {
                 statusBar.setMessage('Failed to delete branch (use force delete if needed)', 3000);
               }
               renderer.scheduleRender();
-            },
-            editorX: editorRect.x,
-            editorWidth: editorRect.width
-          });
+            }
+          }));
+
+          commandPalette.showWithItems(
+            items,
+            'Delete Branch',
+            '',
+            editorRect.x,
+            editorRect.width
+          );
           renderer.scheduleRender();
         }
       },

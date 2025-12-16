@@ -41,7 +41,7 @@ export class CommandPalette implements MouseHandler {
   private height: number = 20;
   private onSelectCallback: ((command: Command) => void) | null = null;
   private onCloseCallback: (() => void) | null = null;
-  
+
   // Custom items mode
   private customItems: PaletteItem[] = [];
   private filteredItems: ScoredItem[] = [];
@@ -49,7 +49,11 @@ export class CommandPalette implements MouseHandler {
   private isCustomMode: boolean = false;
   private highlightedId: string = '';
 
+  // Track if palette was re-shown during a command handler
+  private wasReShown: boolean = false;
+
   show(commands: Command[], screenWidth: number, screenHeight: number, editorX?: number, editorWidth?: number): void {
+    this.wasReShown = this.isVisible; // Track if we're re-showing while already visible
     this.isVisible = true;
     this.isCustomMode = false;
     this.commands = commands;
@@ -80,6 +84,7 @@ export class CommandPalette implements MouseHandler {
     editorX?: number,
     editorWidth?: number
   ): void {
+    this.wasReShown = this.isVisible; // Track if we're re-showing while already visible
     this.isVisible = true;
     this.isCustomMode = true;
     this.customItems = items;
@@ -175,6 +180,8 @@ export class CommandPalette implements MouseHandler {
   }
 
   async confirm(): Promise<void> {
+    this.wasReShown = false; // Reset before handler runs
+
     if (this.isCustomMode) {
       const item = this.getSelectedItem();
       if (item) {
@@ -186,7 +193,12 @@ export class CommandPalette implements MouseHandler {
         await this.onSelectCallback(command);
       }
     }
-    this.hide();
+
+    // Only hide if the handler didn't re-show the palette with new items
+    if (!this.wasReShown) {
+      this.hide();
+    }
+    this.wasReShown = false; // Reset after
   }
 
   onSelect(callback: (command: Command) => void): void {
@@ -394,7 +406,9 @@ export class CommandPalette implements MouseHandler {
   }
 
   render(ctx: RenderContext): void {
-    if (!this.isVisible) return;
+    if (!this.isVisible) {
+      return;
+    }
 
     // Background with border
     ctx.fill(this.x, this.y, this.width, this.height, ' ', undefined, '#2d2d2d');
