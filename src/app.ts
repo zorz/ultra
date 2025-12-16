@@ -2430,6 +2430,245 @@ export class App {
         }
       },
       {
+        id: 'ultra.gitPush',
+        title: 'Git: Push',
+        category: 'Git',
+        handler: async () => {
+          statusBar.setMessage('Pushing...', 0);
+          const success = await gitIntegration.push();
+          if (success) {
+            statusBar.setMessage('Pushed successfully', 2000);
+            await this.updateGitStatus();
+          } else {
+            statusBar.setMessage('Failed to push', 3000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitPushForce',
+        title: 'Git: Push (Force with Lease)',
+        category: 'Git',
+        handler: async () => {
+          statusBar.setMessage('Force pushing...', 0);
+          const success = await gitIntegration.push('origin', true);
+          if (success) {
+            statusBar.setMessage('Force pushed successfully', 2000);
+            await this.updateGitStatus();
+          } else {
+            statusBar.setMessage('Failed to force push', 3000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitPull',
+        title: 'Git: Pull',
+        category: 'Git',
+        handler: async () => {
+          statusBar.setMessage('Pulling...', 0);
+          const success = await gitIntegration.pull();
+          if (success) {
+            statusBar.setMessage('Pulled successfully', 2000);
+            await this.updateGitStatus();
+            // Reload all open documents
+            for (const doc of this.documents.values()) {
+              if (doc.filePath) {
+                await doc.reload();
+              }
+            }
+          } else {
+            statusBar.setMessage('Failed to pull', 3000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitFetch',
+        title: 'Git: Fetch',
+        category: 'Git',
+        handler: async () => {
+          statusBar.setMessage('Fetching...', 0);
+          const success = await gitIntegration.fetch();
+          if (success) {
+            statusBar.setMessage('Fetched successfully', 2000);
+            await this.updateGitStatus();
+          } else {
+            statusBar.setMessage('Failed to fetch', 3000);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitCreateBranch',
+        title: 'Git: Create Branch',
+        category: 'Git',
+        handler: async () => {
+          const editorRect = layoutManager.getEditorAreaRect();
+          inputDialog.show({
+            title: 'Create New Branch',
+            placeholder: 'Enter branch name...',
+            initialValue: '',
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            onSubmit: async (branchName) => {
+              if (branchName) {
+                const success = await gitIntegration.createBranch(branchName);
+                if (success) {
+                  statusBar.setMessage(`Created and switched to branch: ${branchName}`, 2000);
+                  await this.updateGitStatus();
+                } else {
+                  statusBar.setMessage('Failed to create branch', 3000);
+                }
+              }
+              renderer.scheduleRender();
+            }
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitSwitchBranch',
+        title: 'Git: Switch Branch',
+        category: 'Git',
+        handler: async () => {
+          const branches = await gitIntegration.getBranches();
+          if (branches.length === 0) {
+            statusBar.setMessage('No branches found', 2000);
+            return;
+          }
+
+          // Show command palette with branches
+          const branchNames = branches.map(b => b.name);
+          const editorRect = layoutManager.getEditorAreaRect();
+          commandPalette.show({
+            items: branchNames.map(name => ({
+              id: `switch-${name}`,
+              title: name,
+              category: 'Branch'
+            })),
+            onSelect: async (item) => {
+              const branchName = item.title;
+              const success = await gitIntegration.switchBranch(branchName);
+              if (success) {
+                statusBar.setMessage(`Switched to branch: ${branchName}`, 2000);
+                await this.updateGitStatus();
+                // Reload all open documents
+                for (const doc of this.documents.values()) {
+                  if (doc.filePath) {
+                    await doc.reload();
+                  }
+                }
+              } else {
+                statusBar.setMessage('Failed to switch branch', 3000);
+              }
+              renderer.scheduleRender();
+            },
+            editorX: editorRect.x,
+            editorWidth: editorRect.width
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitDeleteBranch',
+        title: 'Git: Delete Branch',
+        category: 'Git',
+        handler: async () => {
+          const branches = await gitIntegration.getBranches();
+          const nonCurrentBranches = branches.filter(b => !b.current);
+
+          if (nonCurrentBranches.length === 0) {
+            statusBar.setMessage('No branches to delete', 2000);
+            return;
+          }
+
+          const editorRect = layoutManager.getEditorAreaRect();
+          commandPalette.show({
+            items: nonCurrentBranches.map(b => ({
+              id: `delete-${b.name}`,
+              title: b.name,
+              category: 'Branch'
+            })),
+            onSelect: async (item) => {
+              const branchName = item.title;
+              const success = await gitIntegration.deleteBranch(branchName);
+              if (success) {
+                statusBar.setMessage(`Deleted branch: ${branchName}`, 2000);
+                await this.updateGitStatus();
+              } else {
+                statusBar.setMessage('Failed to delete branch (use force delete if needed)', 3000);
+              }
+              renderer.scheduleRender();
+            },
+            editorX: editorRect.x,
+            editorWidth: editorRect.width
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitRenameBranch',
+        title: 'Git: Rename Current Branch',
+        category: 'Git',
+        handler: async () => {
+          const currentBranch = await gitIntegration.branch();
+          const editorRect = layoutManager.getEditorAreaRect();
+          inputDialog.show({
+            title: 'Rename Branch',
+            placeholder: 'Enter new branch name...',
+            initialValue: currentBranch || '',
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            onSubmit: async (newName) => {
+              if (newName && newName !== currentBranch) {
+                const success = await gitIntegration.renameBranch(newName);
+                if (success) {
+                  statusBar.setMessage(`Renamed branch to: ${newName}`, 2000);
+                  await this.updateGitStatus();
+                } else {
+                  statusBar.setMessage('Failed to rename branch', 3000);
+                }
+              }
+              renderer.scheduleRender();
+            }
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitAmendCommit',
+        title: 'Git: Amend Last Commit',
+        category: 'Git',
+        handler: async () => {
+          const editorRect = layoutManager.getEditorAreaRect();
+          inputDialog.show({
+            title: 'Amend Commit Message (leave empty to keep current)',
+            placeholder: 'Enter new commit message or leave empty...',
+            initialValue: '',
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            onSubmit: async (message) => {
+              const success = await gitIntegration.amendCommit(message || undefined);
+              if (success) {
+                statusBar.setMessage('Commit amended', 2000);
+                await this.updateGitStatus();
+              } else {
+                statusBar.setMessage('Failed to amend commit', 3000);
+              }
+              renderer.scheduleRender();
+            }
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
         id: 'ultra.toggleMinimap',
         title: 'Toggle Minimap',
         category: 'View',

@@ -814,6 +814,220 @@ export class GitIntegration {
     await this.reset(filePath);
     return this.checkout(filePath);
   }
+
+  /**
+   * Push current branch to remote
+   */
+  async push(remote: string = 'origin', forceLease: boolean = false): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const branch = await this.branch();
+      if (!branch) return false;
+
+      const forceFlag = forceLease ? '--force-with-lease' : '';
+      const result = await $`git -C ${this.workspaceRoot} push ${forceFlag} ${remote} ${branch}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Push failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Pull current branch from remote
+   */
+  async pull(remote: string = 'origin'): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const branch = await this.branch();
+      if (!branch) return false;
+
+      const result = await $`git -C ${this.workspaceRoot} pull ${remote} ${branch}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Pull failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Fetch from remote
+   */
+  async fetch(remote: string = 'origin'): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const result = await $`git -C ${this.workspaceRoot} fetch ${remote}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Fetch failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get list of all branches
+   */
+  async getBranches(): Promise<{ name: string; current: boolean }[]> {
+    if (!this.workspaceRoot) return [];
+    try {
+      const result = await $`git -C ${this.workspaceRoot} branch`.text();
+      const lines = result.trim().split('\n');
+      return lines.map(line => ({
+        name: line.replace('* ', '').trim(),
+        current: line.startsWith('* ')
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Create and switch to a new branch
+   */
+  async createBranch(branchName: string): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const result = await $`git -C ${this.workspaceRoot} checkout -b ${branchName}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Create branch failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Switch to an existing branch
+   */
+  async switchBranch(branchName: string): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const result = await $`git -C ${this.workspaceRoot} checkout ${branchName}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Switch branch failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Delete a branch
+   */
+  async deleteBranch(branchName: string, force: boolean = false): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const flag = force ? '-D' : '-d';
+      const result = await $`git -C ${this.workspaceRoot} branch ${flag} ${branchName}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Delete branch failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Rename current branch
+   */
+  async renameBranch(newName: string): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const result = await $`git -C ${this.workspaceRoot} branch -m ${newName}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Rename branch failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Amend the last commit
+   */
+  async amendCommit(message?: string): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      let result;
+      if (message) {
+        result = await $`git -C ${this.workspaceRoot} commit --amend -m ${message}`.quiet();
+      } else {
+        result = await $`git -C ${this.workspaceRoot} commit --amend --no-edit`.quiet();
+      }
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Amend commit failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get list of remotes
+   */
+  async getRemotes(): Promise<string[]> {
+    if (!this.workspaceRoot) return [];
+    try {
+      const result = await $`git -C ${this.workspaceRoot} remote`.text();
+      return result.trim().split('\n').filter(r => r);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Set upstream branch for current branch
+   */
+  async setUpstream(remote: string, branch: string): Promise<boolean> {
+    if (!this.workspaceRoot) return false;
+    try {
+      const result = await $`git -C ${this.workspaceRoot} branch --set-upstream-to=${remote}/${branch}`.quiet();
+
+      if (result.exitCode === 0) {
+        this.invalidateCache();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      debugLog(`[Git] Set upstream failed: ${error}`);
+      return false;
+    }
+  }
 }
 
 export const gitIntegration = new GitIntegration();

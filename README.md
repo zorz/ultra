@@ -2,7 +2,7 @@
 
 _v0.6.1_
 
-A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities. Also includes git.
+A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities. Also includes git integration for added flavor.
 
 ## Features
 
@@ -12,6 +12,8 @@ A terminal-native code editor with Sublime Text ergonomics, VS Code configuratio
 - **Mouse Support** - Click, drag to select, scroll
 - **Theme Support** - VS Code-compatible color themes
 - **Undo/Redo** - Operation-based with intelligent action merging
+- **Full API via Command Palette** - The entire application is exposed in the command prompt, allowing full control
+- **Robust Settings API** - Settings and Keybindings are done via JSON files and are hot-reloaded on changes
 
 ## Requirements
 
