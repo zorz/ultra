@@ -4,7 +4,6 @@ _v0.6.0_
 
 A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and AI-native capabilities. Also includes git.
 
-
 ## Features
 
 - **Piece Table Buffer** - Efficient text editing with O(log n) insert/delete
@@ -13,6 +12,12 @@ A terminal-native code editor with Sublime Text ergonomics, VS Code configuratio
 - **Mouse Support** - Click, drag to select, scroll
 - **Theme Support** - VS Code-compatible color themes
 - **Undo/Redo** - Operation-based with intelligent action merging
+
+(hmm, is this seen?)
+
+
+
+
 
 ## Requirements
 

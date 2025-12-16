@@ -5,6 +5,7 @@
  */
 
 import { $ } from 'bun';
+import { debugLog } from '../../debug';
 
 export interface GitStatus {
   branch: string;
@@ -264,6 +265,12 @@ export class GitIntegration {
     try {
       // Get the file content at HEAD
       const headContent = await this.show(filePath, 'HEAD');
+      
+      debugLog(`[diffBufferLines] filePath: ${filePath}`);
+      debugLog(`[diffBufferLines] headContent is null: ${headContent === null}`);
+      debugLog(`[diffBufferLines] headContent length: ${headContent?.length ?? 0}, bufferContent length: ${bufferContent.length}`);
+      debugLog(`[diffBufferLines] content equal: ${headContent === bufferContent}`);
+      
       if (headContent === null) {
         // File is not tracked - all lines are "added"
         const lineCount = bufferContent.split('\n').length;
@@ -278,8 +285,13 @@ export class GitIntegration {
       const oldLines = headContent.split('\n');
       const newLines = bufferContent.split('\n');
       
-      return this.computeLineDiff(oldLines, newLines);
-    } catch {
+      debugLog(`[diffBufferLines] oldLines: ${oldLines.length}, newLines: ${newLines.length}`);
+      
+      const result = this.computeLineDiff(oldLines, newLines);
+      debugLog(`[diffBufferLines] result: ${JSON.stringify(result)}`);
+      return result;
+    } catch (e) {
+      debugLog(`[diffBufferLines] ERROR: ${e}`);
       return [];
     }
   }
@@ -386,18 +398,28 @@ export class GitIntegration {
    * Get file content at HEAD
    */
   async show(filePath: string, ref: string = 'HEAD'): Promise<string | null> {
-    if (!this.workspaceRoot) return null;
+    debugLog(`[git show] called with filePath: ${filePath}, ref: ${ref}, workspaceRoot: ${this.workspaceRoot}`);
+    if (!this.workspaceRoot) {
+      debugLog(`[git show] no workspace root!`);
+      return null;
+    }
     try {
       // Make path relative to workspace root
       const relativePath = filePath.startsWith(this.workspaceRoot)
         ? filePath.substring(this.workspaceRoot.length + 1)
         : filePath;
+      debugLog(`[git show] relativePath: ${relativePath}`);
       const result = await $`git -C ${this.workspaceRoot} show ${ref}:${relativePath}`.quiet();
+      debugLog(`[git show] exitCode: ${result.exitCode}`);
       if (result.exitCode === 0) {
-        return result.text();
+        const text = result.text();
+        debugLog(`[git show] success, content length: ${text.length}`);
+        return text;
       }
+      debugLog(`[git show] non-zero exit code`);
       return null;
-    } catch {
+    } catch (e) {
+      debugLog(`[git show] ERROR: ${e}`);
       return null;
     }
   }

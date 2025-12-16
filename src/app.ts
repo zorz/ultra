@@ -3110,10 +3110,10 @@ export class App {
     // Initial check
     this.updateGitStatus();
     
-    // Poll every 3 seconds
+    // Poll every 500ms for responsive git status updates
     this.gitStatusInterval = setInterval(() => {
       this.updateGitStatus();
-    }, 3000);
+    }, 500);
   }
 
   /**
@@ -3191,11 +3191,11 @@ export class App {
     // Compare current buffer content against HEAD (not disk content)
     const bufferContent = doc.content;
     const lineChanges = await gitIntegration.diffBufferLines(doc.filePath, bufferContent);
-    this.debugLog(`[Git Gutter] File: ${doc.filePath}, Changes: ${lineChanges.length}`);
-    if (lineChanges.length > 0) {
-      this.debugLog(`[Git Gutter] First few changes: ${JSON.stringify(lineChanges.slice(0, 5))}`);
-    }
-    paneManager.getActivePane().setGitLineChanges(lineChanges);
+    this.debugLog(`[Git Gutter] File: ${doc.filePath}, Changes: ${lineChanges.length}, changes: ${JSON.stringify(lineChanges.slice(0, 10))}`);
+    const pane = paneManager.getActivePane();
+    this.debugLog(`[Git Gutter] Calling setGitLineChanges on pane: ${pane?.id}`);
+    pane.setGitLineChanges(lineChanges);
+    this.debugLog(`[Git Gutter] setGitLineChanges called`);
   }
 
   /**

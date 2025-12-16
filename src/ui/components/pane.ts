@@ -79,7 +79,7 @@ export class Pane implements MouseHandler {
   // Editor state
   private scrollTop: number = 0;
   private scrollLeft: number = 0;
-  private gutterWidth: number = 5;  // digits(3) + fold indicator + space
+  private gutterWidth: number = 6;  // git(1) + digits(3) + fold indicator + space
   private theme: EditorTheme = defaultTheme;
   private isFocused: boolean = false;
   private minimapEnabled: boolean = true;
@@ -554,6 +554,8 @@ export class Pane implements MouseHandler {
 
   private renderFocusBorder(ctx: RenderContext): void {
     // Subtle highlight on the left edge to show this pane is focused
+    // Note: We skip the editor content area to avoid covering the git gutter
+    // The tab bar already shows focus state, so this is just for the bottom area
     const accentColor = themeLoader.getColor('focusBorder') || '#528bff';
     const rgb = this.hexToRgb(accentColor);
     if (!rgb) return;
@@ -561,10 +563,8 @@ export class Pane implements MouseHandler {
     const fgRgb = `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m`;
     const reset = '\x1b[0m';
     
-    // Draw left border
-    for (let y = this.rect.y; y < this.rect.y + this.rect.height; y++) {
-      ctx.buffer(`\x1b[${y};${this.rect.x}H${fgRgb}▎${reset}`);
-    }
+    // Only draw on the tab bar row (first row)
+    ctx.buffer(`\x1b[${this.rect.y};${this.rect.x}H${fgRgb}▎${reset}`);
   }
 
   private updateTheme(): void {
@@ -583,12 +583,12 @@ export class Pane implements MouseHandler {
   private updateGutterWidth(): void {
     const doc = this.getActiveDocument();
     if (!doc) {
-      this.gutterWidth = 5;  // default: 3 digits + fold indicator + space
+      this.gutterWidth = 6;  // default: 1 git indicator + 3 digits + fold indicator + space
       return;
     }
     const lineCount = doc.lineCount;
     const digits = Math.max(3, String(lineCount).length);
-    this.gutterWidth = digits + 2;  // digits + fold indicator + space
+    this.gutterWidth = digits + 3;  // 1 git indicator + digits + fold indicator + space
   }
 
   private setupHighlighting(doc: Document): void {
@@ -728,35 +728,37 @@ export class Pane implements MouseHandler {
     let output = `\x1b[${screenY};${rect.x}H`;
     if (gutterBg) output += `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m`;
     
-    // Git gutter indicator (single character before line number)
+    // Git gutter indicator (first column - before line number)
     const gitChange = this.gitLineChanges.get(lineNum + 1);  // Git uses 1-based line numbers
     if (gitChange) {
-      const gitAddedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
-      const gitModifiedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
-      const gitDeletedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
+      // Use hardcoded colors that are known to work well
+      const gitAddedColor = { r: 129, g: 199, b: 132 };    // Green
+      const gitModifiedColor = { r: 224, g: 175, b: 104 }; // Orange/Yellow
+      const gitDeletedColor = { r: 229, g: 115, b: 115 };  // Red
       
       let indicatorColor: { r: number; g: number; b: number };
       let indicator: string;
       
       if (gitChange === 'added') {
         indicatorColor = gitAddedColor;
-        indicator = '┃';  // Solid bar for added
+        indicator = '│';  // Simple vertical bar for added (U+2502)
       } else if (gitChange === 'modified') {
         indicatorColor = gitModifiedColor;
-        indicator = '┃';  // Solid bar for modified
+        indicator = '│';  // Simple vertical bar for modified (U+2502)
       } else {  // deleted
         indicatorColor = gitDeletedColor;
-        indicator = '▸';  // Arrow for deleted (shown on line before)
+        indicator = '▼';  // Small triangle for deleted
       }
       
-      output += `\x1b[38;2;${indicatorColor.r};${indicatorColor.g};${indicatorColor.b}m${indicator}`;
-      // Output line number (one less character since we used one for git indicator)
-      if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
-      output += lineNumStr.substring(1);  // Skip first character
+      const gitSeq = `\x1b[38;2;${indicatorColor.r};${indicatorColor.g};${indicatorColor.b}m${indicator}`;
+      output += gitSeq;
     } else {
-      if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
-      output += lineNumStr;
+      output += ' ';  // Empty space for git column when no change
     }
+    
+    // Line number
+    if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
+    output += lineNumStr;
     
     // Fold indicator
     const canFold = this.foldManager.canFold(lineNum);
@@ -1258,10 +1260,14 @@ export class Pane implements MouseHandler {
    * Set git line changes for gutter indicators
    */
   setGitLineChanges(changes: GitLineChange[]): void {
+    // Direct file write to bypass any caching issues
+    const fs = require('fs');
+    fs.appendFileSync('debug.log', `[${new Date().toISOString()}] [Pane.setGitLineChanges DIRECT] changes=${changes.length}\n`);
     this.gitLineChanges.clear();
     for (const change of changes) {
       this.gitLineChanges.set(change.line, change.type);
     }
+    fs.appendFileSync('debug.log', `[${new Date().toISOString()}] [Pane.setGitLineChanges DIRECT] map size=${this.gitLineChanges.size}\n`);
   }
 
   /**
