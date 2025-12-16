@@ -13,8 +13,6 @@ A terminal-native code editor with Sublime Text ergonomics, VS Code configuratio
 - **Theme Support** - VS Code-compatible color themes
 - **Undo/Redo** - Operation-based with intelligent action merging
 
-
-
 (hmm, is this seen?)
 
 
@@ -63,6 +61,8 @@ bun run build
 ```bash
 bun run typecheck
 ```
+
+
 
 ## Keyboard Shortcuts
 

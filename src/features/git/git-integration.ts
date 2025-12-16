@@ -7,6 +7,20 @@
 import { $ } from 'bun';
 import { debugLog } from '../../debug';
 
+/**
+ * Count the number of lines in the new file covered by a diff hunk
+ * (context lines + added lines, but not deleted lines)
+ */
+function countNewLines(hunkLines: string[]): number {
+  let count = 0;
+  for (const line of hunkLines) {
+    if (line.startsWith('@@')) continue; // Skip header
+    if (line.startsWith('-')) continue;  // Deleted lines don't exist in new file
+    count++;
+  }
+  return count;
+}
+
 export interface GitStatus {
   branch: string;
   ahead: number;
@@ -717,16 +731,70 @@ export class GitIntegration {
   }
 
   /**
-   * Get raw diff text for a file (comparing working tree to HEAD)
+   * Get raw diff text for a specific line/hunk (comparing working tree to HEAD)
    */
-  async getLineDiff(filePath: string, _line: number, contextLines: number = 3): Promise<string | null> {
+  async getLineDiff(filePath: string, line: number, contextLines: number = 3): Promise<string | null> {
     if (!this.workspaceRoot) return null;
     try {
       // Get the diff comparing to HEAD (same as what gutter shows)
       const result = await $`git -C ${this.workspaceRoot} diff HEAD -U${contextLines} -- ${filePath}`.quiet();
       if (result.exitCode !== 0 || !result.text().trim()) return null;
       
-      return result.text();
+      const fullDiff = result.text();
+      
+      // Parse the diff to find the hunk containing the clicked line
+      const lines = fullDiff.split('\n');
+      let currentHunkStart = -1;
+      let currentHunkLines: string[] = [];
+      let headerLines: string[] = [];
+      
+      // Collect header lines (diff --git, index, ---, +++)
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        if (l.startsWith('diff --git') || l.startsWith('index ') || 
+            l.startsWith('--- ') || l.startsWith('+++ ')) {
+          headerLines.push(l);
+        } else if (l.startsWith('@@')) {
+          break;
+        }
+      }
+      
+      // Find hunk containing the target line
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        
+        if (l.startsWith('@@')) {
+          // Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
+          const match = l.match(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+          if (match) {
+            // If we had a previous hunk, check if we should use it
+            if (currentHunkStart !== -1 && currentHunkLines.length > 0) {
+              // Check if target line was in previous hunk
+              const prevHunkEnd = currentHunkStart + countNewLines(currentHunkLines);
+              if (line >= currentHunkStart && line < prevHunkEnd) {
+                return [...headerLines, ...currentHunkLines].join('\n');
+              }
+            }
+            
+            // Start new hunk
+            currentHunkStart = parseInt(match[3], 10); // +newStart (1-based)
+            currentHunkLines = [l];
+          }
+        } else if (currentHunkStart !== -1) {
+          currentHunkLines.push(l);
+        }
+      }
+      
+      // Check last hunk
+      if (currentHunkStart !== -1 && currentHunkLines.length > 0) {
+        const hunkEnd = currentHunkStart + countNewLines(currentHunkLines);
+        if (line >= currentHunkStart && line < hunkEnd) {
+          return [...headerLines, ...currentHunkLines].join('\n');
+        }
+      }
+      
+      // If no specific hunk found, return full diff (fallback)
+      return fullDiff;
     } catch {
       return null;
     }
@@ -741,6 +809,9 @@ export class GitIntegration {
   }
 
   async revertFile(filePath: string): Promise<boolean> {
+    // Unstage first (in case file has staged changes), then checkout
+    // reset will fail silently if nothing is staged, which is fine
+    await this.reset(filePath);
     return this.checkout(filePath);
   }
 }
