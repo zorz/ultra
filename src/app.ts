@@ -168,19 +168,19 @@ export class App {
         renderer.scheduleRender();
       });
 
-      // Apply initial settings (sidebar visibility, etc.)
-      this.debugLog('Applying settings...');
-      this.applySettings();
-
       // Initialize LSP manager with workspace root
       this.debugLog('Initializing LSP...');
       lspManager.setWorkspaceRoot(workspaceRoot);
       await this.initializeLSP();
 
-      // Initialize Git integration with workspace root
+      // Initialize Git integration with workspace root (must be before applySettings)
       this.debugLog('Initializing Git...');
       gitIntegration.setWorkspaceRoot(workspaceRoot);
       this.startGitStatusPolling();
+
+      // Apply initial settings (sidebar visibility, etc.)
+      this.debugLog('Applying settings...');
+      this.applySettings();
 
       // Start file watcher
       this.debugLog('Starting file watcher...');
@@ -321,6 +321,29 @@ export class App {
     // Update sidebar width if visible
     if (layoutManager.isSidebarVisible()) {
       layoutManager.setSidebarWidth(settings.get('ultra.sidebar.width') || 30);
+      // Ensure file tree is visible when sidebar is visible
+      fileTree.setVisible(true);
+    }
+    
+    // Handle git panel visibility on startup
+    if (settings.get('git.panel.openOnStartup')) {
+      gitPanel.setVisible(true);
+    }
+    
+    // Handle terminal visibility on startup
+    if (settings.get('terminal.integrated.openOnStartup')) {
+      if (!layoutManager.isTerminalVisible()) {
+        const position = settings.get('terminal.integrated.position') || 'bottom';
+        const size = position === 'bottom' || position === 'top' 
+          ? settings.get('terminal.integrated.defaultHeight') || 12
+          : settings.get('terminal.integrated.defaultWidth') || 40;
+        layoutManager.toggleTerminal(size);
+      }
+      
+      // Spawn a terminal shell if configured
+      if (settings.get('terminal.integrated.spawnOnStartup')) {
+        terminalPane.createTerminal();
+      }
     }
   }
 

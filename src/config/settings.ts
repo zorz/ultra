@@ -36,6 +36,9 @@ export interface EditorSettings {
   'terminal.integrated.defaultWidth': number;
   'git.statusInterval': number;
   'git.panel.location': 'sidebar-bottom' | 'sidebar-top' | 'panel';
+  'git.panel.openOnStartup': boolean;
+  'terminal.integrated.openOnStartup': boolean;
+  'terminal.integrated.spawnOnStartup': boolean;
 }
 
 const defaultSettings: EditorSettings = {
@@ -73,7 +76,10 @@ const defaultSettings: EditorSettings = {
   'terminal.integrated.defaultHeight': 12,
   'terminal.integrated.defaultWidth': 40,
   'git.statusInterval': 100,
-  'git.panel.location': 'sidebar-bottom'
+  'git.panel.location': 'sidebar-bottom',
+  'git.panel.openOnStartup': true,
+  'terminal.integrated.openOnStartup': true,
+  'terminal.integrated.spawnOnStartup': true
 };
 
 export class Settings {

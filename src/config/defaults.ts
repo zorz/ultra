@@ -450,7 +450,10 @@ export const defaultSettings: Record<string, any> = {
   "terminal.integrated.defaultWidth": 60,
   "terminal.integrated.scrollback": 1000,
   "git.statusInterval": 100,
-  "git.panel.location": "sidebar-bottom"
+  "git.panel.location": "sidebar-bottom",
+  "git.panel.openOnStartup": true,
+  "terminal.integrated.openOnStartup": true,
+  "terminal.integrated.spawnOnStartup": true
 };
 
 export const defaultThemes: Record<string, Theme> = {
