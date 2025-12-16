@@ -20,6 +20,7 @@ import { inFileSearch, type SearchMatch } from '../../features/search/in-file-se
 import { settings } from '../../config/settings.ts';
 import { findMatchingBracket, type BracketMatch } from '../../core/bracket-match.ts';
 import { debugLog } from '../../debug.ts';
+import type { GitLineChange } from '../../features/git/git-integration.ts';
 
 // Represents a wrapped line segment
 interface WrappedLine {
@@ -97,6 +98,9 @@ export class Pane implements MouseHandler {
   
   // Bracket matching
   private currentBracketMatch: BracketMatch | null = null;
+  
+  // Git line changes for gutter indicators
+  private gitLineChanges: Map<number, GitLineChange['type']> = new Map();
   
   // Callbacks
   private onClickCallback?: (position: Position, clickCount: number, event: MouseEvent) => void;
@@ -723,8 +727,36 @@ export class Pane implements MouseHandler {
     
     let output = `\x1b[${screenY};${rect.x}H`;
     if (gutterBg) output += `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m`;
-    if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
-    output += lineNumStr;
+    
+    // Git gutter indicator (single character before line number)
+    const gitChange = this.gitLineChanges.get(lineNum + 1);  // Git uses 1-based line numbers
+    if (gitChange) {
+      const gitAddedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
+      const gitModifiedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
+      const gitDeletedColor = this.hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
+      
+      let indicatorColor: { r: number; g: number; b: number };
+      let indicator: string;
+      
+      if (gitChange === 'added') {
+        indicatorColor = gitAddedColor;
+        indicator = '┃';  // Solid bar for added
+      } else if (gitChange === 'modified') {
+        indicatorColor = gitModifiedColor;
+        indicator = '┃';  // Solid bar for modified
+      } else {  // deleted
+        indicatorColor = gitDeletedColor;
+        indicator = '▸';  // Arrow for deleted (shown on line before)
+      }
+      
+      output += `\x1b[38;2;${indicatorColor.r};${indicatorColor.g};${indicatorColor.b}m${indicator}`;
+      // Output line number (one less character since we used one for git indicator)
+      if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
+      output += lineNumStr.substring(1);  // Skip first character
+    } else {
+      if (lnColor) output += `\x1b[38;2;${lnColor.r};${lnColor.g};${lnColor.b}m`;
+      output += lineNumStr;
+    }
     
     // Fold indicator
     const canFold = this.foldManager.canFold(lineNum);
@@ -1218,6 +1250,25 @@ export class Pane implements MouseHandler {
   toggleMinimap(): void {
     this.minimapEnabled = !this.minimapEnabled;
     this.setRect(this.rect); // Recalculate layout
+  }
+
+  // ==================== Git Integration ====================
+
+  /**
+   * Set git line changes for gutter indicators
+   */
+  setGitLineChanges(changes: GitLineChange[]): void {
+    this.gitLineChanges.clear();
+    for (const change of changes) {
+      this.gitLineChanges.set(change.line, change.type);
+    }
+  }
+
+  /**
+   * Clear git line changes
+   */
+  clearGitLineChanges(): void {
+    this.gitLineChanges.clear();
   }
 
   // ==================== Utilities ====================

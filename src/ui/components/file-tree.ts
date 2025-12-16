@@ -22,6 +22,8 @@ export interface FileTreeNode {
   isHidden: boolean;
 }
 
+export type GitFileState = 'added' | 'modified' | 'deleted' | 'untracked' | 'ignored' | 'conflict' | 'none';
+
 // File type icons (nerd font compatible, with fallbacks)
 const FILE_ICONS: Record<string, string> = {
   // Folders
@@ -74,6 +76,9 @@ export class FileTree implements MouseHandler {
   // File watchers
   private watchers: Map<string, fs.FSWatcher> = new Map();
   
+  // Git status - maps relative paths to their git state
+  private gitStatus: Map<string, GitFileState> = new Map();
+  
   // Callbacks
   private onFileSelectCallback?: (path: string) => void;
   
@@ -122,6 +127,25 @@ export class FileTree implements MouseHandler {
    */
   onFileSelect(callback: (path: string) => void): void {
     this.onFileSelectCallback = callback;
+  }
+
+  /**
+   * Set git status for files (map of relative paths to states)
+   */
+  setGitStatus(status: Map<string, GitFileState>): void {
+    this.gitStatus = status;
+  }
+
+  /**
+   * Get git status for a file path
+   */
+  getGitStatus(filePath: string): GitFileState {
+    // Convert to relative path if needed
+    let relativePath = filePath;
+    if (this.rootPath && filePath.startsWith(this.rootPath)) {
+      relativePath = filePath.substring(this.rootPath.length + 1);
+    }
+    return this.gitStatus.get(relativePath) || 'none';
   }
 
   /**
@@ -530,6 +554,13 @@ export class FileTree implements MouseHandler {
       b: Math.floor(selectionFg.b * 0.7) 
     };
     
+    // Git status colors from theme
+    const gitAddedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
+    const gitModifiedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
+    const gitDeletedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
+    const gitUntrackedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
+    const gitConflictFg = this.hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || { r: 255, g: 123, b: 114 };
+    
     for (let i = 0; i < visibleCount; i++) {
       const nodeIndex = this.scrollTop + i;
       const screenY = this.rect.y + 1 + i;
@@ -540,9 +571,21 @@ export class FileTree implements MouseHandler {
         const node = this.flatList[nodeIndex]!;
         const isSelected = nodeIndex === this.selectedIndex;
         
-        // Determine foreground color based on hidden status
+        // Determine foreground color based on git status, then hidden status
         let fg = sidebarFg;
-        if (node.isHidden) {
+        const gitState = this.getGitStatus(node.path);
+        
+        if (gitState === 'added') {
+          fg = gitAddedFg;
+        } else if (gitState === 'modified') {
+          fg = gitModifiedFg;
+        } else if (gitState === 'deleted') {
+          fg = gitDeletedFg;
+        } else if (gitState === 'untracked') {
+          fg = gitUntrackedFg;
+        } else if (gitState === 'conflict') {
+          fg = gitConflictFg;
+        } else if (node.isHidden) {
           fg = dimFg;
         }
         

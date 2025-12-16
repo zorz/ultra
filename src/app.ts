@@ -29,6 +29,7 @@ import { themeLoader } from './ui/themes/theme-loader.ts';
 import { shouldAutoPair, shouldSkipClosing, shouldDeletePair } from './core/auto-pair.ts';
 import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnosticsRenderer } from './features/lsp/index.ts';
 import { terminalPane } from './ui/components/terminal-pane.ts';
+import { gitIntegration } from './features/git/git-integration.ts';
 
 interface OpenDocument {
   id: string;
@@ -47,6 +48,10 @@ export class App {
   // File watching
   private fileWatchers = new Map<string, { watcher: ReturnType<typeof Bun.file>; lastModTime: number }>();
   private fileWatchInterval: ReturnType<typeof setInterval> | null = null;
+  
+  // Git integration
+  private gitStatusInterval: ReturnType<typeof setInterval> | null = null;
+  private lastGitBranch: string | null = null;
   
   // External change notification state
   private externalChangeDialog: {
@@ -160,6 +165,11 @@ export class App {
       lspManager.setWorkspaceRoot(workspaceRoot);
       await this.initializeLSP();
 
+      // Initialize Git integration with workspace root
+      this.debugLog('Initializing Git...');
+      gitIntegration.setWorkspaceRoot(workspaceRoot);
+      this.startGitStatusPolling();
+
       // Start file watcher
       this.debugLog('Starting file watcher...');
       this.startFileWatcher();
@@ -199,6 +209,9 @@ export class App {
     
     // Stop file watcher
     this.stopFileWatcher();
+    
+    // Stop git polling
+    this.stopGitStatusPolling();
     
     // Shutdown LSP servers
     lspManager.shutdown();
@@ -1526,6 +1539,7 @@ export class App {
       document: doc?.getState() || null,
       cursorPosition: doc?.primaryCursor.position || { line: 0, column: 0 },
       cursorCount: doc?.cursorManager.count || 1,
+      gitBranch: this.lastGitBranch || undefined,
       diagnostics,
       lspStatus
     });
@@ -2897,6 +2911,95 @@ export class App {
       this.fileWatchInterval = null;
     }
     this.fileWatchers.clear();
+  }
+
+  /**
+   * Start polling for git status updates
+   */
+  private startGitStatusPolling(): void {
+    // Initial check
+    this.updateGitStatus();
+    
+    // Poll every 3 seconds
+    this.gitStatusInterval = setInterval(() => {
+      this.updateGitStatus();
+    }, 3000);
+  }
+
+  /**
+   * Stop git status polling
+   */
+  private stopGitStatusPolling(): void {
+    if (this.gitStatusInterval) {
+      clearInterval(this.gitStatusInterval);
+      this.gitStatusInterval = null;
+    }
+  }
+
+  /**
+   * Update git status in status bar and file tree
+   */
+  private async updateGitStatus(): Promise<void> {
+    const [branch, status] = await Promise.all([
+      gitIntegration.branch(),
+      gitIntegration.status()
+    ]);
+    
+    // Update branch in status bar
+    if (branch !== this.lastGitBranch) {
+      this.lastGitBranch = branch;
+      this.updateStatusBar();
+    }
+    
+    // Update file tree with git status
+    if (status) {
+      const gitFileStates = new Map<string, 'added' | 'modified' | 'deleted' | 'untracked' | 'conflict' | 'none'>();
+      
+      // Staged files
+      for (const file of status.staged) {
+        const state = file.status === 'A' ? 'added' :
+                      file.status === 'D' ? 'deleted' :
+                      file.status === 'U' ? 'conflict' : 'modified';
+        gitFileStates.set(file.path, state);
+      }
+      
+      // Unstaged files (may override staged if both modified)
+      for (const file of status.unstaged) {
+        const existing = gitFileStates.get(file.path);
+        const state = file.status === 'D' ? 'deleted' :
+                      file.status === 'U' ? 'conflict' : 'modified';
+        // Only override if not already set or new state is more important
+        if (!existing || state === 'conflict') {
+          gitFileStates.set(file.path, state);
+        }
+      }
+      
+      // Untracked files
+      for (const filePath of status.untracked) {
+        gitFileStates.set(filePath, 'untracked');
+      }
+      
+      fileTree.setGitStatus(gitFileStates);
+    }
+    
+    // Update gutter indicators for active document
+    await this.updateGitGutterIndicators();
+    
+    renderer.scheduleRender();
+  }
+
+  /**
+   * Update git gutter indicators for the active document
+   */
+  private async updateGitGutterIndicators(): Promise<void> {
+    const doc = this.getActiveDocument();
+    if (!doc || !doc.filePath) {
+      paneManager.getActivePane().clearGitLineChanges();
+      return;
+    }
+    
+    const lineChanges = await gitIntegration.diffLines(doc.filePath);
+    paneManager.getActivePane().setGitLineChanges(lineChanges);
   }
 
   /**
