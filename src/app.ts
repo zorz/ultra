@@ -30,6 +30,7 @@ import { shouldAutoPair, shouldSkipClosing, shouldDeletePair } from './core/auto
 import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnosticsRenderer } from './features/lsp/index.ts';
 import { terminalPane } from './ui/components/terminal-pane.ts';
 import { gitIntegration } from './features/git/git-integration.ts';
+import { gitPanel } from './ui/components/git-panel.ts';
 
 interface OpenDocument {
   id: string;
@@ -153,6 +154,17 @@ export class App {
       fileTree.onFileSelect(async (filePath) => {
         await this.openFile(filePath);
         fileTree.setFocused(false);
+        renderer.scheduleRender();
+      });
+
+      // Set up git panel callbacks
+      gitPanel.onFileSelect(async (filePath) => {
+        const fullPath = path.join(workspaceRoot, filePath);
+        await this.openFile(fullPath);
+        gitPanel.setFocused(false);
+        renderer.scheduleRender();
+      });
+      gitPanel.onRefresh(() => {
         renderer.scheduleRender();
       });
 
@@ -570,6 +582,24 @@ export class App {
         // Consume all other keys while browser is open
         renderer.scheduleRender();
         return;
+      }
+
+      // Handle git panel input if it's focused
+      if (gitPanel.getFocused() && gitPanel.isOpen()) {
+        // Allow Ctrl+Shift+G to toggle git panel even when focused
+        if (event.ctrl && event.shift && event.key === 'G') {
+          gitPanel.setVisible(false);
+          gitPanel.setFocused(false);
+          fileTree.setVisible(true);
+          renderer.scheduleRender();
+          return;
+        }
+        
+        const handled = await gitPanel.handleKey(event.key, event.ctrl, event.shift, event.char);
+        if (handled) {
+          renderer.scheduleRender();
+          return;
+        }
       }
 
       // Handle file tree input if it's focused
@@ -1207,6 +1237,7 @@ export class App {
     mouseManager.registerHandler(searchWidget);
     mouseManager.registerHandler(terminalPane);  // Terminal pane for embedded terminal
     mouseManager.registerHandler(paneManager);  // Pane manager handles tab bars and editor panes
+    mouseManager.registerHandler(gitPanel);     // Git panel for source control
     mouseManager.registerHandler(fileTree);
   }
   
@@ -1429,11 +1460,18 @@ export class App {
 
     // Render file tree sidebar (if visible)
     if (sidebarRect) {
-      fileTree.setRect(sidebarRect);
-      fileTree.setVisible(true);
-      fileTree.render(ctx);
+      if (gitPanel.isOpen()) {
+        // Git panel takes over sidebar
+        gitPanel.setRect(sidebarRect);
+        gitPanel.render(ctx);
+      } else {
+        fileTree.setRect(sidebarRect);
+        fileTree.setVisible(true);
+        fileTree.render(ctx);
+      }
     } else {
       fileTree.setVisible(false);
+      gitPanel.setVisible(false);
     }
 
     // Render terminal pane (if visible)
@@ -2031,6 +2069,151 @@ export class App {
         title: 'Toggle AI Panel',
         category: 'View',
         handler: () => layoutManager.toggleAIPanel()
+      },
+
+      // Git commands
+      {
+        id: 'ultra.toggleGitPanel',
+        title: 'Toggle Source Control Panel',
+        category: 'Git',
+        handler: async () => {
+          const isVisible = gitPanel.isOpen();
+          if (!isVisible) {
+            // Show git panel in sidebar area
+            if (!layoutManager.isSidebarVisible()) {
+              layoutManager.toggleSidebar(settings.get('ultra.sidebar.width') || 30);
+            }
+            fileTree.setVisible(false);
+            gitPanel.setVisible(true);
+            gitPanel.setFocused(true);
+            await gitPanel.refresh();
+          } else {
+            gitPanel.setVisible(false);
+            gitPanel.setFocused(false);
+            fileTree.setVisible(true);
+          }
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitStageFile',
+        title: 'Git: Stage Current File',
+        category: 'Git',
+        handler: async () => {
+          const doc = this.getActiveDocument();
+          if (doc?.filePath) {
+            const success = await gitIntegration.add(doc.filePath);
+            if (success) {
+              statusBar.setMessage('File staged', 2000);
+              await this.updateGitStatus();
+            } else {
+              statusBar.setMessage('Failed to stage file', 3000);
+            }
+          }
+        }
+      },
+      {
+        id: 'ultra.gitUnstageFile',
+        title: 'Git: Unstage Current File',
+        category: 'Git',
+        handler: async () => {
+          const doc = this.getActiveDocument();
+          if (doc?.filePath) {
+            const success = await gitIntegration.reset(doc.filePath);
+            if (success) {
+              statusBar.setMessage('File unstaged', 2000);
+              await this.updateGitStatus();
+            } else {
+              statusBar.setMessage('Failed to unstage file', 3000);
+            }
+          }
+        }
+      },
+      {
+        id: 'ultra.gitDiscardChanges',
+        title: 'Git: Discard Changes in Current File',
+        category: 'Git',
+        handler: async () => {
+          const doc = this.getActiveDocument();
+          if (doc?.filePath) {
+            const success = await gitIntegration.checkout(doc.filePath);
+            if (success) {
+              statusBar.setMessage('Changes discarded', 2000);
+              // Reload the file
+              await doc.reload();
+              await this.updateGitStatus();
+            } else {
+              statusBar.setMessage('Failed to discard changes', 3000);
+            }
+          }
+        }
+      },
+      {
+        id: 'ultra.gitStageAll',
+        title: 'Git: Stage All Changes',
+        category: 'Git',
+        handler: async () => {
+          const success = await gitIntegration.addAll();
+          if (success) {
+            statusBar.setMessage('All changes staged', 2000);
+            await this.updateGitStatus();
+          } else {
+            statusBar.setMessage('Failed to stage changes', 3000);
+          }
+        }
+      },
+      {
+        id: 'ultra.gitCommit',
+        title: 'Git: Commit',
+        category: 'Git',
+        handler: async () => {
+          inputDialog.show({
+            title: 'Commit Message',
+            placeholder: 'Enter commit message...',
+            initialValue: '',
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            onConfirm: async (message: string) => {
+              if (message.trim()) {
+                const success = await gitIntegration.commit(message);
+                if (success) {
+                  statusBar.setMessage('Changes committed', 2000);
+                  await this.updateGitStatus();
+                } else {
+                  statusBar.setMessage('Commit failed', 3000);
+                }
+              }
+              renderer.scheduleRender();
+            }
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.gitRefresh',
+        title: 'Git: Refresh Status',
+        category: 'Git',
+        handler: async () => {
+          gitIntegration.invalidateCache();
+          await this.updateGitStatus();
+          statusBar.setMessage('Git status refreshed', 2000);
+        }
+      },
+      {
+        id: 'ultra.focusGitPanel',
+        title: 'Focus Source Control Panel',
+        category: 'Git',
+        handler: async () => {
+          if (!layoutManager.isSidebarVisible()) {
+            layoutManager.toggleSidebar(settings.get('ultra.sidebar.width') || 30);
+          }
+          fileTree.setVisible(false);
+          gitPanel.setVisible(true);
+          gitPanel.setFocused(true);
+          fileTree.setFocused(false);
+          await gitPanel.refresh();
+          renderer.scheduleRender();
+        }
       },
       {
         id: 'ultra.toggleMinimap',

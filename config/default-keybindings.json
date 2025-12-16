@@ -117,6 +117,12 @@
   { "key": "ctrl+shift+[", "command": "ultra.previousTerminal" },
   { "key": "ctrl+i", "command": "ultra.toggleAIPanel" },
 
+  { "key": "ctrl+shift+g", "command": "ultra.toggleGitPanel" },
+  { "key": "ctrl+alt+s", "command": "ultra.gitStageFile" },
+  { "key": "ctrl+alt+u", "command": "ultra.gitUnstageFile" },
+  { "key": "ctrl+alt+z", "command": "ultra.gitDiscardChanges" },
+  { "key": "ctrl+enter", "command": "ultra.gitCommit" },
+
   { "key": "f12", "command": "ultra.goToDefinition" },
   { "key": "shift+f12", "command": "ultra.findReferences" },
   { "key": "f2", "command": "ultra.rename" },

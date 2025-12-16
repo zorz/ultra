@@ -343,6 +343,26 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.toggleAIPanel"
   },
   {
+    "key": "ctrl+shift+g",
+    "command": "ultra.toggleGitPanel"
+  },
+  {
+    "key": "ctrl+alt+s",
+    "command": "ultra.gitStageFile"
+  },
+  {
+    "key": "ctrl+alt+u",
+    "command": "ultra.gitUnstageFile"
+  },
+  {
+    "key": "ctrl+alt+z",
+    "command": "ultra.gitDiscardChanges"
+  },
+  {
+    "key": "ctrl+enter",
+    "command": "ultra.gitCommit"
+  },
+  {
     "key": "f12",
     "command": "ultra.goToDefinition"
   },
