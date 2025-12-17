@@ -368,37 +368,6 @@ bun run build.ts    # Compile to ./ultra
 - Use `this.debugLog()` in App class
 - Crash logs show in `debug.log` with stack traces
 
-### Problem: Cursor Scrolling Not Following Arrow Keys (December 16, 2025)
-
-When using arrow keys to navigate in the editor, the viewport doesn't scroll to keep the cursor visible. The cursor can move beyond the visible area without the editor window scrolling to follow it.
-
-**Investigation Process:**
-1. Traced arrow key input flow:
-   ```
-   terminal/input.ts (parseArrowKey)
-     → app.ts (handleKeyDown, command handlers)
-     → paneManager.moveCursor(direction)
-     → paneManager.ensureCursorVisible()
-     → pane.ensureCursorVisible()
-   ```
-
-2. Added debug logging to `pane.ensureCursorVisible()` (lines 506-557)
-3. Built with `--debug` flag and tested arrow key navigation
-4. Analyzed debug.log output
-
-**Root Cause Identified:**
-The debug log revealed that `doc.primaryCursor.line` and `doc.primaryCursor.column` return **undefined** values:
-```
-[Pane pane-1] ensureCursorVisible called: cursor=(undefined,undefined), scrollTop=0, visibleLines=48
-[Pane pane-1] ensureCursorVisible: no scrolling needed, cursor is visible
-```
-
-This causes the scrolling logic to fail because:
-- `cursor.line < this.scrollTop` evaluates to `undefined < 0` → false
-- `cursor.line >= this.scrollTop + visibleLines` evaluates to `undefined >= 48` → false
-- The `scrolled` flag never gets set, so no viewport scrolling occurs
-
-**Status:** Root cause identified, needs fix in cursor property access or Document class implementation.
 
 **Next Steps:**
 1. Investigate Document class (`src/core/document.ts`) and Cursor class to understand why `primaryCursor` properties are undefined

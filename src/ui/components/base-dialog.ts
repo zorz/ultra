@@ -147,7 +147,9 @@ export abstract class BaseDialog implements MouseHandler {
    */
   protected getColors(): DialogColors {
     if (!this._colors) {
+      this.debugLog('Colors not cached, loading from theme...');
       this._colors = this.loadColorsFromTheme();
+      this.debugLog(`Loaded colors: bg=${this._colors.background}`);
     }
     return this._colors;
   }
@@ -156,21 +158,28 @@ export abstract class BaseDialog implements MouseHandler {
    * Load colors from the current theme
    */
   protected loadColorsFromTheme(): DialogColors {
+    // Use editor.background for dialog background (matches main editor color)
+    const dialogBg = themeLoader.getColor('editor.background') || DEFAULT_DIALOG_COLORS.background;
+    const dialogFg = themeLoader.getColor('editor.foreground') || DEFAULT_DIALOG_COLORS.foreground;
+
+    // Debug logging for troubleshooting
+    this.debugLog(`Loading colors: bg=${dialogBg} (from editor.background=${themeLoader.getColor('editor.background')}), fg=${dialogFg}`);
+
     return {
-      background: themeLoader.getColor('panel.background') || DEFAULT_DIALOG_COLORS.background,
-      foreground: themeLoader.getColor('foreground') || DEFAULT_DIALOG_COLORS.foreground,
-      border: themeLoader.getColor('panel.border') || DEFAULT_DIALOG_COLORS.border,
-      titleForeground: themeLoader.getColor('panelTitle.activeForeground') || DEFAULT_DIALOG_COLORS.titleForeground,
-      titleBackground: themeLoader.getColor('panel.background') || DEFAULT_DIALOG_COLORS.titleBackground,
+      background: dialogBg,
+      foreground: dialogFg,
+      border: themeLoader.getColor('editor.lineHighlightBackground') || themeLoader.getColor('tab.border') || DEFAULT_DIALOG_COLORS.border,
+      titleForeground: dialogFg,
+      titleBackground: dialogBg,
       inputBackground: themeLoader.getColor('input.background') || DEFAULT_DIALOG_COLORS.inputBackground,
       inputForeground: themeLoader.getColor('input.foreground') || DEFAULT_DIALOG_COLORS.inputForeground,
       inputBorder: themeLoader.getColor('input.border') || DEFAULT_DIALOG_COLORS.inputBorder,
       inputFocusBorder: themeLoader.getColor('focusBorder') || DEFAULT_DIALOG_COLORS.inputFocusBorder,
       selectedBackground: themeLoader.getColor('list.activeSelectionBackground') || DEFAULT_DIALOG_COLORS.selectedBackground,
       selectedForeground: themeLoader.getColor('list.activeSelectionForeground') || DEFAULT_DIALOG_COLORS.selectedForeground,
-      hintForeground: themeLoader.getColor('descriptionForeground') || DEFAULT_DIALOG_COLORS.hintForeground,
-      successForeground: themeLoader.getColor('successForeground') || DEFAULT_DIALOG_COLORS.successForeground,
-      errorForeground: themeLoader.getColor('errorForeground') || DEFAULT_DIALOG_COLORS.errorForeground
+      hintForeground: themeLoader.getColor('editorLineNumber.foreground') || DEFAULT_DIALOG_COLORS.hintForeground,
+      successForeground: themeLoader.getColor('editorGutter.addedBackground') || DEFAULT_DIALOG_COLORS.successForeground,
+      errorForeground: themeLoader.getColor('editorGutter.deletedBackground') || DEFAULT_DIALOG_COLORS.errorForeground
     };
   }
 
