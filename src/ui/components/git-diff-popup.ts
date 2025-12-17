@@ -1,17 +1,21 @@
 /**
  * Git Diff Popup Component
- * 
+ *
  * Shows inline diff view when clicking on git gutter indicators.
  * Allows staging, reverting, and navigating between changes.
+ *
+ * Now extends BaseDialog for consistent API.
  */
 
 import type { RenderContext } from '../renderer.ts';
-import type { MouseHandler, MouseEvent } from '../mouse.ts';
+import type { MouseEvent } from '../mouse.ts';
+import type { KeyEvent } from '../../terminal/input.ts';
 import type { Rect } from '../layout.ts';
+import { BaseDialog, type BaseDialogConfig } from './base-dialog.ts';
+import { RenderUtils } from '../render-utils.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
 import { settings } from '../../config/settings.ts';
 import { gitIntegration, type GitLineChange } from '../../features/git/git-integration.ts';
-import { debugLog } from '../../debug.ts';
 
 interface DiffLine {
   type: 'context' | 'added' | 'deleted' | 'header';
@@ -28,100 +32,134 @@ interface DiffHunk {
   lines: DiffLine[];
 }
 
-export class GitDiffPopup implements MouseHandler {
-  private visible = false;
-  private rect: Rect = { x: 0, y: 0, width: 80, height: 20 };
-  
-  // Current state
-  private filePath: string = '';
-  private changes: GitLineChange[] = [];
-  private currentChangeIndex: number = 0;
-  private hunks: DiffHunk[] = [];
-  private scrollTop: number = 0;
-  
-  // Callbacks
-  private onCloseCallback?: () => void;
-  private onStageCallback?: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>;
-  private onRevertCallback?: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>;
-  private onRefreshCallback?: () => void;
+/**
+ * GitDiffPopup - Inline diff viewer for git changes
+ *
+ * @example
+ * ```typescript
+ * await gitDiffPopup.show(filePath, changes, targetLine);
+ * gitDiffPopup.setRect(rect);
+ * gitDiffPopup.onStage(async (path, start, end) => {...});
+ * ```
+ */
+export class GitDiffPopup extends BaseDialog {
+  // Diff state
+  private _filePath: string = '';
+  private _changes: GitLineChange[] = [];
+  private _currentChangeIndex: number = 0;
+  private _hunks: DiffHunk[] = [];
+  private _scrollTop: number = 0;
+
+  // Specialized callbacks
+  private _stageCallback?: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>;
+  private _revertCallback?: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>;
+  private _refreshCallback?: () => void;
+
+  constructor() {
+    super();
+    this._debugName = 'GitDiffPopup';
+    this._borderStyle = 'square';
+  }
+
+  // === Lifecycle ===
 
   /**
    * Show the diff popup for a specific line change
    */
   async show(filePath: string, changes: GitLineChange[], targetLine: number): Promise<void> {
-    this.filePath = filePath;
-    this.changes = changes;
-    this.scrollTop = 0;
-    
+    this._filePath = filePath;
+    this._changes = changes;
+    this._scrollTop = 0;
+
     // Find the change closest to targetLine
-    this.currentChangeIndex = this.findClosestChangeIndex(targetLine);
-    
+    this._currentChangeIndex = this.findClosestChangeIndex(targetLine);
+
     // Load the diff hunks
     await this.loadDiffHunks();
-    
-    this.visible = true;
-    debugLog(`[GitDiffPopup] Showing for ${filePath} at line ${targetLine}, change index ${this.currentChangeIndex}`);
+
+    this._isVisible = true;
+    this.debugLog(`Showing for ${filePath} at line ${targetLine}, change index ${this._currentChangeIndex}`);
   }
 
   /**
    * Hide the popup
    */
   hide(): void {
-    this.visible = false;
-    this.hunks = [];
-    if (this.onCloseCallback) {
-      this.onCloseCallback();
-    }
+    this._hunks = [];
+    super.hide();
   }
 
+  /**
+   * Check if visible (legacy API compatibility)
+   */
   isVisible(): boolean {
-    return this.visible;
+    return this._isVisible;
   }
 
-  setRect(rect: Rect): void {
-    this.rect = rect;
-  }
+  // === Change Navigation ===
 
   /**
    * Find the change index closest to a given line
    */
   private findClosestChangeIndex(targetLine: number): number {
-    if (this.changes.length === 0) return 0;
-    
+    if (this._changes.length === 0) return 0;
+
     let closest = 0;
-    let minDiff = Math.abs(this.changes[0]!.line - targetLine);
-    
-    for (let i = 1; i < this.changes.length; i++) {
-      const diff = Math.abs(this.changes[i]!.line - targetLine);
+    let minDiff = Math.abs(this._changes[0]!.line - targetLine);
+
+    for (let i = 1; i < this._changes.length; i++) {
+      const diff = Math.abs(this._changes[i]!.line - targetLine);
       if (diff < minDiff) {
         minDiff = diff;
         closest = i;
       }
     }
-    
+
     return closest;
   }
+
+  /**
+   * Navigate to next change
+   */
+  nextChange(): void {
+    if (this._changes.length === 0) return;
+    this._currentChangeIndex = (this._currentChangeIndex + 1) % this._changes.length;
+    this._scrollTop = 0;
+    this.loadDiffHunks();
+  }
+
+  /**
+   * Navigate to previous change
+   */
+  previousChange(): void {
+    if (this._changes.length === 0) return;
+    this._currentChangeIndex = (this._currentChangeIndex - 1 + this._changes.length) % this._changes.length;
+    this._scrollTop = 0;
+    this.loadDiffHunks();
+  }
+
+  // === Diff Loading ===
 
   /**
    * Load diff hunks from git
    */
   private async loadDiffHunks(): Promise<void> {
     try {
-      const diffHunks = await gitIntegration.diff(this.filePath);
+      const diffHunks = await gitIntegration.diff(this._filePath);
       const contextLines = settings.get('git.diffContextLines') || 3;
-      
-      this.hunks = diffHunks.map(hunk => ({
+
+      this._hunks = diffHunks.map(hunk => ({
         oldStart: hunk.oldStart,
         oldCount: hunk.oldCount,
         newStart: hunk.newStart,
         newCount: hunk.newCount,
         lines: this.parseHunkLines(hunk.content, contextLines)
       }));
-      
-      debugLog(`[GitDiffPopup] Loaded ${this.hunks.length} hunks`);
+
+      this.debugLog(`Loaded ${this._hunks.length} hunks`);
     } catch (e) {
-      debugLog(`[GitDiffPopup] Error loading diff: ${e}`);
-      this.hunks = [];
+      this.debugLog(`Error loading diff: ${e}`);
+      this._hunks = [];
     }
   }
 
@@ -131,13 +169,12 @@ export class GitDiffPopup implements MouseHandler {
   private parseHunkLines(content: string, _contextLines: number): DiffLine[] {
     const lines: DiffLine[] = [];
     const rawLines = content.split('\n');
-    
+
     let oldLineNum = 0;
     let newLineNum = 0;
-    
+
     for (const line of rawLines) {
       if (line.startsWith('@@')) {
-        // Parse header to get line numbers
         const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
         if (match) {
           oldLineNum = parseInt(match[1]!, 10);
@@ -145,60 +182,62 @@ export class GitDiffPopup implements MouseHandler {
         }
         lines.push({ type: 'header', content: line });
       } else if (line.startsWith('-')) {
-        lines.push({ 
-          type: 'deleted', 
+        lines.push({
+          type: 'deleted',
           content: line.substring(1),
           oldLineNum: oldLineNum++
         });
       } else if (line.startsWith('+')) {
-        lines.push({ 
-          type: 'added', 
+        lines.push({
+          type: 'added',
           content: line.substring(1),
           newLineNum: newLineNum++
         });
       } else if (line.startsWith(' ') || line === '') {
-        lines.push({ 
-          type: 'context', 
+        lines.push({
+          type: 'context',
           content: line.substring(1) || '',
           oldLineNum: oldLineNum++,
           newLineNum: newLineNum++
         });
       }
     }
-    
+
     return lines;
   }
 
   /**
-   * Navigate to next change
+   * Get the hunk for the current change
    */
-  nextChange(): void {
-    if (this.changes.length === 0) return;
-    this.currentChangeIndex = (this.currentChangeIndex + 1) % this.changes.length;
-    this.scrollTop = 0;
-    this.loadDiffHunks();
+  private getCurrentHunk(): DiffHunk | null {
+    if (this._changes.length === 0 || this._hunks.length === 0) return null;
+
+    const currentChange = this._changes[this._currentChangeIndex]!;
+    const targetLine = currentChange.line;
+
+    // Find the hunk that contains this line
+    for (const hunk of this._hunks) {
+      if (targetLine >= hunk.newStart && targetLine < hunk.newStart + Math.max(hunk.newCount, 1)) {
+        return hunk;
+      }
+    }
+
+    // Return first hunk if no exact match
+    return this._hunks[0] || null;
   }
 
-  /**
-   * Navigate to previous change
-   */
-  previousChange(): void {
-    if (this.changes.length === 0) return;
-    this.currentChangeIndex = (this.currentChangeIndex - 1 + this.changes.length) % this.changes.length;
-    this.scrollTop = 0;
-    this.loadDiffHunks();
-  }
+  // === Actions ===
 
   /**
    * Stage the current hunk
    */
   async stageCurrentHunk(): Promise<void> {
-    if (this.onStageCallback && this.hunks.length > 0) {
+    if (this._stageCallback && this._hunks.length > 0) {
       const hunk = this.getCurrentHunk();
       if (hunk) {
-        await this.onStageCallback(this.filePath, hunk.newStart, hunk.newStart + hunk.newCount - 1);
-        if (this.onRefreshCallback) {
-          this.onRefreshCallback();
+        await this._stageCallback(this._filePath, hunk.newStart, hunk.newStart + hunk.newCount - 1);
+        if (this._refreshCallback) {
+          this._refreshCallback();
         }
       }
     }
@@ -208,241 +247,229 @@ export class GitDiffPopup implements MouseHandler {
    * Revert the current hunk
    */
   async revertCurrentHunk(): Promise<void> {
-    if (this.onRevertCallback && this.hunks.length > 0) {
+    if (this._revertCallback && this._hunks.length > 0) {
       const hunk = this.getCurrentHunk();
       if (hunk) {
-        await this.onRevertCallback(this.filePath, hunk.newStart, hunk.newStart + hunk.newCount - 1);
-        if (this.onRefreshCallback) {
-          this.onRefreshCallback();
+        await this._revertCallback(this._filePath, hunk.newStart, hunk.newStart + hunk.newCount - 1);
+        if (this._refreshCallback) {
+          this._refreshCallback();
         }
       }
     }
   }
 
-  /**
-   * Get the hunk for the current change
-   */
-  private getCurrentHunk(): DiffHunk | null {
-    if (this.changes.length === 0 || this.hunks.length === 0) return null;
-    
-    const currentChange = this.changes[this.currentChangeIndex]!;
-    const targetLine = currentChange.line;
-    
-    // Find the hunk that contains this line
-    for (const hunk of this.hunks) {
-      if (targetLine >= hunk.newStart && targetLine < hunk.newStart + Math.max(hunk.newCount, 1)) {
-        return hunk;
-      }
-    }
-    
-    // Return first hunk if no exact match
-    return this.hunks[0] || null;
+  // === Callbacks ===
+
+  onStage(callback: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>): void {
+    this._stageCallback = callback;
   }
 
-  /**
-   * Handle keyboard input
-   */
-  handleKey(key: string, ctrl: boolean, _shift: boolean): boolean {
-    if (!this.visible) return false;
-    
+  onRevert(callback: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>): void {
+    this._revertCallback = callback;
+  }
+
+  onRefresh(callback: () => void): void {
+    this._refreshCallback = callback;
+  }
+
+  // === Keyboard Handling ===
+
+  handleKey(event: KeyEvent): boolean {
+    if (!this._isVisible) return false;
+
+    const { key, ctrl } = event;
+
     switch (key) {
-      case 'Escape':
+      case 'ESCAPE':
+      case 'C':
       case 'c':
         this.hide();
         return true;
-        
+
+      case 'N':
       case 'n':
         if (!ctrl) {
           this.nextChange();
           return true;
         }
         break;
-        
+
+      case 'P':
       case 'p':
         if (!ctrl) {
           this.previousChange();
           return true;
         }
         break;
-        
+
+      case 'S':
       case 's':
         if (!ctrl) {
           this.stageCurrentHunk();
           return true;
         }
         break;
-        
+
+      case 'R':
       case 'r':
         if (!ctrl) {
           this.revertCurrentHunk();
           return true;
         }
         break;
-        
-      case 'ArrowUp':
+
+      case 'UP':
+      case 'K':
       case 'k':
-        this.scrollTop = Math.max(0, this.scrollTop - 1);
+        this._scrollTop = Math.max(0, this._scrollTop - 1);
         return true;
-        
-      case 'ArrowDown':
+
+      case 'DOWN':
+      case 'J':
       case 'j':
-        this.scrollTop++;
+        this._scrollTop++;
         return true;
     }
-    
+
     return false;
   }
 
-  // Mouse handler implementation
-  containsPoint(x: number, y: number): boolean {
-    if (!this.visible) return false;
-    return x >= this.rect.x && x < this.rect.x + this.rect.width &&
-           y >= this.rect.y && y < this.rect.y + this.rect.height;
-  }
+  // === Mouse Handling ===
 
   onMouseEvent(event: MouseEvent): boolean {
-    if (!this.visible) return false;
-    
+    if (!this._isVisible) return false;
+
     switch (event.name) {
       case 'MOUSE_LEFT_BUTTON_PRESSED': {
-        const relY = event.y - this.rect.y;
-        
+        const relY = event.y - this._rect.y;
+
         // Check if clicking on header buttons (first row)
         if (relY === 0) {
-          // Calculate button positions to match render()
           const buttons = ' 󰐕  󰜺  󰒭  󰒮  󰅖 ';
-          const buttonX = this.rect.x + this.rect.width - buttons.length - 2;
+          const buttonX = this._rect.x + this._rect.width - buttons.length - 2;
           const clickX = event.x;
-          
-          // Check each button (each is 4 chars wide)
+
+          // Each button is 4 chars wide
           if (clickX >= buttonX + 16 && clickX < buttonX + 20) {
-            // Close button
             this.hide();
             return true;
           } else if (clickX >= buttonX + 12 && clickX < buttonX + 16) {
-            // Previous button
             this.previousChange();
             return true;
           } else if (clickX >= buttonX + 8 && clickX < buttonX + 12) {
-            // Next button
             this.nextChange();
             return true;
           } else if (clickX >= buttonX + 4 && clickX < buttonX + 8) {
-            // Revert button
             this.revertCurrentHunk();
             return true;
           } else if (clickX >= buttonX && clickX < buttonX + 4) {
-            // Stage button
             this.stageCurrentHunk();
             return true;
           }
         }
         return true;
       }
-      
+
       case 'MOUSE_WHEEL_UP':
-        this.scrollTop = Math.max(0, this.scrollTop - 3);
+        this._scrollTop = Math.max(0, this._scrollTop - 3);
         return true;
-        
+
       case 'MOUSE_WHEEL_DOWN':
-        this.scrollTop += 3;
+        this._scrollTop += 3;
         return true;
     }
-    
-    return false;
+
+    return this.containsPoint(event.x, event.y);
   }
 
-  /**
-   * Render the diff popup
-   */
+  // === Rendering ===
+
   render(ctx: RenderContext): void {
-    if (!this.visible) return;
-    
+    if (!this._isVisible) return;
+
     const theme = themeLoader.getCurrentTheme();
     if (!theme) return;
     const colors = theme.colors;
-    
-    const x = this.rect.x;
-    const y = this.rect.y;
-    const width = this.rect.width;
-    const height = this.rect.height;
-    
-    // Background
+
+    const x = this._rect.x;
+    const y = this._rect.y;
+    const width = this._rect.width;
+    const height = this._rect.height;
+
+    // Colors
     const bgColor = colors['editor.background'] || '#1e1e1e';
     const borderColor = colors['panel.border'] || '#404040';
     const fgColor = colors['editor.foreground'] || '#d4d4d4';
-    
-    // Draw background
+    const headerBg = colors['titleBar.activeBackground'] || '#3c3c3c';
+    const greenColor = colors['gitDecoration.addedResourceForeground'] || '#89d185';
+    const redColor = colors['gitDecoration.deletedResourceForeground'] || '#f14c4c';
+    const blueColor = colors['textLink.foreground'] || '#3794ff';
+    const lineNumColor = colors['editorLineNumber.foreground'] || '#858585';
+
+    // Background
     for (let row = 0; row < height; row++) {
       ctx.drawStyled(x, y + row, ' '.repeat(width), fgColor, bgColor);
     }
-    
-    // Draw border
+
+    // Border
     ctx.drawStyled(x, y, '┌' + '─'.repeat(width - 2) + '┐', borderColor, bgColor);
     for (let row = 1; row < height - 1; row++) {
       ctx.drawStyled(x, y + row, '│', borderColor, bgColor);
       ctx.drawStyled(x + width - 1, y + row, '│', borderColor, bgColor);
     }
     ctx.drawStyled(x, y + height - 1, '└' + '─'.repeat(width - 2) + '┘', borderColor, bgColor);
-    
-    // Header with file info and buttons
-    const fileName = this.filePath.split('/').pop() || this.filePath;
-    const changeInfo = this.changes.length > 0 
-      ? `${this.currentChangeIndex + 1}/${this.changes.length}` 
+
+    // Header
+    const fileName = this._filePath.split('/').pop() || this._filePath;
+    const changeInfo = this._changes.length > 0
+      ? `${this._currentChangeIndex + 1}/${this._changes.length}`
       : '0/0';
-    
-    // Icons: 󰐕 stage, 󰜺 revert, 󰒭 next, 󰒮 previous, 󰅖 close
+
     const buttons = ' 󰐕  󰜺  󰒭  󰒮  󰅖 ';
     const headerText = ` ${fileName} - Changes ${changeInfo}`;
     const availableWidth = width - 4 - buttons.length;
-    const truncatedHeader = headerText.length > availableWidth 
+    const truncatedHeader = headerText.length > availableWidth
       ? headerText.substring(0, availableWidth - 1) + '…'
       : headerText.padEnd(availableWidth);
-    
-    const headerBg = colors['titleBar.activeBackground'] || '#3c3c3c';
+
     ctx.drawStyled(x + 1, y, truncatedHeader, fgColor, headerBg);
-    
-    // Render buttons with colors
+
+    // Header buttons
     const buttonX = x + width - buttons.length - 2;
-    const greenColor = colors['gitDecoration.addedResourceForeground'] || '#89d185';
-    const redColor = colors['gitDecoration.deletedResourceForeground'] || '#f14c4c';
-    const blueColor = colors['textLink.foreground'] || '#3794ff';
-    
     ctx.drawStyled(buttonX, y, ' 󰐕 ', greenColor, headerBg);      // stage
     ctx.drawStyled(buttonX + 4, y, ' 󰜺 ', redColor, headerBg);    // revert
     ctx.drawStyled(buttonX + 8, y, ' 󰒭 ', blueColor, headerBg);   // next
     ctx.drawStyled(buttonX + 12, y, ' 󰒮 ', blueColor, headerBg);  // previous
     ctx.drawStyled(buttonX + 16, y, ' 󰅖 ', fgColor, headerBg);    // close
-    
-    // Render diff content
+
+    // Diff content
     const currentHunk = this.getCurrentHunk();
     if (!currentHunk) {
       ctx.drawStyled(x + 2, y + 2, 'No changes to display', fgColor, bgColor);
       return;
     }
-    
-    const contentHeight = height - 3;  // Minus header and borders
+
+    const contentHeight = height - 3;
     const lines = currentHunk.lines;
     const maxScroll = Math.max(0, lines.length - contentHeight);
-    this.scrollTop = Math.min(this.scrollTop, maxScroll);
-    
+    this._scrollTop = Math.min(this._scrollTop, maxScroll);
+
     const addedBg = colors['diffEditor.insertedLineBackground'] || '#2ea04326';
     const deletedBg = colors['diffEditor.removedLineBackground'] || '#f8514926';
-    const addedFg = colors['gitDecoration.addedResourceForeground'] || '#89d185';
-    const deletedFg = colors['gitDecoration.deletedResourceForeground'] || '#f14c4c';
-    const lineNumColor = colors['editorLineNumber.foreground'] || '#858585';
-    
-    for (let i = 0; i < contentHeight && this.scrollTop + i < lines.length; i++) {
-      const line = lines[this.scrollTop + i]!;
+    const addedFg = greenColor;
+    const deletedFg = redColor;
+
+    for (let i = 0; i < contentHeight && this._scrollTop + i < lines.length; i++) {
+      const line = lines[this._scrollTop + i]!;
       const lineY = y + 1 + i;
-      const contentWidth = width - 14;  // Leave room for line numbers and gutter
-      
+      const contentWidth = width - 14;
+
       let lineBg = bgColor;
       let lineFg = fgColor;
       let gutterChar = ' ';
       let oldNum = '    ';
       let newNum = '    ';
-      
+
       switch (line.type) {
         case 'header':
           lineFg = colors['textPreformat.foreground'] || '#d7ba7d';
@@ -451,65 +478,48 @@ export class GitDiffPopup implements MouseHandler {
           lineBg = addedBg;
           lineFg = addedFg;
           gutterChar = '+';
-          newNum = line.newLineNum !== undefined 
-            ? line.newLineNum.toString().padStart(4) 
+          newNum = line.newLineNum !== undefined
+            ? line.newLineNum.toString().padStart(4)
             : '    ';
           break;
         case 'deleted':
           lineBg = deletedBg;
           lineFg = deletedFg;
           gutterChar = '-';
-          oldNum = line.oldLineNum !== undefined 
-            ? line.oldLineNum.toString().padStart(4) 
+          oldNum = line.oldLineNum !== undefined
+            ? line.oldLineNum.toString().padStart(4)
             : '    ';
           break;
         case 'context':
-          oldNum = line.oldLineNum !== undefined 
-            ? line.oldLineNum.toString().padStart(4) 
+          oldNum = line.oldLineNum !== undefined
+            ? line.oldLineNum.toString().padStart(4)
             : '    ';
-          newNum = line.newLineNum !== undefined 
-            ? line.newLineNum.toString().padStart(4) 
+          newNum = line.newLineNum !== undefined
+            ? line.newLineNum.toString().padStart(4)
             : '    ';
           break;
       }
-      
-      // Draw line numbers
+
+      // Line numbers
       ctx.drawStyled(x + 1, lineY, oldNum, lineNumColor, bgColor);
       ctx.drawStyled(x + 6, lineY, newNum, lineNumColor, bgColor);
-      
-      // Draw gutter indicator
-      const gutterColor = line.type === 'added' ? addedFg : 
+
+      // Gutter indicator
+      const gutterColor = line.type === 'added' ? addedFg :
                           line.type === 'deleted' ? deletedFg : fgColor;
       ctx.drawStyled(x + 11, lineY, gutterChar, gutterColor, lineBg);
-      
-      // Draw content
+
+      // Content
       const content = line.content.substring(0, contentWidth);
       const paddedContent = content.padEnd(contentWidth);
       ctx.drawStyled(x + 13, lineY, paddedContent, lineFg, lineBg);
     }
-    
-    // Footer with key hints
+
+    // Footer
     const footerY = y + height - 1;
     const footerText = ' s:stage r:revert n:next p:prev c/Esc:close ';
     const footerX = x + Math.floor((width - footerText.length) / 2);
     ctx.drawStyled(footerX, footerY, footerText, lineNumColor, bgColor);
-  }
-
-  // Callbacks
-  onClose(callback: () => void): void {
-    this.onCloseCallback = callback;
-  }
-
-  onStage(callback: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>): void {
-    this.onStageCallback = callback;
-  }
-
-  onRevert(callback: (filePath: string, lineStart: number, lineEnd: number) => Promise<void>): void {
-    this.onRevertCallback = callback;
-  }
-
-  onRefresh(callback: () => void): void {
-    this.onRefreshCallback = callback;
   }
 }
 

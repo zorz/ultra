@@ -1,358 +1,368 @@
 /**
  * File Picker Component
- * 
+ *
  * Fuzzy file finder dialog for quick file opening.
+ * Now extends SearchableDialog for consistent API.
  */
 
 import type { RenderContext } from '../renderer.ts';
-import type { MouseHandler, MouseEvent } from '../mouse.ts';
+import type { MouseEvent } from '../mouse.ts';
+import type { KeyEvent } from '../../terminal/input.ts';
+import { SearchableDialog, type SearchableDialogConfig, type ItemDisplayConfig } from './searchable-dialog.ts';
+import { RenderUtils } from '../render-utils.ts';
 import { fileSearch, type FileSearchResult } from '../../features/search/file-search.ts';
 
-export class FilePicker implements MouseHandler {
-  private isVisible: boolean = false;
-  private query: string = '';
-  private results: FileSearchResult[] = [];
-  private selectedIndex: number = 0;
-  private x: number = 0;
-  private y: number = 0;
-  private width: number = 80;
-  private height: number = 20;
-  private onSelectCallback: ((filePath: string) => void) | null = null;
-  private onCloseCallback: (() => void) | null = null;
-  private isIndexing: boolean = false;
+/**
+ * File icons by extension
+ */
+const FILE_ICONS: Record<string, string> = {
+  'ts': '󰛦',
+  'tsx': '󰜈',
+  'js': '󰌞',
+  'jsx': '󰜈',
+  'json': '',
+  'md': '',
+  'css': '',
+  'scss': '',
+  'html': '',
+  'vue': '󰡄',
+  'svelte': '',
+  'py': '',
+  'rs': '',
+  'go': '',
+  'rb': '',
+  'sh': '',
+  'bash': '',
+  'zsh': '',
+  'yaml': '',
+  'yml': '',
+  'toml': '',
+  'xml': '󰗀',
+  'svg': '󰜡',
+  'png': '',
+  'jpg': '',
+  'jpeg': '',
+  'gif': '',
+  'sql': '',
+  'graphql': '',
+  'dockerfile': '',
+  'gitignore': '',
+};
+
+/**
+ * Get file icon based on extension
+ */
+function getFileIcon(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return FILE_ICONS[ext] || '';
+}
+
+/**
+ * FilePicker - Fuzzy file finder dialog
+ *
+ * @example New API:
+ * ```typescript
+ * await filePicker.showPicker(
+ *   { screenWidth: 80, screenHeight: 24 },
+ *   '/path/to/workspace'
+ * );
+ * filePicker.onSelect((path) => openFile(path));
+ * ```
+ *
+ * @example Legacy API (still supported):
+ * ```typescript
+ * await filePicker.show(workspaceRoot, screenWidth, screenHeight);
+ * filePicker.onSelect((path) => openFile(path));
+ * ```
+ */
+export class FilePicker extends SearchableDialog<FileSearchResult> {
+  private _workspaceRoot: string = '';
+  private _isIndexing: boolean = false;
+  private _fileSelectCallbacks: Set<(filePath: string) => void> = new Set();
+
+  constructor() {
+    super();
+    this._debugName = 'FilePicker';
+    this._title = 'Quick Open';
+  }
+
+  // === Lifecycle ===
 
   /**
-   * Show the file picker
+   * Show the file picker (new API)
    */
-  async show(workspaceRoot: string, screenWidth: number, screenHeight: number, editorX?: number, editorWidth?: number): Promise<void> {
-    this.isVisible = true;
-    this.query = '';
-    this.selectedIndex = 0;
+  async showPicker(config: SearchableDialogConfig, workspaceRoot: string): Promise<void> {
+    this._workspaceRoot = workspaceRoot;
 
-    // Center the picker over editor area if provided, otherwise over full screen
-    const centerX = editorX !== undefined && editorWidth !== undefined
-      ? editorX + Math.floor(editorWidth / 2)
-      : Math.floor(screenWidth / 2);
-
-    this.width = Math.min(80, (editorWidth || screenWidth) - 4);
-    this.height = Math.min(24, screenHeight - 4);
-    this.x = centerX - Math.floor(this.width / 2) + 1;
-    this.y = 2;
+    // Show base dialog
+    this.showWithItems(
+      {
+        ...config,
+        title: 'Quick Open',
+        width: config.width || 80,
+        height: config.height || 24
+      },
+      [],  // Items will be loaded after indexing
+      ''
+    );
 
     // Index files if needed
     if (fileSearch.getFileCount() === 0) {
-      this.isIndexing = true;
+      this._isIndexing = true;
       fileSearch.setWorkspaceRoot(workspaceRoot);
       await fileSearch.indexFiles();
-      this.isIndexing = false;
+      this._isIndexing = false;
     }
 
+    // Update results with indexed files
     this.updateResults();
+
+    this.debugLog(`Showing for workspace: ${workspaceRoot}`);
   }
 
   /**
-   * Hide the file picker
+   * Show the file picker (legacy API for backwards compatibility)
    */
-  hide(): void {
-    this.isVisible = false;
-    if (this.onCloseCallback) {
-      this.onCloseCallback();
-    }
+  async show(
+    workspaceRoot: string,
+    screenWidth: number,
+    screenHeight: number,
+    editorX?: number,
+    editorWidth?: number
+  ): Promise<void> {
+    await this.showPicker(
+      {
+        screenWidth,
+        screenHeight,
+        editorX,
+        editorWidth
+      },
+      workspaceRoot
+    );
   }
 
   /**
-   * Check if picker is open
-   */
-  isOpen(): boolean {
-    return this.isVisible;
-  }
-
-  /**
-   * Set the search query
-   */
-  setQuery(query: string): void {
-    this.query = query;
-    this.selectedIndex = 0;
-    this.updateResults();
-  }
-
-  /**
-   * Get the current query
-   */
-  getQuery(): string {
-    return this.query;
-  }
-
-  /**
-   * Append to query
-   */
-  appendToQuery(char: string): void {
-    this.query += char;
-    this.selectedIndex = 0;
-    this.updateResults();
-  }
-
-  /**
-   * Backspace in query
-   */
-  backspaceQuery(): void {
-    if (this.query.length > 0) {
-      this.query = this.query.slice(0, -1);
-      this.selectedIndex = 0;
-      this.updateResults();
-    }
-  }
-
-  /**
-   * Update search results
+   * Update results using fileSearch
    */
   private updateResults(): void {
-    this.results = fileSearch.search(this.query, this.height - 3);
+    const maxResults = this._rect.height - 4;
+    const results = fileSearch.search(this._textInput.value, maxResults);
+
+    // Convert to scored items (fileSearch already scores)
+    this._items = results;
+    this._filteredItems = results.map(item => ({ item, score: 0 }));
   }
+
+  // === Query handling (override to use fileSearch) ===
+
+  protected onQueryChange(): void {
+    this._selectedIndex = 0;
+    this._scrollOffset = 0;
+    this.updateResults();
+  }
+
+  // === Scoring (not used since fileSearch does scoring) ===
+
+  protected scoreItem(_item: FileSearchResult, _query: string): number {
+    // fileSearch handles scoring internally
+    return 1;
+  }
+
+  // === Item Display ===
+
+  protected getItemDisplay(item: FileSearchResult, isSelected: boolean): ItemDisplayConfig {
+    const icon = getFileIcon(item.name);
+    const dir = item.relativePath.slice(0, item.relativePath.length - item.name.length - 1);
+
+    return {
+      text: item.name,
+      secondary: dir || undefined,
+      icon,
+      isCurrent: false
+    };
+  }
+
+  // === Selection ===
 
   /**
    * Get selected file path
    */
   getSelectedPath(): string | null {
-    const result = this.results[this.selectedIndex];
-    return result?.path || null;
+    const item = this.getSelectedItem();
+    return item?.path || null;
   }
 
-  /**
-   * Select next item
-   */
-  selectNext(): void {
-    if (this.selectedIndex < this.results.length - 1) {
-      this.selectedIndex++;
-    }
-  }
+  // === Actions ===
 
-  /**
-   * Select previous item
-   */
-  selectPrevious(): void {
-    if (this.selectedIndex > 0) {
-      this.selectedIndex--;
-    }
-  }
-
-  /**
-   * Confirm selection
-   */
-  confirm(): void {
-    const path = this.getSelectedPath();
-    if (path && this.onSelectCallback) {
-      this.onSelectCallback(path);
+  protected async onItemSelected(item: FileSearchResult): Promise<void> {
+    // Trigger file select callbacks
+    for (const callback of this._fileSelectCallbacks) {
+      try {
+        callback(item.path);
+      } catch (e) {
+        this.debugLog(`File select callback error: ${e}`);
+      }
     }
     this.hide();
   }
 
-  /**
-   * Register callback for file selection
-   */
-  onSelect(callback: (filePath: string) => void): void {
-    this.onSelectCallback = callback;
-  }
+  // === Callbacks ===
 
   /**
-   * Register callback for close
+   * Register file selection callback
+   * @returns Cleanup function
    */
-  onClose(callback: () => void): void {
-    this.onCloseCallback = callback;
+  onSelect(callback: (filePath: string) => void): () => void {
+    this._fileSelectCallbacks.add(callback);
+    return () => {
+      this._fileSelectCallbacks.delete(callback);
+    };
   }
 
-  /**
-   * Render the file picker
-   */
+  // === Rendering (custom for file results) ===
+
   render(ctx: RenderContext): void {
-    if (!this.isVisible) return;
+    if (!this._isVisible) return;
 
-    // Background with border
-    ctx.fill(this.x, this.y, this.width, this.height, ' ', undefined, '#2d2d2d');
+    const colors = this.getColors();
 
-    // Draw border
-    this.drawBorder(ctx);
+    // Background and border
+    this.renderBackground(ctx);
 
     // Title
-    const title = ' Quick Open ';
-    const titleX = this.x + Math.floor((this.width - title.length) / 2);
-    ctx.drawStyled(titleX, this.y, title, '#61afef', '#2d2d2d');
+    this.renderTitle(ctx);
 
-    // Input field with icon
-    const inputY = this.y + 1;
-    const inputPrefix = ' 🔍 ';
-    const inputText = this.query;
-    const cursorChar = '│';
-    
-    // Draw input background
-    ctx.fill(this.x + 1, inputY, this.width - 2, 1, ' ', '#d0d0d0', '#3e3e3e');
-    
-    // Draw input content
-    ctx.drawStyled(this.x + 2, inputY, inputPrefix, '#888888', '#3e3e3e');
-    const displayQuery = inputText.slice(0, this.width - 10);
-    ctx.drawStyled(this.x + 6, inputY, displayQuery + cursorChar, '#ffffff', '#3e3e3e');
-
-    // Separator
-    const sepY = this.y + 2;
-    ctx.drawStyled(this.x + 1, sepY, '─'.repeat(this.width - 2), '#444444', '#2d2d2d');
+    // Search input
+    this.renderSearchInput(ctx);
+    this.renderSeparator(ctx, 2);
 
     // Results
-    if (this.isIndexing) {
-      ctx.drawStyled(this.x + 3, this.y + 4, 'Indexing files...', '#888888', '#2d2d2d');
-    } else if (this.results.length === 0) {
-      const noResults = this.query ? 'No matching files' : 'Type to search files';
-      ctx.drawStyled(this.x + 3, this.y + 4, noResults, '#888888', '#2d2d2d');
+    if (this._isIndexing) {
+      ctx.drawStyled(
+        this._rect.x + 3,
+        this._rect.y + 4,
+        'Indexing files...',
+        colors.hintForeground,
+        colors.background
+      );
     } else {
-      const maxResults = this.height - 4;
-      for (let i = 0; i < maxResults; i++) {
-        const result = this.results[i];
-        if (!result) break;
+      this.renderFileResults(ctx);
+    }
 
-        const resultY = this.y + 3 + i;
-        const isSelected = i === this.selectedIndex;
+    // Footer
+    this.renderFileFooter(ctx);
+  }
 
-        // Background
-        const bgColor = isSelected ? '#3e5f8a' : '#2d2d2d';
-        ctx.fill(this.x + 1, resultY, this.width - 2, 1, ' ', undefined, bgColor);
+  /**
+   * Render file results with custom styling
+   */
+  private renderFileResults(ctx: RenderContext): void {
+    const colors = this.getColors();
+    const listStartY = this._rect.y + 3;
+    const listHeight = this._rect.height - 4;
+    const listWidth = this._rect.width - 2;
 
-        // File icon based on extension
-        const icon = this.getFileIcon(result.name);
-        const iconColor = result.isHidden ? '#555555' : '#888888';
-        ctx.drawStyled(this.x + 2, resultY, icon, iconColor, bgColor);
+    if (this._filteredItems.length === 0) {
+      const emptyMessage = this._textInput.value
+        ? 'No matching files'
+        : 'Type to search files';
+      ctx.drawStyled(
+        this._rect.x + 3,
+        listStartY + 1,
+        emptyMessage,
+        colors.hintForeground,
+        colors.background
+      );
+      return;
+    }
 
-        // Filename (highlighted, dimmer for hidden files)
-        let nameColor: string;
-        if (result.isHidden) {
-          nameColor = isSelected ? '#a0a0a0' : '#707070';
-        } else {
-          nameColor = isSelected ? '#ffffff' : '#d4d4d4';
-        }
-        const maxNameLen = Math.min(30, this.width - 10);
-        const displayName = result.name.length > maxNameLen 
-          ? result.name.slice(0, maxNameLen - 1) + '…'
-          : result.name;
-        ctx.drawStyled(this.x + 5, resultY, displayName, nameColor, bgColor);
+    // Render visible items
+    for (let i = 0; i < Math.min(listHeight, this._filteredItems.length - this._scrollOffset); i++) {
+      const itemIndex = this._scrollOffset + i;
+      const scoredItem = this._filteredItems[itemIndex]!;
+      const result = scoredItem.item;
+      const isSelected = itemIndex === this._selectedIndex;
+      const y = listStartY + i;
 
-        // Path (dimmed, even more for hidden)
-        const pathColor = result.isHidden 
-          ? (isSelected ? '#707070' : '#505050')
-          : (isSelected ? '#a0a0a0' : '#666666');
-        const pathStart = this.x + 6 + displayName.length;
-        const pathMaxLen = this.width - (pathStart - this.x) - 2;
-        if (pathMaxLen > 5) {
-          const dir = result.relativePath.slice(0, result.relativePath.length - result.name.length - 1);
-          const displayPath = dir.length > pathMaxLen 
+      // Background
+      const bgColor = isSelected ? colors.selectedBackground : colors.background;
+      ctx.fill(this._rect.x + 1, y, listWidth, 1, ' ', undefined, bgColor);
+
+      // File icon
+      const icon = getFileIcon(result.name);
+      const iconColor = result.isHidden ? '#555555' : colors.hintForeground;
+      ctx.drawStyled(this._rect.x + 2, y, icon, iconColor, bgColor);
+
+      // Filename
+      let nameColor: string;
+      if (result.isHidden) {
+        nameColor = isSelected ? '#a0a0a0' : '#707070';
+      } else {
+        nameColor = isSelected ? colors.selectedForeground : colors.foreground;
+      }
+      const maxNameLen = Math.min(30, listWidth - 8);
+      const displayName = RenderUtils.truncateText(result.name, maxNameLen);
+      ctx.drawStyled(this._rect.x + 5, y, displayName, nameColor, bgColor);
+
+      // Directory path
+      const pathColor = result.isHidden
+        ? (isSelected ? '#707070' : '#505050')
+        : (isSelected ? '#a0a0a0' : colors.hintForeground);
+      const pathStart = this._rect.x + 6 + displayName.length;
+      const pathMaxLen = listWidth - (pathStart - this._rect.x) - 1;
+
+      if (pathMaxLen > 5) {
+        const dir = result.relativePath.slice(0, result.relativePath.length - result.name.length - 1);
+        if (dir) {
+          const displayPath = dir.length > pathMaxLen
             ? '…' + dir.slice(-(pathMaxLen - 1))
             : dir;
-          if (displayPath) {
-            ctx.drawStyled(pathStart, resultY, displayPath, pathColor, bgColor);
-          }
+          ctx.drawStyled(pathStart, y, displayPath, pathColor, bgColor);
         }
       }
     }
+  }
 
-    // Footer with file count
-    const footerY = this.y + this.height - 1;
+  /**
+   * Render footer with file count
+   */
+  private renderFileFooter(ctx: RenderContext): void {
+    const colors = this.getColors();
+    const footerY = this._rect.y + this._rect.height - 1;
     const fileCount = `${fileSearch.getFileCount()} files`;
-    ctx.drawStyled(this.x + this.width - fileCount.length - 2, footerY, fileCount, '#666666', '#2d2d2d');
-  }
-
-  /**
-   * Draw border around picker
-   */
-  private drawBorder(ctx: RenderContext): void {
-    const borderColor = '#444444';
-    const bgColor = '#2d2d2d';
-
-    // Top border
-    ctx.drawStyled(this.x, this.y, '╭' + '─'.repeat(this.width - 2) + '╮', borderColor, bgColor);
-
-    // Side borders
-    for (let y = this.y + 1; y < this.y + this.height - 1; y++) {
-      ctx.drawStyled(this.x, y, '│', borderColor, bgColor);
-      ctx.drawStyled(this.x + this.width - 1, y, '│', borderColor, bgColor);
-    }
-
-    // Bottom border
-    ctx.drawStyled(this.x, this.y + this.height - 1, '╰' + '─'.repeat(this.width - 2) + '╯', borderColor, bgColor);
-  }
-
-  /**
-   * Get file icon based on extension
-   */
-  private getFileIcon(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase() || '';
-    
-    const icons: Record<string, string> = {
-      'ts': '󰛦',
-      'tsx': '󰜈',
-      'js': '󰌞',
-      'jsx': '󰜈',
-      'json': '',
-      'md': '',
-      'css': '',
-      'scss': '',
-      'html': '',
-      'vue': '󰡄',
-      'svelte': '',
-      'py': '',
-      'rs': '',
-      'go': '',
-      'rb': '',
-      'sh': '',
-      'bash': '',
-      'zsh': '',
-      'yaml': '',
-      'yml': '',
-      'toml': '',
-      'xml': '󰗀',
-      'svg': '󰜡',
-      'png': '',
-      'jpg': '',
-      'jpeg': '',
-      'gif': '',
-      'sql': '',
-      'graphql': '',
-      'dockerfile': '',
-      'gitignore': '',
-    };
-
-    return icons[ext] || '';
-  }
-
-  /**
-   * Check if point is inside picker
-   */
-  containsPoint(x: number, y: number): boolean {
-    if (!this.isVisible) return false;
-    return (
-      x >= this.x &&
-      x < this.x + this.width &&
-      y >= this.y &&
-      y < this.y + this.height
+    ctx.drawStyled(
+      this._rect.x + this._rect.width - fileCount.length - 2,
+      footerY,
+      fileCount,
+      colors.hintForeground,
+      colors.background
     );
   }
 
-  /**
-   * Handle mouse events
-   */
-  onMouseEvent(event: MouseEvent): boolean {
-    if (!this.isVisible) return false;
+  // === Search input rendering (custom with search icon) ===
 
-    if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED') {
-      // Calculate which result was clicked
-      const resultY = event.y - this.y - 3;
-      if (resultY >= 0 && resultY < this.results.length) {
-        this.selectedIndex = resultY;
-        this.confirm();
-        return true;
-      }
-    }
+  protected renderSearchInput(ctx: RenderContext): void {
+    const colors = this.getColors();
+    const inputY = this._rect.y + 1;
+    const inputX = this._rect.x + 1;
+    const inputWidth = this._rect.width - 2;
 
-    return this.containsPoint(event.x, event.y);
+    // Input background
+    ctx.fill(inputX, inputY, inputWidth, 1, ' ', colors.inputForeground, colors.inputBackground);
+
+    // Search icon
+    ctx.drawStyled(inputX + 1, inputY, '🔍 ', colors.hintForeground, colors.inputBackground);
+
+    // Query text
+    const query = this._textInput.value;
+    const displayQuery = RenderUtils.truncateText(query, inputWidth - 8);
+    ctx.drawStyled(inputX + 4, inputY, displayQuery, colors.inputForeground, colors.inputBackground);
+
+    // Cursor
+    const cursorX = inputX + 4 + Math.min(this._textInput.cursorPosition, inputWidth - 8);
+    ctx.drawStyled(cursorX, inputY, '│', colors.inputFocusBorder, colors.inputBackground);
   }
 }
 
 export const filePicker = new FilePicker();
-
 export default filePicker;
