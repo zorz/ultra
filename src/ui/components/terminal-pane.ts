@@ -591,15 +591,17 @@ export class TerminalPane implements MouseHandler {
   /**
    * Register update callback
    */
-  onUpdate(callback: () => void): void {
+  onUpdate(callback: () => void): () => void {
     this.onUpdateCallback = callback;
+    return () => { this.onUpdateCallback = undefined; };
   }
 
   /**
    * Register focus callback
    */
-  onFocus(callback: () => void): void {
+  onFocus(callback: () => void): () => void {
     this.onFocusCallback = callback;
+    return () => { this.onFocusCallback = undefined; };
   }
 
   /**

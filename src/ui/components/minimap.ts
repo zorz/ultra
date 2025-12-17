@@ -119,8 +119,9 @@ export class Minimap implements MouseHandler {
   /**
    * Set scroll callback
    */
-  onScroll(callback: (line: number) => void): void {
+  onScroll(callback: (line: number) => void): () => void {
     this.onScrollCallback = callback;
+    return () => { this.onScrollCallback = undefined; };
   }
 
   /**

@@ -174,7 +174,41 @@ export class LSPClient {
   private notificationHandler: NotificationHandler | null = null;
   private serverCapabilities: Record<string, unknown> = {};
   public debugEnabled = false;  // Enable via --debug flag
-  
+
+  /**
+   * Create and initialize an LSP client
+   *
+   * Factory method that creates the client and starts the language server.
+   * Use this instead of constructor + start() for cleaner async initialization.
+   *
+   * @param command - The language server command
+   * @param args - Arguments to pass to the language server
+   * @param workspaceRoot - The workspace root path
+   * @param debug - Enable debug logging
+   * @returns Initialized LSP client, or null if initialization failed
+   *
+   * @example
+   * const client = await LSPClient.create(
+   *   'typescript-language-server',
+   *   ['--stdio'],
+   *   '/path/to/workspace'
+   * );
+   * if (client) {
+   *   // Client is ready to use
+   * }
+   */
+  static async create(
+    command: string,
+    args: string[],
+    workspaceRoot: string,
+    debug: boolean = false
+  ): Promise<LSPClient | null> {
+    const client = new LSPClient(command, args, workspaceRoot);
+    client.debugEnabled = debug;
+    const success = await client.start();
+    return success ? client : null;
+  }
+
   constructor(
     private command: string,
     private args: string[],

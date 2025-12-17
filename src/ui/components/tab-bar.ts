@@ -64,15 +64,17 @@ export class TabBar implements MouseHandler {
   /**
    * Register tab click callback
    */
-  onTabClick(callback: (tabId: string) => void): void {
+  onTabClick(callback: (tabId: string) => void): () => void {
     this.onTabClickCallback = callback;
+    return () => { this.onTabClickCallback = undefined; };
   }
 
   /**
    * Register tab close callback
    */
-  onTabClose(callback: (tabId: string) => void): void {
+  onTabClose(callback: (tabId: string) => void): () => void {
     this.onTabCloseCallback = callback;
+    return () => { this.onTabCloseCallback = undefined; };
   }
 
   /**

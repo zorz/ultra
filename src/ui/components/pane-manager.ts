@@ -742,40 +742,49 @@ export class PaneManager implements MouseHandler {
 
   // ==================== Callbacks ====================
 
-  onActiveDocumentChange(callback: (document: Document | null, pane: Pane) => void): void {
+  onActiveDocumentChange(callback: (document: Document | null, pane: Pane) => void): () => void {
     this.onActiveDocumentChangeCallback = callback;
+    return () => { this.onActiveDocumentChangeCallback = undefined; };
   }
 
-  onPaneFocus(callback: (pane: Pane) => void): void {
+  onPaneFocus(callback: (pane: Pane) => void): () => void {
     this.onPaneFocusCallback = callback;
+    return () => { this.onPaneFocusCallback = undefined; };
   }
 
-  onDocumentClick(callback: (document: Document, position: Position, clickCount: number, event: MouseEvent) => void): void {
+  onDocumentClick(callback: (document: Document, position: Position, clickCount: number, event: MouseEvent) => void): () => void {
     this.onDocumentClickCallback = callback;
+    return () => { this.onDocumentClickCallback = undefined; };
   }
 
-  onDocumentDrag(callback: (document: Document, position: Position, event: MouseEvent) => void): void {
+  onDocumentDrag(callback: (document: Document, position: Position, event: MouseEvent) => void): () => void {
     this.onDocumentDragCallback = callback;
+    return () => { this.onDocumentDragCallback = undefined; };
   }
 
-  onDocumentScroll(callback: (document: Document, deltaX: number, deltaY: number) => void): void {
+  onDocumentScroll(callback: (document: Document, deltaX: number, deltaY: number) => void): () => void {
     this.onDocumentScrollCallback = callback;
+    return () => { this.onDocumentScrollCallback = undefined; };
   }
 
-  onTabCloseRequest(callback: (document: Document, pane: Pane) => void): void {
+  onTabCloseRequest(callback: (document: Document, pane: Pane) => void): () => void {
     this.onTabCloseRequestCallback = callback;
+    return () => { this.onTabCloseRequestCallback = undefined; };
   }
 
-  onGitGutterClick(callback: (line: number) => void): void {
+  onGitGutterClick(callback: (line: number) => void): () => void {
     this.onGitGutterClickCallback = callback;
+    return () => { this.onGitGutterClickCallback = undefined; };
   }
 
-  onInlineDiffStage(callback: (filePath: string, line: number) => Promise<void>): void {
+  onInlineDiffStage(callback: (filePath: string, line: number) => Promise<void>): () => void {
     this.onInlineDiffStageCallback = callback;
+    return () => { this.onInlineDiffStageCallback = undefined; };
   }
 
-  onInlineDiffRevert(callback: (filePath: string, line: number) => Promise<void>): void {
+  onInlineDiffRevert(callback: (filePath: string, line: number) => Promise<void>): () => void {
     this.onInlineDiffRevertCallback = callback;
+    return () => { this.onInlineDiffRevertCallback = undefined; };
   }
 
   // ==================== Pane Utilities ====================

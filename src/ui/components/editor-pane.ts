@@ -335,22 +335,25 @@ export class EditorPane implements MouseHandler {
   /**
    * Set click callback
    */
-  onClick(callback: (position: Position, clickCount: number, event: MouseEvent) => void): void {
+  onClick(callback: (position: Position, clickCount: number, event: MouseEvent) => void): () => void {
     this.onClickCallback = callback;
+    return () => { this.onClickCallback = undefined; };
   }
 
   /**
    * Set drag callback
    */
-  onDrag(callback: (position: Position, event: MouseEvent) => void): void {
+  onDrag(callback: (position: Position, event: MouseEvent) => void): () => void {
     this.onDragCallback = callback;
+    return () => { this.onDragCallback = undefined; };
   }
 
   /**
    * Set scroll callback
    */
-  onScroll(callback: (deltaX: number, deltaY: number) => void): void {
+  onScroll(callback: (deltaX: number, deltaY: number) => void): () => void {
     this.onScrollCallback = callback;
+    return () => { this.onScrollCallback = undefined; };
   }
 
   /**

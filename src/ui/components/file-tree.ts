@@ -127,12 +127,14 @@ export class FileTree implements MouseHandler {
   /**
    * Set file select callback
    */
-  onFileSelect(callback: (path: string) => void): void {
+  onFileSelect(callback: (path: string) => void): () => void {
     this.onFileSelectCallback = callback;
+    return () => { this.onFileSelectCallback = undefined; };
   }
 
-  onFocus(callback: () => void): void {
+  onFocus(callback: () => void): () => void {
     this.onFocusCallback = callback;
+    return () => { this.onFocusCallback = undefined; };
   }
 
   /**

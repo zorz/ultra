@@ -930,21 +930,21 @@ if (entry.type === 'command') {
 5. ✅ Add Result type
 
 ### Phase 2: API Consistency (Week 3-4)
-1. Standardize callback naming across all components
-2. Update async method signatures for consistency
+1. ✅ Standardize callback naming across all components
+2. ✅ Add factory patterns for async initialization (LSPClient.create)
 3. Add JSDoc to all public APIs
 4. Fix type guard implementations
 
 ### Phase 3: Component Decomposition (Week 5-6)
-1. Extract PaneGutter component
+1. ✅ Extract PaneGutter component (src/ui/components/pane/pane-gutter.ts)
 2. Extract PaneEditor component
-3. Extract InlineDiff component
+3. ✅ Extract InlineDiff component (src/ui/components/pane/inline-diff.ts)
 4. Refactor Pane as orchestrator
 
 ### Phase 4: State Management (Week 7-8)
-1. Create EditorStateManager
+1. ✅ Create EditorStateManager (src/state/editor-state.ts)
 2. Migrate state from App to state manager
-3. Add state change events
+3. ✅ Add state change events
 4. Update components to use state manager
 
 ### Phase 5: Error Handling (Week 9-10)
@@ -963,19 +963,27 @@ if (entry.type === 'command') {
 
 ## Appendix: File-by-File Changes Summary
 
-| File | Priority | Changes |
-|------|----------|---------|
-| `src/ui/colors.ts` | High | NEW - Shared color utilities |
-| `src/core/event-emitter.ts` | High | NEW - Typed event emitter |
-| `src/ui/components/component.interface.ts` | High | NEW - Component interfaces |
-| `src/constants.ts` | Medium | NEW - Centralized constants |
-| `src/core/result.ts` | Medium | NEW - Result type |
-| `src/core/errors.ts` | Medium | NEW - Error handling |
-| `src/ui/components/pane.ts` | High | Decompose into sub-components |
-| `src/ui/components/pane-manager.ts` | Medium | Remove duplicated utilities |
-| `src/features/git/git-integration.ts` | Medium | Consistent return types |
-| `src/ui/renderer.ts` | Low | Add render priorities |
-| `src/features/lsp/client.ts` | Low | Use Result type, improve errors |
+| File | Priority | Status | Changes |
+|------|----------|--------|---------|
+| `src/ui/colors.ts` | High | ✅ | NEW - Shared color utilities |
+| `src/core/event-emitter.ts` | High | ✅ | NEW - Typed event emitter |
+| `src/ui/components/component.interface.ts` | High | ✅ | NEW - Component interfaces |
+| `src/constants.ts` | High | ✅ | NEW - Centralized constants |
+| `src/core/result.ts` | Medium | ✅ | NEW - Result type |
+| `src/state/editor-state.ts` | Medium | ✅ | NEW - Centralized state management |
+| `src/ui/components/pane/pane-gutter.ts` | Medium | ✅ | NEW - Gutter rendering component |
+| `src/ui/components/pane/inline-diff.ts` | Medium | ✅ | NEW - Inline diff widget component |
+| `src/features/lsp/client.ts` | Medium | ✅ | Added LSPClient.create() factory method |
+| `src/ui/components/pane.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/pane-manager.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/file-tree.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/git-panel.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/terminal-pane.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/minimap.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/tab-bar.ts` | Medium | ✅ | Standardized callback return types |
+| `src/ui/components/editor-pane.ts` | Medium | ✅ | Standardized callback return types |
+| `src/core/errors.ts` | Standard | Pending | NEW - Error handling |
+| `src/ui/renderer.ts` | Standard | Pending | Add render priorities |
 
 ---
 

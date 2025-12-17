@@ -649,20 +649,24 @@ export class GitPanel implements MouseHandler {
   }
 
   // Callbacks
-  onFileSelect(callback: (filePath: string) => void): void {
+  onFileSelect(callback: (filePath: string) => void): () => void {
     this.onFileSelectCallback = callback;
+    return () => { this.onFileSelectCallback = undefined; };
   }
 
-  onRefresh(callback: () => void): void {
+  onRefresh(callback: () => void): () => void {
     this.onRefreshCallback = callback;
+    return () => { this.onRefreshCallback = undefined; };
   }
 
-  onFocus(callback: () => void): void {
+  onFocus(callback: () => void): () => void {
     this.onFocusCallback = callback;
+    return () => { this.onFocusCallback = undefined; };
   }
 
-  onCommitRequest(callback: () => void): void {
+  onCommitRequest(callback: () => void): () => void {
     this.onCommitRequestCallback = callback;
+    return () => { this.onCommitRequestCallback = undefined; };
   }
 }
 

@@ -1781,36 +1781,44 @@ export class Pane implements MouseHandler {
 
   // ==================== Callbacks ====================
 
-  onClick(callback: (position: Position, clickCount: number, event: MouseEvent) => void): void {
+  onClick(callback: (position: Position, clickCount: number, event: MouseEvent) => void): () => void {
     this.onClickCallback = callback;
+    return () => { this.onClickCallback = undefined; };
   }
 
-  onDrag(callback: (position: Position, event: MouseEvent) => void): void {
+  onDrag(callback: (position: Position, event: MouseEvent) => void): () => void {
     this.onDragCallback = callback;
+    return () => { this.onDragCallback = undefined; };
   }
 
-  onScroll(callback: (deltaX: number, deltaY: number) => void): void {
+  onScroll(callback: (deltaX: number, deltaY: number) => void): () => void {
     this.onScrollCallback = callback;
+    return () => { this.onScrollCallback = undefined; };
   }
 
-  onFocus(callback: () => void): void {
+  onFocus(callback: () => void): () => void {
     this.onFocusCallback = callback;
+    return () => { this.onFocusCallback = undefined; };
   }
 
-  onTabSelect(callback: (document: Document) => void): void {
+  onTabSelect(callback: (document: Document) => void): () => void {
     this.onTabSelectCallback = callback;
+    return () => { this.onTabSelectCallback = undefined; };
   }
 
-  onTabClose(callback: (document: Document, tabId: string) => void): void {
+  onTabClose(callback: (document: Document, tabId: string) => void): () => void {
     this.onTabCloseCallback = callback;
+    return () => { this.onTabCloseCallback = undefined; };
   }
 
-  onFoldToggle(callback: (line: number) => void): void {
+  onFoldToggle(callback: (line: number) => void): () => void {
     this.onFoldToggleCallback = callback;
+    return () => { this.onFoldToggleCallback = undefined; };
   }
 
-  onGitGutterClick(callback: (line: number) => void): void {
+  onGitGutterClick(callback: (line: number) => void): () => void {
     this.onGitGutterClickCallback = callback;
+    return () => { this.onGitGutterClickCallback = undefined; };
   }
 
   // ==================== Folding ====================
@@ -1989,15 +1997,17 @@ export class Pane implements MouseHandler {
   /**
    * Set callback for inline diff stage action
    */
-  onInlineDiffStage(callback: (filePath: string, line: number) => Promise<void>): void {
+  onInlineDiffStage(callback: (filePath: string, line: number) => Promise<void>): () => void {
     this.onInlineDiffStageCallback = callback;
+    return () => { this.onInlineDiffStageCallback = undefined; };
   }
 
   /**
    * Set callback for inline diff revert action
    */
-  onInlineDiffRevert(callback: (filePath: string, line: number) => Promise<void>): void {
+  onInlineDiffRevert(callback: (filePath: string, line: number) => Promise<void>): () => void {
     this.onInlineDiffRevertCallback = callback;
+    return () => { this.onInlineDiffRevertCallback = undefined; };
   }
 
 }
