@@ -21,6 +21,7 @@ import { commandPalette } from './ui/components/command-palette.ts';
 import { fileTree } from './ui/components/file-tree.ts';
 import { searchWidget } from './ui/components/search-widget.ts';
 import { inputDialog } from './ui/components/input-dialog.ts';
+import { commitDialog } from './ui/components/commit-dialog.ts';
 import { saveBrowser } from './ui/components/save-browser.ts';
 import { commandRegistry } from './input/commands.ts';
 import { keymap, type ParsedKey } from './input/keymap.ts';
@@ -505,6 +506,17 @@ export class App {
         if (['ESCAPE'].includes(event.key)) {
           signatureHelp.hide();
         }
+      }
+
+      // Handle commit dialog first if it's open
+      if (commitDialog.isOpen()) {
+        if (commitDialog.handleKey(event)) {
+          renderer.scheduleRender();
+          return;
+        }
+        // Consume all other keys while dialog is open
+        renderer.scheduleRender();
+        return;
       }
 
       // Handle input dialog first if it's open
@@ -1346,6 +1358,7 @@ export class App {
     });
 
     // Register mouse handlers (order matters - first handlers get priority)
+    mouseManager.registerHandler(commitDialog);
     mouseManager.registerHandler(commandPalette);
     mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
@@ -1710,6 +1723,9 @@ export class App {
 
     // Render input dialog (on top of everything)
     inputDialog.render(ctx);
+
+    // Render commit dialog (on top of everything)
+    commitDialog.render(ctx);
 
     // Render save browser (on top of everything)
     saveBrowser.render(ctx);
@@ -2379,12 +2395,10 @@ export class App {
         category: 'Git',
         handler: async () => {
           const editorRect = layoutManager.getEditorAreaRect();
-          inputDialog.show({
-            title: 'Commit Message',
-            placeholder: 'Enter commit message...',
-            initialValue: '',
+          commitDialog.show({
             screenWidth: renderer.width,
             screenHeight: renderer.height,
+            width: 70,
             editorX: editorRect.x,
             editorWidth: editorRect.width,
             onConfirm: async (message: string) => {
@@ -3776,12 +3790,10 @@ export class App {
     const height = renderer.height;
     const editorRect = layoutManager.getEditorAreaRect();
 
-    inputDialog.show({
-      title: 'Commit Message',
-      placeholder: 'Enter commit message...',
+    commitDialog.show({
       screenWidth: width,
       screenHeight: height,
-      width: 80,  // Wider for commit messages
+      width: 70,  // Good width for commit messages
       editorX: editorRect.x,
       editorWidth: editorRect.width,
       onConfirm: async (message) => {
