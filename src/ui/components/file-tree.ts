@@ -542,12 +542,18 @@ export class FileTree implements MouseHandler {
     
     const title = ' EXPLORER';
     output += title.padEnd(this.rect.width, ' ');
-    
+
+    // Separator line
+    output += moveTo(this.rect.x, this.rect.y + 1);
+    output += bgRgb(sidebarBg.r, sidebarBg.g, sidebarBg.b);
+    output += fgRgb(Math.floor(sidebarFg.r * 0.5), Math.floor(sidebarFg.g * 0.5), Math.floor(sidebarFg.b * 0.5));
+    output += '─'.repeat(this.rect.width);
+
     // Reserve space for help hint when focused (2 lines for dialog mode)
     const helpHeight = this.isFocused ? (this.dialogMode !== 'none' ? 2 : 1) : 0;
-    
-    // Draw file list
-    const visibleCount = this.getVisibleCount() - helpHeight;
+
+    // Draw file list (now starting at +2 for header and separator)
+    const visibleCount = this.getVisibleCount() - helpHeight - 1; // -1 for separator line
     
     // Calculate dimmed colors for hidden files
     const dimFg = { 
@@ -582,8 +588,8 @@ export class FileTree implements MouseHandler {
     
     for (let i = 0; i < visibleCount; i++) {
       const nodeIndex = this.scrollTop + i;
-      const screenY = this.rect.y + 1 + i;
-      
+      const screenY = this.rect.y + 2 + i; // +2 for header and separator
+
       output += moveTo(this.rect.x, screenY);
       
       if (nodeIndex < this.flatList.length) {
@@ -630,12 +636,12 @@ export class FileTree implements MouseHandler {
         
         // Indent (depth - 1 because root children are depth 1)
         const indent = '  '.repeat(Math.max(0, node.depth - 1));
-        
+
         // Icon
         const icon = this.getIcon(node);
-        
-        // Build line content
-        let lineContent = indent + icon + node.name;
+
+        // Build line content with 1-space gutter
+        let lineContent = ' ' + indent + icon + node.name;
         
         // Truncate if too long
         if (lineContent.length > this.rect.width) {
@@ -760,8 +766,8 @@ export class FileTree implements MouseHandler {
         }
 
         // Calculate which item was clicked
-        const clickY = event.y - this.rect.y - 1; // -1 for header
-        if (clickY < 0) return true; // Clicked on header
+        const clickY = event.y - this.rect.y - 2; // -2 for header and separator
+        if (clickY < 0) return true; // Clicked on header or separator
 
         const clickedIndex = this.scrollTop + clickY;
         if (clickedIndex < this.flatList.length) {
