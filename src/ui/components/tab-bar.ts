@@ -92,11 +92,11 @@ export class TabBar implements MouseHandler {
     const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
     // Get theme colors
-    let inactiveBg = this.hexToRgb(themeLoader.getColor('tab.inactiveBackground')) || { r: 41, g: 44, b: 60 };
-    let activeBg = this.hexToRgb(themeLoader.getColor('tab.activeBackground')) || { r: 48, g: 52, b: 70 };
-    let activeFg = this.hexToRgb(themeLoader.getColor('tab.activeForeground')) || { r: 198, g: 208, b: 245 };
-    let inactiveFg = this.hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
-    const borderColor = this.hexToRgb(themeLoader.getColor('tab.border')) || { r: 35, g: 38, b: 52 };
+    let inactiveBg = hexToRgb(themeLoader.getColor('tab.inactiveBackground')) || { r: 41, g: 44, b: 60 };
+    let activeBg = hexToRgb(themeLoader.getColor('tab.activeBackground')) || { r: 48, g: 52, b: 70 };
+    let activeFg = hexToRgb(themeLoader.getColor('tab.activeForeground')) || { r: 198, g: 208, b: 245 };
+    let inactiveFg = hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
+    const borderColor = hexToRgb(themeLoader.getColor('tab.border')) || { r: 35, g: 38, b: 52 };
     const dirtyColor = { r: 231, g: 130, b: 132 }; // Catppuccin red
 
     // Dim colors for unfocused pane

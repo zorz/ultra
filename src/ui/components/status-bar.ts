@@ -84,8 +84,8 @@ export class StatusBar {
     const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
     // Get theme colors
-    const statusBg = this.hexToRgb(themeLoader.getColor('statusBar.background')) || { r: 41, g: 44, b: 60 };
-    const statusFg = this.hexToRgb(themeLoader.getColor('statusBar.foreground')) || { r: 198, g: 208, b: 245 };
+    const statusBg = hexToRgb(themeLoader.getColor('statusBar.background')) || { r: 41, g: 44, b: 60 };
+    const statusFg = hexToRgb(themeLoader.getColor('statusBar.foreground')) || { r: 198, g: 208, b: 245 };
     const dimFg = { r: Math.floor(statusFg.r * 0.7), g: Math.floor(statusFg.g * 0.7), b: Math.floor(statusFg.b * 0.7) };
     const warningColor = { r: 231, g: 130, b: 132 }; // Catppuccin red for dirty indicator
     const accentColor = { r: 202, g: 158, b: 230 }; // Catppuccin mauve for branch

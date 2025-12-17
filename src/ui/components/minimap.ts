@@ -226,7 +226,7 @@ export class Minimap implements MouseHandler {
 
     // Get colors from theme
     const editorBgHex = themeLoader.getColor('editor.background');
-    const editorBg = this.hexToRgb(editorBgHex);
+    const editorBg = hexToRgb(editorBgHex);
     
     // Minimap background is slightly darker than editor
     const minimapBg = editorBg 
@@ -272,7 +272,7 @@ export class Minimap implements MouseHandler {
           const color = row.colors[i];
           
           if (color && char !== ' ') {
-            const rgb = this.hexToRgb(color);
+            const rgb = hexToRgb(color);
             if (rgb) {
               output += fgRgb(rgb.r, rgb.g, rgb.b);
             }
