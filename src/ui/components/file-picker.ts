@@ -11,6 +11,7 @@ import type { KeyEvent } from '../../terminal/input.ts';
 import { SearchableDialog, type SearchableDialogConfig, type ItemDisplayConfig } from './searchable-dialog.ts';
 import { RenderUtils } from '../render-utils.ts';
 import { fileSearch, type FileSearchResult } from '../../features/search/file-search.ts';
+import { themeLoader } from '../themes/theme-loader.ts';
 
 /**
  * File icons by extension
@@ -290,13 +291,16 @@ export class FilePicker extends SearchableDialog<FileSearchResult> {
 
       // File icon
       const icon = getFileIcon(result.name);
-      const iconColor = result.isHidden ? '#555555' : colors.hintForeground;
+      const iconColor = result.isHidden
+        ? themeLoader.adjustBrightness(colors.hintForeground, -30)
+        : colors.hintForeground;
       ctx.drawStyled(this._rect.x + 2, y, icon, iconColor, bgColor);
 
       // Filename
       let nameColor: string;
       if (result.isHidden) {
-        nameColor = isSelected ? '#a0a0a0' : '#707070';
+        const baseColor = isSelected ? colors.selectedForeground : colors.foreground;
+        nameColor = themeLoader.adjustBrightness(baseColor, -20);
       } else {
         nameColor = isSelected ? colors.selectedForeground : colors.foreground;
       }
@@ -306,8 +310,8 @@ export class FilePicker extends SearchableDialog<FileSearchResult> {
 
       // Directory path
       const pathColor = result.isHidden
-        ? (isSelected ? '#707070' : '#505050')
-        : (isSelected ? '#a0a0a0' : colors.hintForeground);
+        ? themeLoader.adjustBrightness(colors.hintForeground, -30)
+        : colors.hintForeground;
       const pathStart = this._rect.x + 6 + displayName.length;
       const pathMaxLen = listWidth - (pathStart - this._rect.x) - 1;
 

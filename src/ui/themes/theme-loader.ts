@@ -35,6 +35,13 @@ export interface ThemeColors {
   'input.foreground': string;
   'input.border': string;
   'focusBorder': string;
+  'foreground': string;
+  'panel.background': string;
+  'panel.border': string;
+  'panelTitle.activeForeground': string;
+  'descriptionForeground': string;
+  'errorForeground': string;
+  'successForeground': string;
   [key: string]: string;
 }
 
@@ -90,7 +97,14 @@ const defaultColors: ThemeColors = {
   'input.background': '#3c3c3c',
   'input.foreground': '#cccccc',
   'input.border': '#3c3c3c',
-  'focusBorder': '#007fd4'
+  'focusBorder': '#007fd4',
+  'foreground': '#cccccc',
+  'panel.background': '#252526',
+  'panel.border': '#3c3c3c',
+  'panelTitle.activeForeground': '#e7e7e7',
+  'descriptionForeground': '#ccccccb3',
+  'errorForeground': '#f48771',
+  'successForeground': '#89d185'
 };
 
 export class ThemeLoader {

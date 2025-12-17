@@ -105,6 +105,8 @@ export interface DialogColors {
   selectedBackground: string;
   selectedForeground: string;
   hintForeground: string;
+  successForeground: string;
+  errorForeground: string;
 }
 
 /**
@@ -122,7 +124,9 @@ export const DEFAULT_DIALOG_COLORS: DialogColors = {
   inputFocusBorder: '#007fd4',
   selectedBackground: '#3e5f8a',
   selectedForeground: '#ffffff',
-  hintForeground: '#888888'
+  hintForeground: '#888888',
+  successForeground: '#89d185',
+  errorForeground: '#f48771'
 };
 
 /**

@@ -168,7 +168,9 @@ export abstract class BaseDialog implements MouseHandler {
       inputFocusBorder: themeLoader.getColor('focusBorder') || DEFAULT_DIALOG_COLORS.inputFocusBorder,
       selectedBackground: themeLoader.getColor('list.activeSelectionBackground') || DEFAULT_DIALOG_COLORS.selectedBackground,
       selectedForeground: themeLoader.getColor('list.activeSelectionForeground') || DEFAULT_DIALOG_COLORS.selectedForeground,
-      hintForeground: themeLoader.getColor('descriptionForeground') || DEFAULT_DIALOG_COLORS.hintForeground
+      hintForeground: themeLoader.getColor('descriptionForeground') || DEFAULT_DIALOG_COLORS.hintForeground,
+      successForeground: themeLoader.getColor('successForeground') || DEFAULT_DIALOG_COLORS.successForeground,
+      errorForeground: themeLoader.getColor('errorForeground') || DEFAULT_DIALOG_COLORS.errorForeground
     };
   }
 

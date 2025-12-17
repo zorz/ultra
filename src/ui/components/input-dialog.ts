@@ -13,6 +13,7 @@ import type { KeyEvent } from '../../terminal/input.ts';
 import { BaseDialog, type BaseDialogConfig } from './base-dialog.ts';
 import { TextInput } from './text-input.ts';
 import { RenderUtils } from '../render-utils.ts';
+import { themeLoader } from '../themes/theme-loader.ts';
 
 /**
  * Configuration for InputDialog (new API)
@@ -368,7 +369,7 @@ export class InputDialog extends BaseDialog {
     const maxWidth = this._rect.width - 4;
 
     const text = this._validationError || this._hint;
-    const color = this._validationError ? '#f14c4c' : colors.hintForeground;
+    const color = this._validationError ? (themeLoader.getColor('errorForeground') || colors.hintForeground) : colors.hintForeground;
     const truncated = RenderUtils.truncateText(text, maxWidth);
 
     ctx.drawStyled(hintX, hintY, truncated, color, colors.background);

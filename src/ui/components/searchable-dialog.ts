@@ -573,7 +573,7 @@ export abstract class SearchableDialog<T> extends BaseDialog {
 
     // Current marker
     if (display.isCurrent) {
-      ctx.drawStyled(textX, y, '✓ ', '#98c379', bgColor);
+      ctx.drawStyled(textX, y, '✓ ', colors.successForeground, bgColor);
       textX += 2;
     }
 
@@ -585,7 +585,7 @@ export abstract class SearchableDialog<T> extends BaseDialog {
 
     // Secondary text (right-aligned)
     if (display.secondary) {
-      const secondaryColor = isSelected ? RenderUtils.lighten(colors.hintForeground, 20) : colors.hintForeground;
+      const secondaryColor = colors.hintForeground;
       const secondaryX = x + width - display.secondary.length - 2;
       if (secondaryX > textX + displayText.length + 2) {
         ctx.drawStyled(secondaryX, y, display.secondary, secondaryColor, bgColor);

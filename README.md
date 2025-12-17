@@ -197,23 +197,23 @@ Place VS Code-compatible theme JSON files in `~/.config/ultra/themes/`.
 ## Development Roadmap
 
 - [x] **Phase 1**: Core Editor MVP
-  - Piece table buffer
-  - Multi-cursor editing
-  - Basic UI (editor, tabs, status bar)
-  - Keybinding system
-  - File I/O
+  - [x] Piece table buffer
+  - [x] Multi-cursor editing
+  - [x] Basic UI (editor, tabs, status bar)
+  - [x] Keybinding system
+  - [x] File I/O
 
-- [ ] **Phase 2**: Enhanced Editing
-  - Tree-sitter syntax highlighting
-  - Auto-indent
-  - Bracket matching
-  - Code folding
+- [x] **Phase 2**: Enhanced Editing
+  - [x] Tree-sitter syntax highlighting
+  - [x] Auto-indent
+  - [x] Bracket matching
+  - [x] Code folding
 
 - [ ] **Phase 3**: IDE Features
-  - LSP integration
-  - File tree sidebar
+  - [x] LSP integration
+  - [x] File tree sidebar
   - Project-wide search
-  - Git integration
+  - [x] Git integration
 
 - [ ] **Phase 4**: AI Integration
   - Claude API integration

@@ -493,7 +493,7 @@ export class CommandPalette extends SearchableDialog<PaletteEntry> {
 
         // Category label (right-aligned)
         if (cmd.category) {
-          const categoryColor = isSelected ? '#a0a0a0' : colors.hintForeground;
+          const categoryColor = colors.hintForeground;
           const categoryX = this._rect.x + listWidth - cmd.category.length - 1;
           if (categoryX > this._rect.x + 5 + displayTitle.length + 2) {
             ctx.drawStyled(categoryX, y, cmd.category, categoryColor, bgColor);
@@ -549,7 +549,7 @@ export class CommandPalette extends SearchableDialog<PaletteEntry> {
 
         // Checkmark for current item
         const checkmark = isCurrent ? '✓ ' : '  ';
-        ctx.drawStyled(this._rect.x + 2, y, checkmark, '#98c379', bgColor);
+        ctx.drawStyled(this._rect.x + 2, y, checkmark, colors.successForeground, bgColor);
 
         // Item title
         const titleColor = isSelected ? colors.selectedForeground : colors.foreground;
@@ -559,7 +559,7 @@ export class CommandPalette extends SearchableDialog<PaletteEntry> {
 
         // Category label (right-aligned)
         if (item.category) {
-          const categoryColor = isSelected ? '#a0a0a0' : colors.hintForeground;
+          const categoryColor = colors.hintForeground;
           const categoryX = this._rect.x + listWidth - item.category.length - 1;
           if (categoryX > this._rect.x + 4 + displayTitle.length + 2) {
             ctx.drawStyled(categoryX, y, item.category, categoryColor, bgColor);
