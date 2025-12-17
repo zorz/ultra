@@ -12,6 +12,7 @@ import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import { highlighter as shikiHighlighter } from '../../features/syntax/shiki-highlighter.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
 import { settings } from '../../config/settings.ts';
+import { hexToRgb } from '../colors.ts';
 
 // Block characters for representing code density (from empty to full)
 const DENSITY_CHARS = [' ', '░', '▒', '▓', '█'];
@@ -379,19 +380,6 @@ export class Minimap implements MouseHandler {
     const linesPerRow = this.getLinesPerRow();
     const row = screenY - this.rect.y + this.scrollTop;
     return row * linesPerRow;
-  }
-
-  /**
-   * Convert hex color to RGB
-   */
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const match = hex?.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
-    if (!match) return null;
-    return {
-      r: parseInt(match[1]!, 16),
-      g: parseInt(match[2]!, 16),
-      b: parseInt(match[3]!, 16)
-    };
   }
 
   // MouseHandler implementation

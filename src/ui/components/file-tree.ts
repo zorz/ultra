@@ -11,6 +11,7 @@ import { themeLoader } from '../themes/theme-loader.ts';
 import { settings } from '../../config/settings.ts';
 import * as path from 'path';
 import * as fs from 'fs';
+import { hexToRgb } from '../colors.ts';
 
 export interface FileTreeNode {
   name: string;
@@ -525,13 +526,13 @@ export class FileTree implements MouseHandler {
     // Get colors from theme (adjust brightness when focused)
     const baseBgColor = themeLoader.getColor('sideBar.background');
     const bgColor = this.isFocused ? themeLoader.getFocusedBackground(baseBgColor) : baseBgColor;
-    const sidebarBg = this.hexToRgb(bgColor) || { r: 37, g: 37, b: 38 };
-    const sidebarFg = this.hexToRgb(themeLoader.getColor('sideBar.foreground')) || { r: 204, g: 204, b: 204 };
-    const titleFg = this.hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || { r: 187, g: 187, b: 187 };
-    const selectionBg = this.hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: 9, g: 71, b: 113 };
-    const selectionFg = this.hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || { r: 255, g: 255, b: 255 };
-    const hoverBg = this.hexToRgb(themeLoader.getColor('list.hoverBackground')) || { r: 42, g: 45, b: 46 };
-    const focusBorder = this.hexToRgb(themeLoader.getColor('focusBorder')) || { r: 0, g: 127, b: 212 };
+    const sidebarBg = hexToRgb(bgColor) || { r: 37, g: 37, b: 38 };
+    const sidebarFg = hexToRgb(themeLoader.getColor('sideBar.foreground')) || { r: 204, g: 204, b: 204 };
+    const titleFg = hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || { r: 187, g: 187, b: 187 };
+    const selectionBg = hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: 9, g: 71, b: 113 };
+    const selectionFg = hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || { r: 255, g: 255, b: 255 };
+    const hoverBg = hexToRgb(themeLoader.getColor('list.hoverBackground')) || { r: 42, g: 45, b: 46 };
+    const focusBorder = hexToRgb(themeLoader.getColor('focusBorder')) || { r: 0, g: 127, b: 212 };
     
     let output = '';
     
@@ -568,11 +569,11 @@ export class FileTree implements MouseHandler {
     };
     
     // Git status colors from theme
-    const gitAddedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
-    const gitModifiedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
-    const gitDeletedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
-    const gitUntrackedFg = this.hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
-    const gitConflictFg = this.hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || { r: 255, g: 123, b: 114 };
+    const gitAddedFg = hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
+    const gitModifiedFg = hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
+    const gitDeletedFg = hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
+    const gitUntrackedFg = hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
+    const gitConflictFg = hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || { r: 255, g: 123, b: 114 };
     
     // Subtle background tints for git status (blend with sidebar background)
     const blendBg = (color: { r: number; g: number; b: number }, amount: number) => ({
@@ -727,19 +728,6 @@ export class FileTree implements MouseHandler {
     
     output += reset;
     ctx.buffer(output);
-  }
-
-  /**
-   * Convert hex to RGB
-   */
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const match = hex?.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
-    if (!match) return null;
-    return {
-      r: parseInt(match[1]!, 16),
-      g: parseInt(match[2]!, 16),
-      b: parseInt(match[3]!, 16)
-    };
   }
 
   // MouseHandler implementation

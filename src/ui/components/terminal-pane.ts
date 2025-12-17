@@ -11,6 +11,7 @@ import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
 import { settings } from '../../config/settings.ts';
+import { hexToRgb } from '../colors.ts';
 
 interface TerminalInstance {
   id: string;
@@ -347,8 +348,8 @@ export class TerminalPane implements MouseHandler {
    * Render the title bar
    */
   private renderTitleBar(ctx: RenderContext): void {
-    const bgRgb = this.hexToRgb(this.titleBgColor);
-    const fgRgb = this.hexToRgb(this.titleFgColor);
+    const bgRgb = hexToRgb(this.titleBgColor);
+    const fgRgb = hexToRgb(this.titleFgColor);
     
     // Background
     let output = `\x1b[${this.rect.y};${this.rect.x}H`;
@@ -381,7 +382,7 @@ export class TerminalPane implements MouseHandler {
       output += `\x1b[${this.rect.y};${x}H`;
       
       if (isActive) {
-        const activeBg = this.hexToRgb(this.activeTitleBgColor);
+        const activeBg = hexToRgb(this.activeTitleBgColor);
         if (activeBg) output += `\x1b[48;2;${activeBg.r};${activeBg.g};${activeBg.b}m`;
       } else {
         if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
@@ -420,8 +421,8 @@ export class TerminalPane implements MouseHandler {
     const cursor = terminal.pty.getCursor();
     const viewOffset = terminal.pty.getViewOffset();
     
-    const defaultBg = this.hexToRgb(this.bgColor);
-    const defaultFg = this.hexToRgb(this.fgColor);
+    const defaultBg = hexToRgb(this.bgColor);
+    const defaultFg = hexToRgb(this.fgColor);
     
     for (let y = 0; y < contentRect.height; y++) {
       const line = buffer[y];
@@ -443,8 +444,8 @@ export class TerminalPane implements MouseHandler {
         const isCursor = this.isFocused && viewOffset === 0 && y === cursor.y && x === cursor.x;
         
         // Determine colors
-        let fg = cell.fg ? this.hexToRgb(cell.fg) : defaultFg;
-        let bg = cell.bg ? this.hexToRgb(cell.bg) : defaultBg;
+        let fg = cell.fg ? hexToRgb(cell.fg) : defaultFg;
+        let bg = cell.bg ? hexToRgb(cell.bg) : defaultBg;
         
         // Handle inverse
         if (cell.inverse) {
@@ -453,7 +454,7 @@ export class TerminalPane implements MouseHandler {
         
         // Cursor rendering
         if (isCursor) {
-          const cursorRgb = this.hexToRgb(this.cursorColor);
+          const cursorRgb = hexToRgb(this.cursorColor);
           bg = cursorRgb;
           fg = defaultBg;  // Invert text color at cursor
         }
@@ -489,8 +490,8 @@ export class TerminalPane implements MouseHandler {
    */
   private renderEmptyState(ctx: RenderContext): void {
     const contentRect = this.getTerminalContentRect();
-    const bg = this.hexToRgb(this.bgColor);
-    const fg = this.hexToRgb(this.fgColor);
+    const bg = hexToRgb(this.bgColor);
+    const fg = hexToRgb(this.fgColor);
     
     // Fill background
     for (let y = 0; y < contentRect.height; y++) {
@@ -599,18 +600,6 @@ export class TerminalPane implements MouseHandler {
    */
   onFocus(callback: () => void): void {
     this.onFocusCallback = callback;
-  }
-
-  /**
-   * Convert hex color to RGB
-   */
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1]!, 16),
-      g: parseInt(result[2]!, 16),
-      b: parseInt(result[3]!, 16)
-    } : null;
   }
 
   /**

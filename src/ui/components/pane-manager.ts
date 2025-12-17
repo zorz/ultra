@@ -13,6 +13,7 @@ import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import type { Position } from '../../core/buffer.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
 import { debugLog } from '../../debug.ts';
+import { hexToRgb } from '../colors.ts';
 
 interface LayoutNode {
   type: 'leaf' | 'horizontal' | 'vertical';
@@ -676,7 +677,7 @@ export class PaneManager implements MouseHandler {
     if (node.type === 'leaf' || !node.children) return;
     
     const dividerColor = themeLoader.getColor('editorGroup.border') || '#3e4451';
-    const rgb = this.hexToRgb(dividerColor);
+    const rgb = hexToRgb(dividerColor);
     if (!rgb) return;
     
     const fg = `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m`;
@@ -839,16 +840,6 @@ export class PaneManager implements MouseHandler {
     return this.getActivePane().getVisibleLineCount();
   }
 
-  // ==================== Utilities ====================
-
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1]!, 16),
-      g: parseInt(result[2]!, 16),
-      b: parseInt(result[3]!, 16)
-    } : null;
-  }
 }
 
 // Export singleton

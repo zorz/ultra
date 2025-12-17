@@ -17,6 +17,7 @@ import { minimap } from './minimap.ts';
 import { inFileSearch, type SearchMatch } from '../../features/search/in-file-search.ts';
 import { settings } from '../../config/settings.ts';
 import { findMatchingBracket, type BracketMatch } from '../../core/bracket-match.ts';
+import { hexToRgb } from '../colors.ts';
 
 // Represents a wrapped line segment
 interface WrappedLine {
@@ -507,8 +508,8 @@ export class EditorPane implements MouseHandler {
    */
   private buildEmptyLineString(textWidth: number): string {
     const bgRgb = (r: number, g: number, b: number) => `\x1b[48;2;${r};${g};${b}m`;
-    const gutterBgColor = this.hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
-    const editorBgColor = this.hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
+    const gutterBgColor = hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
+    const editorBgColor = hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
     
     let output = '';
     output += bgRgb(gutterBgColor.r, gutterBgColor.g, gutterBgColor.b) + ' '.repeat(this.gutterWidth);
@@ -530,16 +531,16 @@ export class EditorPane implements MouseHandler {
     const fgRgb = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
     
     // Get theme colors
-    const gutterBgColor = this.hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
-    const lineNumColor = this.hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 73, g: 81, b: 98 };
-    const lineNumActiveColor = this.hexToRgb(themeLoader.getColor('editorLineNumber.activeForeground')) || { r: 171, g: 178, b: 191 };
-    const editorBgColor = this.hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
-    const lineHighlightColor = this.hexToRgb(themeLoader.getColor('editor.lineHighlightBackground')) || { r: 44, g: 49, b: 60 };
-    const selectionBgColor = this.hexToRgb(themeLoader.getColor('editor.selectionBackground')) || { r: 62, g: 68, b: 81 };
-    const defaultFgColor = this.hexToRgb(themeLoader.getColor('editor.foreground')) || { r: 171, g: 178, b: 191 };
-    const findMatchBgColor = this.hexToRgb(themeLoader.getColor('editor.findMatchBackground')) || { r: 81, g: 92, b: 106 };
-    const findMatchHighlightBgColor = this.hexToRgb(themeLoader.getColor('editor.findMatchHighlightBackground')) || { r: 234, g: 92, b: 0 };
-    const bracketMatchBgColor = this.hexToRgb(themeLoader.getColor('editorBracketMatch.background')) || lineHighlightColor;
+    const gutterBgColor = hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
+    const lineNumColor = hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 73, g: 81, b: 98 };
+    const lineNumActiveColor = hexToRgb(themeLoader.getColor('editorLineNumber.activeForeground')) || { r: 171, g: 178, b: 191 };
+    const editorBgColor = hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
+    const lineHighlightColor = hexToRgb(themeLoader.getColor('editor.lineHighlightBackground')) || { r: 44, g: 49, b: 60 };
+    const selectionBgColor = hexToRgb(themeLoader.getColor('editor.selectionBackground')) || { r: 62, g: 68, b: 81 };
+    const defaultFgColor = hexToRgb(themeLoader.getColor('editor.foreground')) || { r: 171, g: 178, b: 191 };
+    const findMatchBgColor = hexToRgb(themeLoader.getColor('editor.findMatchBackground')) || { r: 81, g: 92, b: 106 };
+    const findMatchHighlightBgColor = hexToRgb(themeLoader.getColor('editor.findMatchHighlightBackground')) || { r: 234, g: 92, b: 0 };
+    const bracketMatchBgColor = hexToRgb(themeLoader.getColor('editorBracketMatch.background')) || lineHighlightColor;
     
     let output = '';
     const lineNum = wrap.bufferLine;
@@ -636,7 +637,7 @@ export class EditorPane implements MouseHandler {
       // Apply foreground color from syntax highlighting
       const tokenColor = col < colorMap.length ? colorMap[col] : null;
       if (tokenColor) {
-        const rgb = this.hexToRgb(tokenColor);
+        const rgb = hexToRgb(tokenColor);
         if (rgb) {
           const newFgKey = this.rgbToKey(rgb);
           if (newFgKey !== currentFgKey) {
@@ -676,20 +677,20 @@ export class EditorPane implements MouseHandler {
     const reset = '\x1b[0m';
     
     // Get theme colors
-    const gutterBgColor = this.hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
-    const lineNumColor = this.hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 73, g: 81, b: 98 };
-    const lineNumActiveColor = this.hexToRgb(themeLoader.getColor('editorLineNumber.activeForeground')) || { r: 171, g: 178, b: 191 };
-    const editorBgColor = this.hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
-    const lineHighlightColor = this.hexToRgb(themeLoader.getColor('editor.lineHighlightBackground')) || { r: 44, g: 49, b: 60 };
-    const selectionBgColor = this.hexToRgb(themeLoader.getColor('editor.selectionBackground')) || { r: 62, g: 68, b: 81 };
-    const defaultFgColor = this.hexToRgb(themeLoader.getColor('editor.foreground')) || { r: 171, g: 178, b: 191 };
+    const gutterBgColor = hexToRgb(themeLoader.getColor('editorGutter.background')) || { r: 40, g: 44, b: 52 };
+    const lineNumColor = hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 73, g: 81, b: 98 };
+    const lineNumActiveColor = hexToRgb(themeLoader.getColor('editorLineNumber.activeForeground')) || { r: 171, g: 178, b: 191 };
+    const editorBgColor = hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
+    const lineHighlightColor = hexToRgb(themeLoader.getColor('editor.lineHighlightBackground')) || { r: 44, g: 49, b: 60 };
+    const selectionBgColor = hexToRgb(themeLoader.getColor('editor.selectionBackground')) || { r: 62, g: 68, b: 81 };
+    const defaultFgColor = hexToRgb(themeLoader.getColor('editor.foreground')) || { r: 171, g: 178, b: 191 };
     
     // Search match highlight colors
-    const findMatchBgColor = this.hexToRgb(themeLoader.getColor('editor.findMatchBackground')) || { r: 81, g: 92, b: 106 };
-    const findMatchHighlightBgColor = this.hexToRgb(themeLoader.getColor('editor.findMatchHighlightBackground')) || { r: 234, g: 92, b: 0 };
+    const findMatchBgColor = hexToRgb(themeLoader.getColor('editor.findMatchBackground')) || { r: 81, g: 92, b: 106 };
+    const findMatchHighlightBgColor = hexToRgb(themeLoader.getColor('editor.findMatchHighlightBackground')) || { r: 234, g: 92, b: 0 };
     
     // Bracket match highlight color - use line highlight as fallback
-    const bracketMatchBgColor = this.hexToRgb(themeLoader.getColor('editorBracketMatch.background')) || lineHighlightColor;
+    const bracketMatchBgColor = hexToRgb(themeLoader.getColor('editorBracketMatch.background')) || lineHighlightColor;
     
     let output = '';
     
@@ -790,7 +791,7 @@ export class EditorPane implements MouseHandler {
         // Apply foreground color from syntax highlighting
         const tokenColor = col < colorMap.length ? colorMap[col] : null;
         if (tokenColor) {
-          const rgb = this.hexToRgb(tokenColor);
+          const rgb = hexToRgb(tokenColor);
           if (rgb && this.rgbToKey(rgb) !== currentFgKey) {
             currentFgKey = this.rgbToKey(rgb);
             output += fgRgb(rgb.r, rgb.g, rgb.b);
@@ -891,19 +892,6 @@ export class EditorPane implements MouseHandler {
   }
 
   /**
-   * Convert hex color to RGB
-   */
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
-    if (!match) return null;
-    return {
-      r: parseInt(match[1]!, 16),
-      g: parseInt(match[2]!, 16),
-      b: parseInt(match[3]!, 16)
-    };
-  }
-
-  /**
    * Create a unique key for an RGB color (for comparison)
    */
   private rgbToKey(rgb: { r: number; g: number; b: number }): number {
@@ -919,8 +907,8 @@ export class EditorPane implements MouseHandler {
     const reset = '\x1b[0m';
     const moveTo = (x: number, y: number) => `\x1b[${y};${x}H`;
     
-    const editorBg = this.hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
-    const fgColor = this.hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 133, g: 133, b: 133 };
+    const editorBg = hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
+    const fgColor = hexToRgb(themeLoader.getColor('editorLineNumber.foreground')) || { r: 133, g: 133, b: 133 };
     
     let output = '';
     const emptyLine = bgRgb(editorBg.r, editorBg.g, editorBg.b) + ' '.repeat(Math.max(0, this.rect.width)) + reset;
@@ -950,8 +938,8 @@ export class EditorPane implements MouseHandler {
     const moveTo = (x: number, y: number) => `\x1b[${y};${x}H`;
     
     // Get cursor color from theme
-    const cursorColor = this.hexToRgb(themeLoader.getColor('editorCursor.foreground')) || { r: 82, g: 139, b: 255 };
-    const editorBg = this.hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
+    const cursorColor = hexToRgb(themeLoader.getColor('editorCursor.foreground')) || { r: 82, g: 139, b: 255 };
+    const editorBg = hexToRgb(themeLoader.getColor('editor.background')) || { r: 40, g: 44, b: 52 };
     
     let output = '';
     const wordWrapEnabled = this.isWordWrapEnabled();

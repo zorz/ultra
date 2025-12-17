@@ -1,8 +1,10 @@
 /**
  * Theme Loader
- * 
+ *
  * Loads and parses VS Code compatible theme JSON files.
  */
+
+import { hexToRgb as sharedHexToRgb } from '../colors.ts';
 
 export interface ThemeColors {
   'editor.background': string;
@@ -272,16 +274,10 @@ export class ThemeLoader {
 
   /**
    * Convert hex color to RGB
+   * @deprecated Use hexToRgb from '../colors.ts' directly
    */
   hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    hex = hex.replace('#', '');
-    if (hex.length !== 6) return null;
-    
-    return {
-      r: parseInt(hex.substr(0, 2), 16),
-      g: parseInt(hex.substr(2, 2), 16),
-      b: parseInt(hex.substr(4, 2), 16)
-    };
+    return sharedHexToRgb(hex);
   }
 }
 

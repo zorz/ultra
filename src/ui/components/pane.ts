@@ -21,6 +21,7 @@ import { settings } from '../../config/settings.ts';
 import { findMatchingBracket, type BracketMatch } from '../../core/bracket-match.ts';
 import { debugLog } from '../../debug.ts';
 import type { GitLineChange } from '../../features/git/git-integration.ts';
+import { hexToRgb, blendColors } from '../colors.ts';
 
 // Represents a wrapped line segment
 interface WrappedLine {
@@ -761,7 +762,7 @@ export class Pane implements MouseHandler {
     // Note: We skip the editor content area to avoid covering the git gutter
     // The tab bar already shows focus state, so this is just for the bottom area
     const accentColor = themeLoader.getColor('focusBorder') || '#528bff';
-    const rgb = this.hexToRgb(accentColor);
+    const rgb = hexToRgb(accentColor);
     if (!rgb) return;
     
     const fgRgb = `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m`;
@@ -826,7 +827,7 @@ export class Pane implements MouseHandler {
     debugLog(`[Pane ${this.id}] renderEditor: doc=${doc ? 'exists' : 'null'}, editorRect=${JSON.stringify(editorRect)}`);
     
     // Background
-    const bgRgb = this.hexToRgb(this.theme.background);
+    const bgRgb = hexToRgb(this.theme.background);
     if (bgRgb) {
       const bg = `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
       for (let y = editorRect.y; y < editorRect.y + editorRect.height; y++) {
@@ -852,7 +853,7 @@ export class Pane implements MouseHandler {
     const x = rect.x + Math.floor((rect.width - message.length) / 2);
     const y = rect.y + Math.floor(rect.height / 2);
     
-    const fgRgb = this.hexToRgb(this.theme.lineNumberForeground);
+    const fgRgb = hexToRgb(this.theme.lineNumberForeground);
     const fg = fgRgb ? `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m` : '';
     
     ctx.buffer(`\x1b[${y};${x}H${fg}${message}\x1b[0m`);
@@ -975,8 +976,8 @@ export class Pane implements MouseHandler {
     // We'll darken the gutter colors to create subtle background highlights
     const addedGutterColor = colors['editorGutter.addedBackground'] || '#a6e3a1';
     const deletedGutterColor = colors['editorGutter.deletedBackground'] || '#f38ba8';
-    const addedBg = this.blendColor(bgColor, addedGutterColor, 0.15);
-    const deletedBg = this.blendColor(bgColor, deletedGutterColor, 0.15);
+    const addedBg = blendColors(bgColor, addedGutterColor, 0.15);
+    const deletedBg = blendColors(bgColor, deletedGutterColor, 0.15);
     const addedFg = colors['gitDecoration.addedResourceForeground'] || addedGutterColor;
     const deletedFg = colors['gitDecoration.deletedResourceForeground'] || deletedGutterColor;
     const headerBg = colors['editorWidget.background'] || '#252526';
@@ -1061,9 +1062,9 @@ export class Pane implements MouseHandler {
     const lineNumStr = String(lineNum + 1).padStart(digits, ' ');
     
     const lnColor = isCurrentLine 
-      ? this.hexToRgb(this.theme.lineNumberActiveForeground)
-      : this.hexToRgb(this.theme.lineNumberForeground);
-    const gutterBg = this.hexToRgb(this.theme.gutterBackground);
+      ? hexToRgb(this.theme.lineNumberActiveForeground)
+      : hexToRgb(this.theme.lineNumberForeground);
+    const gutterBg = hexToRgb(this.theme.gutterBackground);
     
     let output = `\x1b[${screenY};${rect.x}H`;
     if (gutterBg) output += `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m`;
@@ -1108,7 +1109,7 @@ export class Pane implements MouseHandler {
       // Use line number color for fold indicator to blend with theme
       const foldColor = themeLoader.getColor('editorLineNumber.foreground') || 
                         this.theme.lineNumberForeground || '#626880';
-      const foldRgb = this.hexToRgb(foldColor);
+      const foldRgb = hexToRgb(foldColor);
       if (foldRgb) {
         output += `\x1b[38;2;${foldRgb.r};${foldRgb.g};${foldRgb.b}m`;
       }
@@ -1128,11 +1129,11 @@ export class Pane implements MouseHandler {
       // Use a subtle background for folded indicator - blend with line highlight or use comment color
       const foldBgColor = themeLoader.getColor('editor.lineHighlightBackground') || 
                           themeLoader.getColor('editor.background') || '#2c313c';
-      const foldBgRgb = this.hexToRgb(foldBgColor);
+      const foldBgRgb = hexToRgb(foldBgColor);
       // Use a muted foreground color (comment color or dimmed foreground)
       const foldFgColor = themeLoader.getColor('editorLineNumber.foreground') || 
                           themeLoader.getColor('editor.foreground') || '#626880';
-      const foldFgRgb = this.hexToRgb(foldFgColor);
+      const foldFgRgb = hexToRgb(foldFgColor);
       
       // Render the first part of the line content
       const contentWidth = rect.width - this.gutterWidth;
@@ -1142,7 +1143,7 @@ export class Pane implements MouseHandler {
       // Apply line highlight if current line
       let lineBg: { r: number; g: number; b: number } | null = null;
       if (isCurrentLine && this.isFocused) {
-        lineBg = this.hexToRgb(this.theme.lineHighlightBackground);
+        lineBg = hexToRgb(this.theme.lineHighlightBackground);
       }
       
       if (lineBg) {
@@ -1153,7 +1154,7 @@ export class Pane implements MouseHandler {
       if (lineTokens.length > 0) {
         output += this.renderTextWithSelection(truncatedText, lineTokens, startCol, truncatedText.length, -1, -1, lineBg, null);
       } else {
-        const fgColor = this.hexToRgb(this.theme.foreground);
+        const fgColor = hexToRgb(this.theme.foreground);
         if (fgColor) output += `\x1b[38;2;${fgColor.r};${fgColor.g};${fgColor.b}m`;
         output += truncatedText;
       }
@@ -1183,7 +1184,7 @@ export class Pane implements MouseHandler {
     // Determine background color for line
     let lineBg: { r: number; g: number; b: number } | null = null;
     if (isCurrentLine && this.isFocused) {
-      lineBg = this.hexToRgb(this.theme.lineHighlightBackground);
+      lineBg = hexToRgb(this.theme.lineHighlightBackground);
     }
     
     // Get selection range for this line (if any)
@@ -1201,7 +1202,7 @@ export class Pane implements MouseHandler {
       }
     }
     
-    const selBg = this.hexToRgb(this.theme.selectionBackground);
+    const selBg = hexToRgb(this.theme.selectionBackground);
     
     // Content with syntax highlighting and selection
     const contentWidth = rect.width - this.gutterWidth;
@@ -1283,9 +1284,9 @@ export class Pane implements MouseHandler {
     const lineNumStr = wrap.isFirstWrap ? String(wrap.bufferLine + 1).padStart(digits, ' ') : ' '.repeat(digits);
 
     const lnColor = isCurrentLine
-      ? this.hexToRgb(this.theme.lineNumberActiveForeground)
-      : this.hexToRgb(this.theme.lineNumberForeground);
-    const gutterBg = this.hexToRgb(this.theme.gutterBackground);
+      ? hexToRgb(this.theme.lineNumberActiveForeground)
+      : hexToRgb(this.theme.lineNumberForeground);
+    const gutterBg = hexToRgb(this.theme.gutterBackground);
 
     let output = `\x1b[${screenY};${rect.x}H`;
     if (gutterBg) output += `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m`;
@@ -1333,7 +1334,7 @@ export class Pane implements MouseHandler {
       if (canFold) {
         const foldColor = themeLoader.getColor('editorLineNumber.foreground') ||
                           this.theme.lineNumberForeground || '#626880';
-        const foldRgb = this.hexToRgb(foldColor);
+        const foldRgb = hexToRgb(foldColor);
         if (foldRgb) {
           output += `\x1b[38;2;${foldRgb.r};${foldRgb.g};${foldRgb.b}m`;
         }
@@ -1351,7 +1352,7 @@ export class Pane implements MouseHandler {
     // Determine background color for line
     let lineBg: { r: number; g: number; b: number } | null = null;
     if (isCurrentLine && this.isFocused) {
-      lineBg = this.hexToRgb(this.theme.lineHighlightBackground);
+      lineBg = hexToRgb(this.theme.lineHighlightBackground);
     }
 
     // Get selection range for this line segment
@@ -1371,7 +1372,7 @@ export class Pane implements MouseHandler {
       }
     }
 
-    const selBg = this.hexToRgb(this.theme.selectionBackground);
+    const selBg = hexToRgb(this.theme.selectionBackground);
 
     // Content with syntax highlighting and selection
     const contentWidth = rect.width - this.gutterWidth;
@@ -1415,7 +1416,7 @@ export class Pane implements MouseHandler {
     if (text.length === 0) return '';
     
     let result = '';
-    const defaultFg = this.hexToRgb(this.theme.foreground);
+    const defaultFg = hexToRgb(this.theme.foreground);
     
     // Build a color map for each character position
     const charColors: (string | null)[] = new Array(text.length).fill(null);
@@ -1451,7 +1452,7 @@ export class Pane implements MouseHandler {
       
       // Set foreground
       if (currentFg) {
-        const rgb = this.hexToRgb(currentFg);
+        const rgb = hexToRgb(currentFg);
         if (rgb) {
           style += `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m`;
         }
@@ -1514,7 +1515,7 @@ export class Pane implements MouseHandler {
     const cursorX = rect.x + this.gutterWidth + screenCol;
     const cursorY = rect.y + screenLine;
 
-    const cursorColor = this.hexToRgb(this.theme.cursorForeground);
+    const cursorColor = hexToRgb(this.theme.cursorForeground);
     if (cursorColor) {
       ctx.buffer(`\x1b[${cursorY};${cursorX}H\x1b[48;2;${cursorColor.r};${cursorColor.g};${cursorColor.b}m \x1b[0m`);
     }
@@ -1999,33 +2000,4 @@ export class Pane implements MouseHandler {
     this.onInlineDiffRevertCallback = callback;
   }
 
-  // ==================== Utilities ====================
-
-  private hexToRgb(hex: string | undefined): { r: number; g: number; b: number } | null {
-    if (!hex) return null;
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1]!, 16),
-      g: parseInt(result[2]!, 16),
-      b: parseInt(result[3]!, 16)
-    } : null;
-  }
-
-  /**
-   * Blend two hex colors together
-   * @param base - Base color (hex)
-   * @param blend - Color to blend in (hex)
-   * @param amount - Blend amount (0-1, where 0 is all base, 1 is all blend)
-   */
-  private blendColor(base: string, blend: string, amount: number): string {
-    const baseRgb = this.hexToRgb(base);
-    const blendRgb = this.hexToRgb(blend);
-    if (!baseRgb || !blendRgb) return base;
-    
-    const r = Math.round(baseRgb.r + (blendRgb.r - baseRgb.r) * amount);
-    const g = Math.round(baseRgb.g + (blendRgb.g - baseRgb.g) * amount);
-    const b = Math.round(baseRgb.b + (blendRgb.b - baseRgb.b) * amount);
-    
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-  }
 }

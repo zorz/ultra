@@ -147,26 +147,22 @@ export const PASTE = {
   end: `${ESC}[201~`,
 };
 
+// Import shared color utilities
+import { hexToRgbTuple } from '../ui/colors.ts';
+
 /**
  * Convert hex color to RGB tuple
+ * @deprecated Use hexToRgbTuple from '../ui/colors.ts' directly
  */
 export function hexToRgb(hex: string): [number, number, number] {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (result) {
-    return [
-      parseInt(result[1]!, 16),
-      parseInt(result[2]!, 16),
-      parseInt(result[3]!, 16)
-    ];
-  }
-  return [255, 255, 255];  // Default to white
+  return hexToRgbTuple(hex);
 }
 
 /**
  * Create foreground color from hex
  */
 export function fgHex(hex: string): string {
-  const [r, g, b] = hexToRgb(hex);
+  const [r, g, b] = hexToRgbTuple(hex);
   return FG.rgb(r, g, b);
 }
 
@@ -174,7 +170,7 @@ export function fgHex(hex: string): string {
  * Create background color from hex
  */
 export function bgHex(hex: string): string {
-  const [r, g, b] = hexToRgb(hex);
+  const [r, g, b] = hexToRgbTuple(hex);
   return BG.rgb(r, g, b);
 }
 

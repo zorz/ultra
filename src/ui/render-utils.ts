@@ -8,15 +8,16 @@
 import type { RenderContext } from './renderer.ts';
 import type { Rect } from './layout.ts';
 import { BORDER_CHARS, type BorderStyle, type TextAlign } from './types.ts';
+import {
+  hexToRgb,
+  rgbToHex,
+  lighten,
+  darken,
+  type RGB,
+} from './colors.ts';
 
-/**
- * RGB color representation
- */
-export interface RGB {
-  r: number;
-  g: number;
-  b: number;
-}
+// Re-export RGB type for backward compatibility
+export type { RGB };
 
 /**
  * Utility class for common rendering operations
@@ -26,51 +27,34 @@ export class RenderUtils {
    * Convert hex color string to RGB object
    * @param hex - Color in #RRGGBB format
    * @returns RGB object or null if invalid
+   * @deprecated Use hexToRgb from './colors.ts' directly
    */
   static hexToRgb(hex: string): RGB | null {
-    if (!hex || !hex.startsWith('#')) return null;
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1]!, 16),
-      g: parseInt(result[2]!, 16),
-      b: parseInt(result[3]!, 16)
-    } : null;
+    return hexToRgb(hex);
   }
 
   /**
    * Convert RGB to hex string
+   * @deprecated Use rgbToHex from './colors.ts' directly
    */
   static rgbToHex(rgb: RGB): string {
-    const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
-    return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
+    return rgbToHex(rgb);
   }
 
   /**
    * Lighten a hex color by a percentage
+   * @deprecated Use lighten from './colors.ts' directly
    */
   static lighten(hex: string, percent: number): string {
-    const rgb = this.hexToRgb(hex);
-    if (!rgb) return hex;
-    const factor = percent / 100;
-    return this.rgbToHex({
-      r: Math.round(rgb.r + (255 - rgb.r) * factor),
-      g: Math.round(rgb.g + (255 - rgb.g) * factor),
-      b: Math.round(rgb.b + (255 - rgb.b) * factor)
-    });
+    return lighten(hex, percent);
   }
 
   /**
    * Darken a hex color by a percentage
+   * @deprecated Use darken from './colors.ts' directly
    */
   static darken(hex: string, percent: number): string {
-    const rgb = this.hexToRgb(hex);
-    if (!rgb) return hex;
-    const factor = 1 - percent / 100;
-    return this.rgbToHex({
-      r: Math.round(rgb.r * factor),
-      g: Math.round(rgb.g * factor),
-      b: Math.round(rgb.b * factor)
-    });
+    return darken(hex, percent);
   }
 
   /**

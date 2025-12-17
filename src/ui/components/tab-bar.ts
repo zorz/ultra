@@ -8,6 +8,7 @@ import type { RenderContext } from '../renderer.ts';
 import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
+import { hexToRgb } from '../colors.ts';
 
 export interface Tab {
   id: string;
@@ -167,19 +168,6 @@ export class TabBar implements MouseHandler {
       r: Math.floor(color.r * factor),
       g: Math.floor(color.g * factor),
       b: Math.floor(color.b * factor)
-    };
-  }
-
-  /**
-   * Convert hex to RGB
-   */
-  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-    const match = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
-    if (!match) return null;
-    return {
-      r: parseInt(match[1]!, 16),
-      g: parseInt(match[2]!, 16),
-      b: parseInt(match[3]!, 16)
     };
   }
 
