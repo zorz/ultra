@@ -242,18 +242,27 @@ export class PaneManager implements MouseHandler {
     
     if (!parent) {
       // Splitting root node - create a new container
-      // IMPORTANT: Create a copy of the node to avoid reusing the root reference
+      // IMPORTANT: Create a DEEP copy of the node to avoid any shared references
+      // This is critical for proper tree management after close/split cycles
       const nodeCopy: LayoutNode = {
         type: node.type,
         pane: node.pane,
-        children: node.children,
-        ratio: node.ratio
+        // Deep copy arrays to prevent any reference sharing issues
+        children: node.children ? [...node.children] : undefined,
+        ratio: node.ratio ? [...node.ratio] : undefined
       };
+
+      // Clear the old root's references before reassigning
+      // This ensures no stale references remain
+      const oldRoot = this.root;
+
       this.root = {
         type: direction,
         children: [nodeCopy, newNode],
         ratio: [0.5, 0.5]
       };
+
+      debugLog(`[PaneManager] splitPane: split root node, oldRoot.type=${oldRoot.type}, newRoot.type=${this.root.type}`);
     } else {
       // Always wrap the selected pane in a new container with the new pane
       // This ensures we split just this pane, not add to a container of siblings
@@ -273,6 +282,7 @@ export class PaneManager implements MouseHandler {
     this.recalculateLayout();
 
     debugLog(`[PaneManager] splitPane: tree after split:\n${this.dumpTree(this.root)}`);
+    debugLog(`[PaneManager] splitPane: panes.size=${this.panes.size}, panes=[${Array.from(this.panes.keys()).join(', ')}]`);
 
     return newPane;
   }
@@ -319,6 +329,7 @@ export class PaneManager implements MouseHandler {
     this.recalculateLayout();
 
     debugLog(`[PaneManager] closePane: tree after close:\n${this.dumpTree(this.root)}`);
+    debugLog(`[PaneManager] closePane: panes.size=${this.panes.size}, panes=[${Array.from(this.panes.keys()).join(', ')}]`);
 
     return true;
   }
@@ -400,11 +411,18 @@ export class PaneManager implements MouseHandler {
     const child = node.children[0]!;
     debugLog(`[PaneManager] collapseNode: collapsing container(${node.type}) with child(${child.type}, pane=${child.pane?.id ?? 'none'})`);
 
-    // Completely replace node contents with child
-    node.type = child.type;
-    node.pane = child.pane;
-    node.children = child.children;
-    node.ratio = child.ratio;
+    // Store child properties before modifying node to avoid any reference issues
+    const childType = child.type;
+    const childPane = child.pane;
+    // Deep copy arrays to prevent shared references
+    const childChildren = child.children ? [...child.children] : undefined;
+    const childRatio = child.ratio ? [...child.ratio] : undefined;
+
+    // Completely replace node contents with child's properties
+    node.type = childType;
+    node.pane = childPane;
+    node.children = childChildren;
+    node.ratio = childRatio;
 
     // Clean up: leaf nodes shouldn't have children/ratio, containers shouldn't have pane
     if (node.type === 'leaf') {
@@ -547,17 +565,48 @@ export class PaneManager implements MouseHandler {
   // ==================== Rendering ====================
 
   /**
+   * Validate tree consistency - checks that Map and tree have same panes
+   * Returns true if consistent, logs errors and returns false if not
+   */
+  private validateTreeConsistency(): boolean {
+    const panesInTree = this.collectPanesFromTree(this.root);
+    const panesInMap = new Set(this.panes.keys());
+
+    // Check sizes match
+    if (panesInTree.size !== panesInMap.size) {
+      debugLog(`[PaneManager] INCONSISTENCY: Map has ${panesInMap.size} panes, tree has ${panesInTree.size}`);
+      debugLog(`[PaneManager] Panes in map: ${Array.from(panesInMap).join(', ')}`);
+      debugLog(`[PaneManager] Panes in tree: ${Array.from(panesInTree).join(', ')}`);
+      return false;
+    }
+
+    // Check each pane in map exists in tree
+    for (const paneId of panesInMap) {
+      if (!panesInTree.has(paneId)) {
+        debugLog(`[PaneManager] INCONSISTENCY: Pane ${paneId} in Map but not in tree`);
+        return false;
+      }
+    }
+
+    // Check each pane in tree exists in map
+    for (const paneId of panesInTree) {
+      if (!panesInMap.has(paneId)) {
+        debugLog(`[PaneManager] INCONSISTENCY: Pane ${paneId} in tree but not in Map`);
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Render all panes
    */
   render(ctx: RenderContext): void {
-    // Verify tree consistency (only in debug mode)
-    if (process.env.DEBUG) {
-      const panesInTree = this.collectPanesFromTree(this.root);
-      if (panesInTree.size !== this.panes.size) {
-        debugLog(`[PaneManager] ERROR: panes.size=${this.panes.size} but tree has ${panesInTree.size} panes!`);
-        debugLog(`[PaneManager] Panes in map: ${Array.from(this.panes.keys()).join(', ')}`);
-        debugLog(`[PaneManager] Panes in tree: ${Array.from(panesInTree).join(', ')}`);
-      }
+    // Always verify tree consistency and log any issues
+    if (!this.validateTreeConsistency()) {
+      debugLog(`[PaneManager] WARNING: Tree inconsistency detected during render!`);
+      debugLog(`[PaneManager] Current tree:\n${this.dumpTree(this.root)}`);
     }
 
     this.renderNode(ctx, this.root);
