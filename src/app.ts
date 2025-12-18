@@ -490,9 +490,9 @@ export class App {
       const ui = {
         sidebarVisible: saveUILayout ? settings.get('workbench.sideBar.visible') : true,
         sidebarWidth: saveUILayout ? (settings.get('ultra.sidebar.width') || 30) : 30,
-        terminalVisible: saveUILayout ? terminalPane.isVisible() : false,
+        terminalVisible: saveUILayout ? layoutManager.isTerminalVisible() : false,
         terminalHeight: saveUILayout ? (settings.get('terminal.integrated.defaultHeight') || 12) : 12,
-        gitPanelVisible: saveUILayout ? gitPanel.isVisible() : false,
+        gitPanelVisible: saveUILayout ? gitPanel.isOpen() : false,
         gitPanelWidth: 30,
         activeSidebarPanel: 'files' as const,
         minimapEnabled: saveUILayout ? settings.get('editor.minimap.enabled') : true
@@ -699,9 +699,16 @@ export class App {
    * Save current session
    */
   async saveSession(): Promise<void> {
-    if (this.workspaceRoot) {
+    if (!this.workspaceRoot) {
+      statusBar.setMessage('No workspace root to save session', 3000);
+      return;
+    }
+    try {
       await sessionManager.saveWorkspaceSession(this.workspaceRoot);
       statusBar.setMessage('Session saved', 2000);
+    } catch (error) {
+      this.debugLog(`Failed to save session: ${error}`);
+      statusBar.setMessage(`Failed to save session: ${error}`, 5000);
     }
   }
 
@@ -709,9 +716,14 @@ export class App {
    * Save session with a specific name
    */
   async saveSessionAs(name: string): Promise<void> {
-    this.sessionName = name;
-    await sessionManager.saveNamedSession(name, this.workspaceRoot);
-    statusBar.setMessage(`Session saved as "${name}"`, 2000);
+    try {
+      this.sessionName = name;
+      await sessionManager.saveNamedSession(name, this.workspaceRoot);
+      statusBar.setMessage(`Session saved as "${name}"`, 2000);
+    } catch (error) {
+      this.debugLog(`Failed to save session: ${error}`);
+      statusBar.setMessage(`Failed to save session: ${error}`, 5000);
+    }
   }
 
   /**
@@ -1861,6 +1873,7 @@ export class App {
       }
       this.updateStatusBar();
       renderer.scheduleRender();
+      sessionManager.markDirty();
     });
 
     // Handle pane focus changes
@@ -1874,6 +1887,7 @@ export class App {
       }
       this.updateStatusBar();
       renderer.scheduleRender();
+      sessionManager.markDirty();
     });
 
     // Handle mouse clicks in documents
@@ -3329,6 +3343,7 @@ export class App {
             const result = paneManager.splitVertical();
             this.debugLog(`splitVertical returned: ${result?.id ?? 'null'}`);
             renderer.scheduleRender();
+            sessionManager.markDirty();
           };
         })()
       },
@@ -3346,6 +3361,7 @@ export class App {
             lastExecution = now;
             paneManager.splitHorizontal();
             renderer.scheduleRender();
+            sessionManager.markDirty();
           };
         })()
       },
@@ -3355,6 +3371,7 @@ export class App {
         category: 'View',
         handler: () => {
           paneManager.closeActivePane();
+          sessionManager.markDirty();
           renderer.scheduleRender();
         }
       },
@@ -3851,6 +3868,9 @@ export class App {
         const uri = `file://${document.filePath}`;
         await lspManager.openDocument(uri, document.language, document.content);
       }
+
+      // Mark session dirty for auto-save
+      sessionManager.markDirty();
     } catch (error) {
       console.error('Failed to open file:', error);
     }
@@ -4046,8 +4066,11 @@ export class App {
       }
       this.updateStatusBar();
     }
+
+    // Mark session dirty for auto-save
+    sessionManager.markDirty();
   }
-  
+
   /**
    * Handle close confirmation dialog response
    */

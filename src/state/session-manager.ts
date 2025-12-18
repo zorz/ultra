@@ -367,6 +367,15 @@ export class SessionManager {
    * Save current session for workspace
    */
   async saveWorkspaceSession(workspacePath: string): Promise<void> {
+    this.debugLog(`saveWorkspaceSession called with path: ${workspacePath}`);
+    this.debugLog(`initialized: ${this.initialized}, pathsDir: ${this.pathsDir}`);
+
+    // Ensure paths are initialized
+    if (!this.initialized) {
+      this.debugLog('WARNING: Paths not initialized, calling initializePaths()');
+      this.initializePaths();
+    }
+
     if (!this.onSessionSaveCallback) {
       this.debugLog('No save callback registered');
       return;
@@ -378,11 +387,14 @@ export class SessionManager {
       return;
     }
 
+    this.debugLog(`Session data has ${sessionData.documents.length} documents`);
+
     sessionData.workspaceRoot = workspacePath;
     sessionData.instanceId = this.instanceId;
     sessionData.timestamp = new Date().toISOString();
 
     const sessionPath = this.getSessionPathForWorkspace(workspacePath);
+    this.debugLog(`Saving to: ${sessionPath}`);
     await this.saveSessionToFile(sessionPath, sessionData);
 
     // Update last session reference
@@ -427,11 +439,18 @@ export class SessionManager {
    */
   private async saveSessionToFile(sessionPath: string, data: SessionData): Promise<void> {
     try {
+      // Ensure directory exists
+      const dir = path.dirname(sessionPath);
+      this.debugLog(`Ensuring directory exists: ${dir}`);
+      await fs.promises.mkdir(dir, { recursive: true });
+
       const content = JSON.stringify(data, null, 2);
+      this.debugLog(`Writing ${content.length} bytes to ${sessionPath}`);
       await fs.promises.writeFile(sessionPath, content, 'utf-8');
       this.debugLog(`Saved session to ${sessionPath}`);
     } catch (error) {
       this.debugLog(`Failed to save session: ${error}`);
+      throw error; // Re-throw so caller knows it failed
     }
   }
 
