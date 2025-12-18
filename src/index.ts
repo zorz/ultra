@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Ultra - Terminal Code Editor
- * 
+ *
  * Entry point for the application.
  */
 
@@ -15,18 +15,23 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(`
 Ultra - Terminal Code Editor
 
-Usage: ultra [options] [file...]
+Usage: ultra [options] [file|folder]
 
 Options:
-  -h, --help      Show this help message
-  -v, --version   Show version number
-  --debug         Enable LSP debug logging to debug.log
+  -h, --help              Show this help message
+  -v, --version           Show version number
+  --debug                 Enable debug logging to debug.log
+  --session <name>        Open a named session
+  --save-session <name>   Save current session with a name on startup
+  --no-session            Don't restore previous session
 
 Examples:
-  ultra                   Open Ultra with no file
-  ultra file.ts           Open file.ts
-  ultra src/              Open folder
-  ultra --debug file.ts   Open with debug logging
+  ultra                       Open Ultra with previous session (or empty)
+  ultra file.ts               Open file.ts
+  ultra src/                  Open folder
+  ultra --session work        Open the "work" session
+  ultra --no-session          Start fresh without restoring session
+  ultra --debug file.ts       Open with debug logging
 
 `);
   process.exit(0);
@@ -38,11 +43,32 @@ if (args.includes('--version') || args.includes('-v')) {
   process.exit(0);
 }
 
-// Check for debug flag
+// Parse options
 const debugMode = args.includes('--debug');
+const noSession = args.includes('--no-session');
 
-// Filter out any remaining flags and get file paths
-const filePath = args.filter(arg => !arg.startsWith('-'))[0];
+// Parse --session option
+let sessionName: string | undefined;
+const sessionIndex = args.indexOf('--session');
+if (sessionIndex !== -1 && args[sessionIndex + 1]) {
+  sessionName = args[sessionIndex + 1];
+}
+
+// Parse --save-session option
+let saveSessionName: string | undefined;
+const saveSessionIndex = args.indexOf('--save-session');
+if (saveSessionIndex !== -1 && args[saveSessionIndex + 1]) {
+  saveSessionName = args[saveSessionIndex + 1];
+}
+
+// Filter out flags and their values to get file paths
+const flagsWithValues = ['--session', '--save-session'];
+const filePath = args.filter((arg, i) => {
+  if (arg.startsWith('-')) return false;
+  // Check if previous arg was a flag that takes a value
+  if (i > 0 && flagsWithValues.includes(args[i - 1]!)) return false;
+  return true;
+})[0];
 
 // Global error handler - write to debug.log
 const fs = require('fs');
@@ -70,7 +96,12 @@ process.on('SIGTERM', () => {
 });
 
 // Start the application
-app.start(filePath, { debug: debugMode }).catch((error) => {
+app.start(filePath, {
+  debug: debugMode,
+  sessionName,
+  saveSessionName,
+  noSession
+}).catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
 });

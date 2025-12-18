@@ -477,7 +477,16 @@ export const defaultSettings: Record<string, any> = {
   "git.panel.openOnStartup": true,
   "git.diffContextLines": 3,
   "terminal.integrated.openOnStartup": true,
-  "terminal.integrated.spawnOnStartup": true
+  "terminal.integrated.spawnOnStartup": true,
+  "session.restoreOnStartup": true,
+  "session.autoSave": true,
+  "session.autoSaveInterval": 30000,
+  "session.save.openFiles": true,
+  "session.save.cursorPositions": true,
+  "session.save.scrollPositions": true,
+  "session.save.foldState": true,
+  "session.save.uiLayout": true,
+  "session.save.unsavedContent": true
 };
 
 export const defaultThemes: Record<string, Theme> = {

@@ -42,6 +42,20 @@ export interface EditorSettings {
   'git.diffContextLines': number;
   'terminal.integrated.openOnStartup': boolean;
   'terminal.integrated.spawnOnStartup': boolean;
+  // Session settings
+  /** Whether to restore sessions on startup */
+  'session.restoreOnStartup': boolean;
+  /** Whether to auto-save session state */
+  'session.autoSave': boolean;
+  /** Auto-save interval in milliseconds */
+  'session.autoSaveInterval': number;
+  /** What to save in sessions */
+  'session.save.openFiles': boolean;
+  'session.save.cursorPositions': boolean;
+  'session.save.scrollPositions': boolean;
+  'session.save.foldState': boolean;
+  'session.save.uiLayout': boolean;
+  'session.save.unsavedContent': boolean;
 }
 
 const defaultSettings: EditorSettings = {
@@ -85,7 +99,17 @@ const defaultSettings: EditorSettings = {
   'git.panel.openOnStartup': true,
   'git.diffContextLines': 3,
   'terminal.integrated.openOnStartup': true,
-  'terminal.integrated.spawnOnStartup': true
+  'terminal.integrated.spawnOnStartup': true,
+  // Session settings
+  'session.restoreOnStartup': true,
+  'session.autoSave': true,
+  'session.autoSaveInterval': 30000,
+  'session.save.openFiles': true,
+  'session.save.cursorPositions': true,
+  'session.save.scrollPositions': true,
+  'session.save.foldState': true,
+  'session.save.uiLayout': true,
+  'session.save.unsavedContent': true
 };
 
 export class Settings {

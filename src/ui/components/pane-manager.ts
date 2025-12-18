@@ -849,6 +849,110 @@ export class PaneManager implements MouseHandler {
     return this.getActivePane().getVisibleLineCount();
   }
 
+  // ==================== Session State Serialization ====================
+
+  /**
+   * Get the active pane ID
+   */
+  getActivePaneId(): string {
+    return this.activePaneId;
+  }
+
+  /**
+   * Serialize layout tree for session state
+   */
+  serializeLayout(): { type: 'leaf' | 'horizontal' | 'vertical'; paneId?: string; children?: any[]; ratios?: number[] } {
+    return this.serializeLayoutNode(this.root);
+  }
+
+  private serializeLayoutNode(node: LayoutNode): { type: 'leaf' | 'horizontal' | 'vertical'; paneId?: string; children?: any[]; ratios?: number[] } {
+    if (node.type === 'leaf') {
+      return {
+        type: 'leaf',
+        paneId: node.pane?.id
+      };
+    }
+
+    return {
+      type: node.type,
+      children: node.children?.map(child => this.serializeLayoutNode(child)),
+      ratios: node.ratio
+    };
+  }
+
+  /**
+   * Reset pane manager to single pane state (for session restore)
+   */
+  reset(): void {
+    // Clear all panes
+    for (const pane of this.panes.values()) {
+      // Clear tabs from pane
+      for (const docId of pane.getDocumentIds()) {
+        pane.removeDocument(docId);
+      }
+    }
+    this.panes.clear();
+
+    // Create new main pane
+    this.paneIdCounter = 0;
+    const mainPane = this.createPane();
+    this.root = { type: 'leaf', pane: mainPane };
+    this.activePaneId = mainPane.id;
+    this.lastFocusedPaneId = mainPane.id;
+  }
+
+  /**
+   * Restore layout from session state
+   * Returns a map of paneId -> newPaneId for document assignment
+   */
+  restoreLayout(layout: { type: 'leaf' | 'horizontal' | 'vertical'; paneId?: string; children?: any[]; ratios?: number[] }): Map<string, string> {
+    const paneIdMap = new Map<string, string>();
+
+    // Clear existing panes
+    this.panes.clear();
+    this.paneIdCounter = 0;
+
+    // Rebuild layout tree
+    this.root = this.restoreLayoutNode(layout, paneIdMap);
+
+    // Set active pane to first pane
+    const firstPaneId = this.panes.keys().next().value;
+    if (firstPaneId) {
+      this.activePaneId = firstPaneId;
+      this.lastFocusedPaneId = firstPaneId;
+    }
+
+    return paneIdMap;
+  }
+
+  private restoreLayoutNode(
+    node: { type: 'leaf' | 'horizontal' | 'vertical'; paneId?: string; children?: any[]; ratios?: number[] },
+    paneIdMap: Map<string, string>
+  ): LayoutNode {
+    if (node.type === 'leaf') {
+      const newPane = this.createPane();
+      if (node.paneId) {
+        paneIdMap.set(node.paneId, newPane.id);
+      }
+      return { type: 'leaf', pane: newPane };
+    }
+
+    return {
+      type: node.type,
+      children: node.children?.map(child => this.restoreLayoutNode(child, paneIdMap)),
+      ratio: node.ratios
+    };
+  }
+
+  /**
+   * Set active pane by ID (for session restore)
+   */
+  setActivePaneById(paneId: string): void {
+    if (this.panes.has(paneId)) {
+      this.setActivePane(paneId);
+    }
+  }
+
 }
 
 // Export singleton

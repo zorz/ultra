@@ -365,6 +365,30 @@ export class Pane implements MouseHandler {
   }
 
   /**
+   * Get all tabs information for session state serialization
+   */
+  getTabsInfo(): Array<{
+    documentId: string;
+    filePath: string | null;
+    isActive: boolean;
+    tabOrder: number;
+  }> {
+    return this.tabs.map((tab, index) => ({
+      documentId: tab.documentId,
+      filePath: tab.filePath,
+      isActive: tab.id === this.activeTabId,
+      tabOrder: index
+    }));
+  }
+
+  /**
+   * Get all document IDs in this pane
+   */
+  getDocumentIds(): string[] {
+    return this.tabs.map(t => t.documentId);
+  }
+
+  /**
    * Remove a document by ID (for app.ts integration)
    */
   removeDocument(id: string): void {
@@ -749,9 +773,10 @@ export class Pane implements MouseHandler {
       fileName: t.document.fileName,
       filePath: t.document.filePath,
       isDirty: t.document.isDirty,
-      isActive: t.id === this.activeTabId
+      isActive: t.id === this.activeTabId,
+      isMissing: t.document.isMissing
     }));
-    
+
     this.tabBar.setTabs(tabBarTabs);
     this.tabBar.setFocused(this.isFocused);
     this.tabBar.render(ctx);

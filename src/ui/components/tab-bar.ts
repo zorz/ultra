@@ -16,6 +16,8 @@ export interface Tab {
   filePath: string | null;
   isDirty: boolean;
   isActive: boolean;
+  /** Whether the file is missing from disk */
+  isMissing?: boolean;
 }
 
 export class TabBar implements MouseHandler {
@@ -100,6 +102,9 @@ export class TabBar implements MouseHandler {
     let inactiveFg = hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
     const borderColor = hexToRgb(themeLoader.getColor('tab.border')) || { r: 35, g: 38, b: 52 };
     const dirtyColor = { r: 231, g: 130, b: 132 }; // Catppuccin red
+    const missingColor = { r: 243, g: 139, b: 168 }; // Brighter red for missing files
+    const strikethrough = '\x1b[9m';
+    const noStrikethrough = '\x1b[29m';
 
     // Dim colors for unfocused pane
     if (!this.isFocused) {
@@ -135,16 +140,22 @@ export class TabBar implements MouseHandler {
       const tabBg = tab.isActive ? activeBg : inactiveBg;
       output += moveTo(currentX, y) + bgRgb(tabBg.r, tabBg.g, tabBg.b);
 
-      // Dirty indicator or space
-      if (tab.isDirty) {
+      // Missing/Dirty indicator or space
+      if (tab.isMissing) {
+        output += fgRgb(missingColor.r, missingColor.g, missingColor.b) + ' ⚠';
+      } else if (tab.isDirty) {
         output += fgRgb(dirtyColor.r, dirtyColor.g, dirtyColor.b) + ' ●';
       } else {
         output += '  ';
       }
 
-      // Tab name
-      const tabFg = tab.isActive ? activeFg : inactiveFg;
-      output += fgRgb(tabFg.r, tabFg.g, tabFg.b) + tabContent;
+      // Tab name (with strikethrough for missing files)
+      const tabFg = tab.isMissing ? missingColor : (tab.isActive ? activeFg : inactiveFg);
+      if (tab.isMissing) {
+        output += strikethrough + fgRgb(tabFg.r, tabFg.g, tabFg.b) + tabContent + noStrikethrough;
+      } else {
+        output += fgRgb(tabFg.r, tabFg.g, tabFg.b) + tabContent;
+      }
 
       // Close button with visible hover area
       const closeFg = tab.isActive ? inactiveFg : { r: Math.floor(inactiveFg.r * 0.6), g: Math.floor(inactiveFg.g * 0.6), b: Math.floor(inactiveFg.b * 0.6) };

@@ -36,7 +36,8 @@ import { gitIntegration } from './features/git/git-integration.ts';
 import { gitPanel } from './ui/components/git-panel.ts';
 // Import boot file content directly (Bun embeds this at build time)
 import defaultBootFile from '../config/BOOT.md' with { type: 'text' };
-import { setDebugEnabled } from './debug.ts';
+import { setDebugEnabled, debugLog } from './debug.ts';
+import { sessionManager, type SessionData, type SessionDocumentState } from './state/session-manager.ts';
 
 // Helper function to ensure boot file exists
 async function ensureBootFile(bootFilePath: string): Promise<void> {
@@ -106,7 +107,12 @@ export class App {
 
   // Debug logging
   private debugEnabled: boolean = false;
-  
+
+  // Session management
+  private workspaceRoot: string = process.cwd();
+  private sessionRestored: boolean = false;
+  private sessionName: string | null = null;
+
   private debugLog(msg: string): void {
     if (this.debugEnabled) {
       const fs = require('fs');
@@ -117,12 +123,31 @@ export class App {
   constructor() {
     this.setupPaneManagerCallbacks();
     this.setupTerminalCallbacks();
+    this.setupSessionManager();
+  }
+
+  /**
+   * Setup session manager callbacks
+   */
+  private setupSessionManager(): void {
+    // Register save callback
+    sessionManager.onSessionSave(() => this.serializeSessionState());
+
+    // Register multi-instance warning callback
+    sessionManager.onMultiInstanceWarning((existingInstanceId) => {
+      statusBar.setMessage('Warning: Another Ultra instance may be editing this workspace', 5000);
+    });
   }
 
   /**
    * Initialize and start the application
    */
-  async start(filePath?: string, options?: { debug?: boolean }): Promise<void> {
+  async start(filePath?: string, options?: {
+    debug?: boolean;
+    sessionName?: string;
+    saveSessionName?: string;
+    noSession?: boolean;
+  }): Promise<void> {
     try {
       // Enable debug logging if requested
       if (options?.debug) {
@@ -133,6 +158,11 @@ export class App {
         const fs = require('fs');
         fs.writeFileSync('debug.log', '');
       }
+
+      // Store session options
+      const sessionName = options?.sessionName;
+      const saveSessionName = options?.saveSessionName;
+      const noSession = options?.noSession;
 
       this.debugLog('Starting Ultra...');
 
@@ -160,34 +190,39 @@ export class App {
       
       // Determine workspace root and file to open based on argument
       this.debugLog('Determining workspace root...');
-      let workspaceRoot = process.cwd();
+      this.workspaceRoot = process.cwd();
       let fileToOpen: string | undefined;
-      
+
       if (filePath) {
         const absolutePath = path.resolve(filePath);
         const fs = await import('fs');
-        
+
         try {
           const stat = fs.statSync(absolutePath);
           if (stat.isDirectory()) {
             // Argument is a directory - use it as workspace root
-            workspaceRoot = absolutePath;
+            this.workspaceRoot = absolutePath;
           } else if (stat.isFile()) {
             // Argument is a file - use its parent as workspace root
-            workspaceRoot = path.dirname(absolutePath);
+            this.workspaceRoot = path.dirname(absolutePath);
             fileToOpen = absolutePath;
           }
         } catch {
           // Path doesn't exist yet - treat as new file
           // Use parent directory as workspace root
-          workspaceRoot = path.dirname(absolutePath);
+          this.workspaceRoot = path.dirname(absolutePath);
           fileToOpen = absolutePath;
         }
       }
+
+      // Initialize session manager
+      this.debugLog('Initializing session manager...');
+      await sessionManager.init();
+      sessionManager.setWorkspaceRoot(this.workspaceRoot);
       
       // Initialize file tree with workspace root
-      this.debugLog(`Loading file tree from: ${workspaceRoot}`);
-      await fileTree.loadDirectory(workspaceRoot);
+      this.debugLog(`Loading file tree from: ${this.workspaceRoot}`);
+      await fileTree.loadDirectory(this.workspaceRoot);
       fileTree.onFileSelect(async (filePath) => {
         await this.openFile(filePath);
         fileTree.setFocused(false);
@@ -201,7 +236,7 @@ export class App {
 
       // Set up git panel callbacks
       gitPanel.onFileSelect(async (filePath) => {
-        const fullPath = path.join(workspaceRoot, filePath);
+        const fullPath = path.join(this.workspaceRoot, filePath);
         await this.openFile(fullPath);
         gitPanel.setFocused(false);
         renderer.scheduleRender();
@@ -220,12 +255,12 @@ export class App {
 
       // Initialize LSP manager with workspace root
       this.debugLog('Initializing LSP...');
-      lspManager.setWorkspaceRoot(workspaceRoot);
+      lspManager.setWorkspaceRoot(this.workspaceRoot);
       await this.initializeLSP();
 
       // Initialize Git integration with workspace root (must be before applySettings)
       this.debugLog('Initializing Git...');
-      gitIntegration.setWorkspaceRoot(workspaceRoot);
+      gitIntegration.setWorkspaceRoot(this.workspaceRoot);
       this.startGitStatusPolling();
 
       // Apply initial settings (sidebar visibility, etc.)
@@ -236,13 +271,46 @@ export class App {
       this.debugLog('Starting file watcher...');
       this.startFileWatcher();
 
-      // Open file if provided, otherwise check startup setting
-      this.debugLog(`Opening: ${fileToOpen || 'checking startup setting'}`);
+      // Try to restore session or open file
+      this.debugLog(`Opening: ${fileToOpen || 'checking session/startup setting'}`);
+
+      // Check if we should restore session
+      const shouldRestoreSession = !noSession && settings.get('session.restoreOnStartup') && !fileToOpen;
+      let sessionRestored = false;
+
+      // Handle named session from CLI
+      if (sessionName && !noSession) {
+        this.debugLog(`Loading named session: ${sessionName}`);
+        const sessionData = await sessionManager.loadNamedSession(sessionName);
+        if (sessionData && sessionData.documents.length > 0) {
+          await this.restoreSessionState(sessionData);
+          this.sessionName = sessionName;
+          sessionRestored = true;
+          this.debugLog('Named session restored successfully');
+        } else {
+          statusBar.setMessage(`Session "${sessionName}" not found`, 3000);
+        }
+      } else if (shouldRestoreSession) {
+        this.debugLog('Attempting to restore workspace session...');
+        const sessionData = await sessionManager.loadWorkspaceSession(this.workspaceRoot);
+        if (sessionData && sessionData.documents.length > 0) {
+          await this.restoreSessionState(sessionData);
+          sessionRestored = true;
+          this.debugLog('Workspace session restored successfully');
+        }
+      }
+
+      // Handle --save-session option
+      if (saveSessionName) {
+        this.sessionName = saveSessionName;
+        this.debugLog(`Will save session as: ${saveSessionName}`);
+      }
+
       if (fileToOpen) {
         // File provided via command line - open it
         await this.openFile(fileToOpen);
-      } else {
-        // No file provided - check workbench.startupEditor setting
+      } else if (!sessionRestored) {
+        // No session restored and no file provided - check workbench.startupEditor setting
         const startupEditor = settings.get('workbench.startupEditor') || '';
         this.debugLog(`startupEditor setting: "${startupEditor}"`);
 
@@ -284,6 +352,12 @@ export class App {
         }
       }
 
+      // Start session auto-save
+      if (settings.get('session.autoSave')) {
+        this.debugLog('Starting session auto-save...');
+        sessionManager.startAutoSave();
+      }
+
       this.debugLog('Setting isRunning = true');
       this.isRunning = true;
 
@@ -311,6 +385,17 @@ export class App {
    */
   stop(exitCode: number = 0): void {
     this.isRunning = false;
+
+    // Save session before stopping (sync call since we're shutting down)
+    if (settings.get('session.autoSave') && this.workspaceRoot) {
+      // Save session synchronously on shutdown
+      sessionManager.saveWorkspaceSession(this.workspaceRoot).catch(() => {});
+    }
+
+    // Stop session auto-save
+    sessionManager.stopAutoSave();
+    sessionManager.destroy();
+
     userConfigManager.destroy();
     fileTree.destroy();
 
@@ -340,6 +425,331 @@ export class App {
    */
   rebuild(): void {
     this.stop(App.REBUILD_EXIT_CODE);
+  }
+
+  // ==================== Session State Management ====================
+
+  /**
+   * Serialize current editor state for session saving
+   */
+  private serializeSessionState(): SessionData | null {
+    try {
+      const documents: SessionDocumentState[] = [];
+
+      // Collect state from all panes
+      for (const pane of paneManager.getAllPanes()) {
+        const tabsInfo = pane.getTabsInfo();
+        const scrollTop = pane.getScrollTop();
+        const scrollLeft = pane.getScrollLeft();
+
+        for (const tabInfo of tabsInfo) {
+          // Find the document
+          const docEntry = this.documents.find(d => d.id === tabInfo.documentId);
+          if (!docEntry) continue;
+
+          const doc = docEntry.document;
+          const cursor = doc.primaryCursor;
+
+          // Only save if we should save this type of data
+          const saveOpenFiles = settings.get('session.save.openFiles');
+          if (!saveOpenFiles) continue;
+
+          // Build document state
+          const docState: SessionDocumentState = {
+            filePath: doc.filePath || '',
+            scrollTop: settings.get('session.save.scrollPositions') ? scrollTop : 0,
+            scrollLeft: settings.get('session.save.scrollPositions') ? scrollLeft : 0,
+            cursorLine: settings.get('session.save.cursorPositions') ? cursor.position.line : 0,
+            cursorColumn: settings.get('session.save.cursorPositions') ? cursor.position.column : 0,
+            foldedRegions: settings.get('session.save.foldState') ? [] : [], // TODO: Get fold state
+            paneId: pane.id,
+            tabOrder: tabInfo.tabOrder,
+            isActiveInPane: tabInfo.isActive
+          };
+
+          // Add selection if exists
+          if (settings.get('session.save.cursorPositions') && cursor.selection) {
+            docState.selectionAnchorLine = cursor.selection.anchor.line;
+            docState.selectionAnchorColumn = cursor.selection.anchor.column;
+          }
+
+          // Save unsaved content if enabled and document is dirty
+          if (settings.get('session.save.unsavedContent') && doc.isDirty) {
+            docState.unsavedContent = doc.content;
+          }
+
+          documents.push(docState);
+        }
+      }
+
+      // Get UI state if enabled
+      const saveUILayout = settings.get('session.save.uiLayout');
+      const ui = {
+        sidebarVisible: saveUILayout ? settings.get('workbench.sideBar.visible') : true,
+        sidebarWidth: saveUILayout ? (settings.get('ultra.sidebar.width') || 30) : 30,
+        terminalVisible: saveUILayout ? terminalPane.isVisible() : false,
+        terminalHeight: saveUILayout ? (settings.get('terminal.integrated.defaultHeight') || 12) : 12,
+        gitPanelVisible: saveUILayout ? gitPanel.isVisible() : false,
+        gitPanelWidth: 30,
+        activeSidebarPanel: 'files' as const,
+        minimapEnabled: saveUILayout ? settings.get('editor.minimap.enabled') : true
+      };
+
+      // Get layout
+      const layout = paneManager.serializeLayout();
+
+      // Find active document path
+      const activeDoc = this.getActiveDocument();
+      const activeDocumentPath = activeDoc?.filePath || null;
+
+      const sessionData: SessionData = {
+        version: 1,
+        timestamp: new Date().toISOString(),
+        instanceId: sessionManager.getInstanceId(),
+        workspaceRoot: this.workspaceRoot,
+        sessionName: this.sessionName || undefined,
+        documents,
+        activeDocumentPath,
+        activePaneId: paneManager.getActivePaneId(),
+        layout,
+        ui
+      };
+
+      return sessionData;
+    } catch (error) {
+      this.debugLog(`Failed to serialize session state: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Restore editor state from session data
+   */
+  private async restoreSessionState(sessionData: SessionData): Promise<void> {
+    try {
+      this.debugLog('Restoring session state...');
+
+      // Restore layout first
+      const paneIdMap = paneManager.restoreLayout(sessionData.layout);
+
+      // Track which pane should be active
+      let activePaneId: string | null = null;
+      if (sessionData.activePaneId && paneIdMap.has(sessionData.activePaneId)) {
+        activePaneId = paneIdMap.get(sessionData.activePaneId)!;
+      }
+
+      // Group documents by pane
+      const docsByPane = new Map<string, SessionDocumentState[]>();
+      for (const docState of sessionData.documents) {
+        const newPaneId = paneIdMap.get(docState.paneId) || paneIdMap.values().next().value;
+        if (!newPaneId) continue;
+
+        if (!docsByPane.has(newPaneId)) {
+          docsByPane.set(newPaneId, []);
+        }
+        docsByPane.get(newPaneId)!.push(docState);
+      }
+
+      // Sort documents by tab order within each pane
+      for (const docs of docsByPane.values()) {
+        docs.sort((a, b) => a.tabOrder - b.tabOrder);
+      }
+
+      // Open documents in each pane
+      for (const [paneId, docs] of docsByPane) {
+        const pane = paneManager.getPane(paneId);
+        if (!pane) continue;
+
+        let activeDocIdInPane: string | null = null;
+
+        for (const docState of docs) {
+          if (!docState.filePath) continue;
+
+          try {
+            // Check if file exists
+            const fileExists = await this.fileExists(docState.filePath);
+
+            let document: Document;
+            let id: string;
+
+            if (fileExists) {
+              // Load the file
+              document = await Document.fromFile(docState.filePath);
+            } else {
+              // Create a placeholder document for missing file
+              if (docState.unsavedContent) {
+                document = new Document(docState.unsavedContent, docState.filePath);
+              } else {
+                document = new Document('', docState.filePath);
+              }
+              // Mark as missing
+              document.isMissing = true;
+            }
+
+            id = this.generateId();
+            this.documents.push({ id, document });
+
+            // Add to pane
+            pane.addDocument(id, document);
+
+            // Restore cursor position
+            if (settings.get('session.save.cursorPositions')) {
+              document.cursorManager.setPosition({
+                line: docState.cursorLine,
+                column: docState.cursorColumn
+              });
+
+              // Restore selection
+              if (docState.selectionAnchorLine !== undefined) {
+                document.cursorManager.setSelection({
+                  anchor: {
+                    line: docState.selectionAnchorLine,
+                    column: docState.selectionAnchorColumn || 0
+                  },
+                  head: {
+                    line: docState.cursorLine,
+                    column: docState.cursorColumn
+                  }
+                });
+              }
+            }
+
+            // Restore scroll position
+            if (settings.get('session.save.scrollPositions')) {
+              pane.setScrollTop(docState.scrollTop);
+              pane.setScrollLeft(docState.scrollLeft);
+            }
+
+            // Track active document in pane
+            if (docState.isActiveInPane) {
+              activeDocIdInPane = id;
+            }
+
+            // Track global active document
+            if (docState.filePath === sessionData.activeDocumentPath) {
+              this.activeDocumentId = id;
+            }
+
+            // Notify LSP of document open
+            if (this.lspEnabled && document.filePath && fileExists) {
+              const uri = `file://${document.filePath}`;
+              await lspManager.openDocument(uri, document.language, document.content);
+            }
+          } catch (error) {
+            this.debugLog(`Failed to restore document ${docState.filePath}: ${error}`);
+          }
+        }
+
+        // Set active document in pane
+        if (activeDocIdInPane) {
+          const docEntry = this.documents.find(d => d.id === activeDocIdInPane);
+          if (docEntry) {
+            pane.setActiveDocument(activeDocIdInPane, docEntry.document);
+          }
+        }
+      }
+
+      // Restore UI state
+      if (settings.get('session.save.uiLayout')) {
+        if (sessionData.ui.sidebarVisible !== settings.get('workbench.sideBar.visible')) {
+          // Toggle sidebar if needed
+          fileTree.setVisible(sessionData.ui.sidebarVisible);
+        }
+
+        if (sessionData.ui.terminalVisible) {
+          terminalPane.show();
+        }
+
+        if (sessionData.ui.gitPanelVisible) {
+          gitPanel.show();
+        }
+      }
+
+      // Set active pane
+      if (activePaneId) {
+        paneManager.setActivePaneById(activePaneId);
+      }
+
+      // Recalculate layout
+      layoutManager.updateDimensions(renderer.width, renderer.height);
+
+      this.sessionRestored = true;
+      this.debugLog('Session state restored');
+    } catch (error) {
+      this.debugLog(`Failed to restore session state: ${error}`);
+    }
+  }
+
+  /**
+   * Check if file exists
+   */
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.promises.access(filePath, fs.constants.F_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Save current session
+   */
+  async saveSession(): Promise<void> {
+    if (this.workspaceRoot) {
+      await sessionManager.saveWorkspaceSession(this.workspaceRoot);
+      statusBar.setMessage('Session saved', 2000);
+    }
+  }
+
+  /**
+   * Save session with a specific name
+   */
+  async saveSessionAs(name: string): Promise<void> {
+    this.sessionName = name;
+    await sessionManager.saveNamedSession(name, this.workspaceRoot);
+    statusBar.setMessage(`Session saved as "${name}"`, 2000);
+  }
+
+  /**
+   * Load a named session
+   */
+  async loadNamedSession(name: string): Promise<void> {
+    const sessionData = await sessionManager.loadNamedSession(name);
+    if (sessionData) {
+      // Clear current state
+      this.clearAllDocuments();
+      paneManager.reset();
+
+      // Restore session
+      await this.restoreSessionState(sessionData);
+      this.sessionName = name;
+      statusBar.setMessage(`Session "${name}" loaded`, 2000);
+      renderer.scheduleRender();
+    } else {
+      statusBar.setMessage(`Session "${name}" not found`, 3000);
+    }
+  }
+
+  /**
+   * Clear all documents
+   */
+  private clearAllDocuments(): void {
+    for (const doc of this.documents) {
+      if (doc.document.filePath && this.lspEnabled) {
+        const uri = `file://${doc.document.filePath}`;
+        lspManager.closeDocument(uri);
+      }
+    }
+    this.documents = [];
+    this.activeDocumentId = null;
+  }
+
+  /**
+   * Get list of named sessions
+   */
+  async getNamedSessions(): Promise<string[]> {
+    return sessionManager.getNamedSessions();
   }
 
   /**
@@ -1894,6 +2304,83 @@ export class App {
         category: 'File',
         handler: () => this.rebuild()
       },
+
+      // Session commands
+      {
+        id: 'ultra.saveSession',
+        title: 'Save Session',
+        category: 'Session',
+        handler: async () => {
+          await this.saveSession();
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.saveSessionAs',
+        title: 'Save Session As...',
+        category: 'Session',
+        handler: async () => {
+          inputDialog.show({
+            title: 'Save Session As',
+            placeholder: 'Enter session name',
+            onSubmit: async (name) => {
+              if (name.trim()) {
+                await this.saveSessionAs(name.trim());
+              }
+              renderer.scheduleRender();
+            },
+            onCancel: () => {
+              renderer.scheduleRender();
+            }
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.openSession',
+        title: 'Open Session...',
+        category: 'Session',
+        handler: async () => {
+          const sessions = await this.getNamedSessions();
+          if (sessions.length === 0) {
+            statusBar.setMessage('No saved sessions found', 3000);
+            return;
+          }
+
+          // Use command palette to show sessions
+          const items = sessions.map(name => ({
+            id: `session:${name}`,
+            title: name,
+            category: 'Session',
+            handler: async () => {
+              await this.loadNamedSession(name);
+              renderer.scheduleRender();
+            }
+          }));
+
+          const editorRect = layoutManager.getEditorAreaRect();
+          commandPalette.showItems(
+            { screenWidth: renderer.width, screenHeight: renderer.height, editorX: editorRect.x, editorWidth: editorRect.width },
+            items,
+            'Open Session'
+          );
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.clearSession',
+        title: 'Clear Session (Start Fresh)',
+        category: 'Session',
+        handler: () => {
+          this.clearAllDocuments();
+          paneManager.reset();
+          this.newFile();
+          this.sessionName = null;
+          statusBar.setMessage('Session cleared', 2000);
+          renderer.scheduleRender();
+        }
+      },
+
       {
         id: 'ultra.closeTab',
         title: 'Close Tab',

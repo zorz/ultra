@@ -37,6 +37,8 @@ export class Document {
   private _encoding: string = 'utf-8';
   private _lineEnding: 'lf' | 'crlf' = 'lf';
   private _savedContent: string = '';
+  /** Whether the file is missing from disk (for session restore) */
+  private _isMissing: boolean = false;
 
   constructor(content: string = '', filePath: string | null = null) {
     // Normalize line endings
@@ -198,6 +200,14 @@ export class Document {
 
   get isDirty(): boolean {
     return this._isDirty;
+  }
+
+  get isMissing(): boolean {
+    return this._isMissing;
+  }
+
+  set isMissing(value: boolean) {
+    this._isMissing = value;
   }
 
   get encoding(): string {
