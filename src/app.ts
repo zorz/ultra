@@ -46,7 +46,7 @@ async function ensureBootFile(bootFilePath: string): Promise<void> {
     const expandedPath = bootFilePath.replace(/^~/, os.homedir());
     const dir = path.dirname(expandedPath);
 
-    // Create ~/.ultra directory if it doesn't exist
+    // Create config directory if it doesn't exist
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -326,8 +326,11 @@ export class App {
             const expandedPath = startupEditor.replace(/^~/, os.homedir());
             this.debugLog(`Expanded path: ${expandedPath}`);
 
-            // Ensure boot file exists if it's the default one
-            if (startupEditor === '~/.ultra/BOOT.md') {
+            // Ensure boot file exists if it's a BOOT.md in the config directory
+            const configDir = userConfigManager.getConfigDir();
+            const defaultBootPath = path.join(configDir, 'BOOT.md');
+            const expandedStartupPath = startupEditor.replace(/^~/, os.homedir());
+            if (expandedStartupPath === defaultBootPath || startupEditor === '~/.ultra/BOOT.md') {
               this.debugLog('Ensuring boot file exists...');
               await ensureBootFile(startupEditor);
               this.debugLog('Boot file ensured');

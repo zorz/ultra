@@ -84,11 +84,12 @@ export class StatusBar {
     const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
     // Get theme colors
-    const statusBg = hexToRgb(themeLoader.getColor('statusBar.background')) || { r: 41, g: 44, b: 60 };
-    const statusFg = hexToRgb(themeLoader.getColor('statusBar.foreground')) || { r: 198, g: 208, b: 245 };
+    const statusBg = hexToRgb(themeLoader.getColor('statusBar.background')) || hexToRgb(themeLoader.getColor('editor.background')) || { r: 41, g: 44, b: 60 };
+    const statusFg = hexToRgb(themeLoader.getColor('statusBar.foreground')) || hexToRgb(themeLoader.getColor('editor.foreground')) || { r: 198, g: 208, b: 245 };
     const dimFg = { r: Math.floor(statusFg.r * 0.7), g: Math.floor(statusFg.g * 0.7), b: Math.floor(statusFg.b * 0.7) };
-    const warningColor = { r: 231, g: 130, b: 132 }; // Catppuccin red for dirty indicator
-    const accentColor = { r: 202, g: 158, b: 230 }; // Catppuccin mauve for branch
+    // Use theme colors for warning/error indicators
+    const warningColor = hexToRgb(themeLoader.getColor('editorGutter.deletedBackground')) || { r: statusFg.r, g: Math.floor(statusFg.g * 0.5), b: Math.floor(statusFg.b * 0.5) };
+    const accentColor = hexToRgb(themeLoader.getColor('focusBorder')) || statusFg;
 
     // Build entire status bar as one string
     let output = moveTo(x, y) + bgRgb(statusBg.r, statusBg.g, statusBg.b) + ' '.repeat(width) + moveTo(x, y) + bgRgb(statusBg.r, statusBg.g, statusBg.b);
@@ -125,7 +126,7 @@ export class StatusBar {
           output += fgRgb(warningColor.r, warningColor.g, warningColor.b) + `● ${errors}`;
         }
         if (warnings > 0) {
-          const warningYellow = { r: 239, g: 159, b: 118 };  // Orange for warnings
+          const warningYellow = hexToRgb(themeLoader.getColor('editorGutter.modifiedBackground')) || { r: statusFg.r, g: Math.floor(statusFg.g * 0.8), b: Math.floor(statusFg.b * 0.5) };
           if (errors > 0) output += ' ';
           output += fgRgb(warningYellow.r, warningYellow.g, warningYellow.b) + `▲ ${warnings}`;
         }

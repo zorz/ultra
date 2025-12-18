@@ -1098,22 +1098,24 @@ export class Pane implements MouseHandler {
     // Git gutter indicator (first column - before line number)
     const gitChange = this.gitLineChanges.get(lineNum + 1);  // Git uses 1-based line numbers
     if (gitChange) {
-      // Use hardcoded colors that are known to work well
-      const gitAddedColor = { r: 129, g: 199, b: 132 };    // Green
-      const gitModifiedColor = { r: 224, g: 175, b: 104 }; // Orange/Yellow
-      const gitDeletedColor = { r: 229, g: 115, b: 115 };  // Red
-      
+      // Get git colors from theme
+      const getGitColor = (type: string): { r: number; g: number; b: number } => {
+        const colorKey = `editorGutter.${type}Background`;
+        const themeColor = themeLoader.getColor(colorKey);
+        return hexToRgb(themeColor) || hexToRgb(this.theme.lineNumberForeground) || { r: 171, g: 178, b: 191 };
+      };
+
       let indicatorColor: { r: number; g: number; b: number };
       let indicator: string;
-      
+
       if (gitChange === 'added') {
-        indicatorColor = gitAddedColor;
+        indicatorColor = getGitColor('added');
         indicator = '│';  // Simple vertical bar for added (U+2502)
       } else if (gitChange === 'modified') {
-        indicatorColor = gitModifiedColor;
+        indicatorColor = getGitColor('modified');
         indicator = '│';  // Simple vertical bar for modified (U+2502)
       } else {  // deleted
-        indicatorColor = gitDeletedColor;
+        indicatorColor = getGitColor('deleted');
         indicator = '▼';  // Small triangle for deleted
       }
       
@@ -1316,21 +1318,24 @@ export class Pane implements MouseHandler {
     if (wrap.isFirstWrap) {
       const gitChange = this.gitLineChanges.get(wrap.bufferLine + 1);
       if (gitChange) {
-        const gitAddedColor = { r: 129, g: 199, b: 132 };
-        const gitModifiedColor = { r: 224, g: 175, b: 104 };
-        const gitDeletedColor = { r: 229, g: 115, b: 115 };
+        // Get git colors from theme
+        const getGitColor = (type: string): { r: number; g: number; b: number } => {
+          const colorKey = `editorGutter.${type}Background`;
+          const themeColor = themeLoader.getColor(colorKey);
+          return hexToRgb(themeColor) || hexToRgb(this.theme.lineNumberForeground) || { r: 171, g: 178, b: 191 };
+        };
 
         let indicatorColor: { r: number; g: number; b: number };
         let indicator: string;
 
         if (gitChange === 'added') {
-          indicatorColor = gitAddedColor;
+          indicatorColor = getGitColor('added');
           indicator = '│';
         } else if (gitChange === 'modified') {
-          indicatorColor = gitModifiedColor;
+          indicatorColor = getGitColor('modified');
           indicator = '│';
         } else {
-          indicatorColor = gitDeletedColor;
+          indicatorColor = getGitColor('deleted');
           indicator = '▼';
         }
 

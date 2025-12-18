@@ -450,18 +450,24 @@ export class GitPanel implements MouseHandler {
     // Get colors from theme (adjust brightness when focused)
     const baseBgColor = themeLoader.getColor('sideBar.background');
     const bgColor = this.isFocused ? themeLoader.getFocusedBackground(baseBgColor) : baseBgColor;
-    const panelBg = hexToRgb(bgColor) || { r: 37, g: 37, b: 38 };
-    const panelFg = hexToRgb(themeLoader.getColor('sideBar.foreground')) || { r: 204, g: 204, b: 204 };
-    const titleFg = hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || { r: 187, g: 187, b: 187 };
-    const selectionBg = hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: 9, g: 71, b: 113 };
-    const selectionFg = hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || { r: 255, g: 255, b: 255 };
-    const accentFg = hexToRgb(themeLoader.getColor('focusBorder')) || { r: 0, g: 127, b: 212 };
-    
-    // Git status colors
-    const addedFg = hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
-    const modifiedFg = hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
-    const deletedFg = hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
-    const untrackedFg = hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
+    // Primary fallback is editor background/foreground to maintain visual consistency
+    const editorBg = hexToRgb(themeLoader.getColor('editor.background'));
+    const editorFg = hexToRgb(themeLoader.getColor('editor.foreground'));
+    const panelBg = hexToRgb(bgColor) || editorBg || { r: 37, g: 37, b: 38 };
+    const panelFg = hexToRgb(themeLoader.getColor('sideBar.foreground')) || editorFg || { r: 204, g: 204, b: 204 };
+    const titleFg = hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || panelFg;
+    const selectionBg = hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: Math.min(255, panelBg.r + 30), g: Math.min(255, panelBg.g + 30), b: Math.min(255, panelBg.b + 30) };
+    const selectionFg = hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || panelFg;
+    const accentFg = hexToRgb(themeLoader.getColor('focusBorder')) || panelFg;
+
+    // Git status colors - fallback to gutter colors or derive from foreground
+    const gutterAdded = hexToRgb(themeLoader.getColor('editorGutter.addedBackground'));
+    const gutterModified = hexToRgb(themeLoader.getColor('editorGutter.modifiedBackground'));
+    const gutterDeleted = hexToRgb(themeLoader.getColor('editorGutter.deletedBackground'));
+    const addedFg = hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || gutterAdded || panelFg;
+    const modifiedFg = hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || gutterModified || panelFg;
+    const deletedFg = hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || gutterDeleted || panelFg;
+    const untrackedFg = hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || gutterAdded || panelFg;
     
     let output = '';
     let y = this.rect.y;

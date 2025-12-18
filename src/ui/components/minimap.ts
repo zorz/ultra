@@ -225,23 +225,26 @@ export class Minimap implements MouseHandler {
     const fgRgb = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
     const reset = '\x1b[0m';
 
-    // Get colors from theme
-    const editorBgHex = themeLoader.getColor('editor.background');
+    // Get colors from theme - try sidebar background as fallback
+    const editorBgHex = themeLoader.getColor('editor.background') || themeLoader.getColor('sideBar.background');
     const editorBg = hexToRgb(editorBgHex);
-    
-    // Minimap background is slightly darker than editor
-    const minimapBg = editorBg 
-      ? { r: Math.max(0, editorBg.r - 10), g: Math.max(0, editorBg.g - 10), b: Math.max(0, editorBg.b - 10) }
+    // Use a neutral dark gray derived from foreground if no background available
+    const editorFgHex = themeLoader.getColor('editor.foreground');
+    const editorFg = hexToRgb(editorFgHex);
+    const fallbackBg = editorFg
+      ? { r: Math.floor(editorFg.r * 0.15), g: Math.floor(editorFg.g * 0.15), b: Math.floor(editorFg.b * 0.15) }
       : { r: 30, g: 30, b: 46 };
-    
+
+    // Minimap background is slightly darker than editor
+    const baseBg = editorBg || fallbackBg;
+    const minimapBg = { r: Math.max(0, baseBg.r - 10), g: Math.max(0, baseBg.g - 10), b: Math.max(0, baseBg.b - 10) };
+
     // Slider background is lighter
-    const sliderBg = editorBg
-      ? { 
-          r: Math.min(255, editorBg.r + (this.isDragging ? 60 : this.isHovering ? 45 : 30)), 
-          g: Math.min(255, editorBg.g + (this.isDragging ? 60 : this.isHovering ? 45 : 30)), 
-          b: Math.min(255, editorBg.b + (this.isDragging ? 60 : this.isHovering ? 45 : 30))
-        }
-      : { r: 100, g: 100, b: 120 };
+    const sliderBg = {
+      r: Math.min(255, baseBg.r + (this.isDragging ? 60 : this.isHovering ? 45 : 30)),
+      g: Math.min(255, baseBg.g + (this.isDragging ? 60 : this.isHovering ? 45 : 30)),
+      b: Math.min(255, baseBg.b + (this.isDragging ? 60 : this.isHovering ? 45 : 30))
+    };
 
     let output = '';
     

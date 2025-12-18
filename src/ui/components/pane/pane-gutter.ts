@@ -24,13 +24,24 @@ export interface GutterTheme {
 }
 
 /**
- * Git indicator colors
+ * Get git indicator color from theme
  */
-const GIT_COLORS = {
-  added: { r: 129, g: 199, b: 132 },    // Green
-  modified: { r: 224, g: 175, b: 104 }, // Orange/Yellow
-  deleted: { r: 229, g: 115, b: 115 },  // Red
-} as const;
+function getGitColor(type: 'added' | 'modified' | 'deleted'): RGB {
+  const colorKeys: Record<string, string> = {
+    added: 'editorGutter.addedBackground',
+    modified: 'editorGutter.modifiedBackground',
+    deleted: 'editorGutter.deletedBackground',
+  };
+  const themeColor = themeLoader.getColor(colorKeys[type] || '');
+  const rgb = themeColor ? hexToRgb(themeColor) : null;
+  // Derive fallback from editor foreground if theme color not available
+  if (!rgb) {
+    const fgColor = themeLoader.getColor('editor.foreground');
+    const fgRgb = fgColor ? hexToRgb(fgColor) : { r: 171, g: 178, b: 191 };
+    return fgRgb || { r: 171, g: 178, b: 191 };
+  }
+  return rgb;
+}
 
 /**
  * Git indicator characters
@@ -157,7 +168,7 @@ export class PaneGutter {
       return ' ';
     }
 
-    const color = GIT_COLORS[gitChange];
+    const color = getGitColor(gitChange);
     const indicator = GIT_INDICATORS[gitChange];
 
     return `\x1b[38;2;${color.r};${color.g};${color.b}m${indicator}`;

@@ -568,10 +568,11 @@ export class CommitDialog extends BaseDialog {
     const startX = this._rect.x + 2;
     const contentWidth = this._rect.width - 4;
 
-    // Input background color
+    // Input background color - derive from dialog background if not available
+    const dialogBg = hexToRgb(colors.background);
     const inputBg = hexToRgb(themeLoader.getColor('input.background')) ||
                     hexToRgb(colors.inputBackground) ||
-                    { r: 60, g: 60, b: 60 };
+                    (dialogBg ? { r: Math.max(0, dialogBg.r - 10), g: Math.max(0, dialogBg.g - 10), b: Math.max(0, dialogBg.b - 10) } : { r: 60, g: 60, b: 60 });
     const inputFg = colors.inputForeground;
 
     for (let i = 0; i < this._visibleLines; i++) {
@@ -599,7 +600,10 @@ export class CommitDialog extends BaseDialog {
     if (this._lines.length > this._visibleLines) {
       const scrollPercent = this._scrollTop / Math.max(1, this._lines.length - this._visibleLines);
       const indicatorY = startY + Math.floor(scrollPercent * (this._visibleLines - 1));
-      const scrollFg = hexToRgb(themeLoader.getColor('scrollbarSlider.background')) || { r: 100, g: 100, b: 100 };
+      // Derive scroll indicator color from input background or foreground
+      const inputFgRgb = hexToRgb(inputFg);
+      const scrollFg = hexToRgb(themeLoader.getColor('scrollbarSlider.background')) ||
+                       (inputFgRgb ? { r: Math.floor(inputFgRgb.r * 0.5), g: Math.floor(inputFgRgb.g * 0.5), b: Math.floor(inputFgRgb.b * 0.5) } : { r: 100, g: 100, b: 100 });
       ctx.drawStyled(startX + contentWidth - 1, indicatorY, '█',
         `rgb(${scrollFg.r},${scrollFg.g},${scrollFg.b})`, colors.inputBackground);
     }

@@ -528,13 +528,16 @@ export class FileTree implements MouseHandler {
     // Get colors from theme (adjust brightness when focused)
     const baseBgColor = themeLoader.getColor('sideBar.background');
     const bgColor = this.isFocused ? themeLoader.getFocusedBackground(baseBgColor) : baseBgColor;
-    const sidebarBg = hexToRgb(bgColor) || { r: 37, g: 37, b: 38 };
-    const sidebarFg = hexToRgb(themeLoader.getColor('sideBar.foreground')) || { r: 204, g: 204, b: 204 };
-    const titleFg = hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || { r: 187, g: 187, b: 187 };
-    const selectionBg = hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: 9, g: 71, b: 113 };
-    const selectionFg = hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || { r: 255, g: 255, b: 255 };
-    const hoverBg = hexToRgb(themeLoader.getColor('list.hoverBackground')) || { r: 42, g: 45, b: 46 };
-    const focusBorder = hexToRgb(themeLoader.getColor('focusBorder')) || { r: 0, g: 127, b: 212 };
+    // Primary fallback is editor background/foreground to maintain visual consistency
+    const editorBg = hexToRgb(themeLoader.getColor('editor.background'));
+    const editorFg = hexToRgb(themeLoader.getColor('editor.foreground'));
+    const sidebarBg = hexToRgb(bgColor) || editorBg || { r: 37, g: 37, b: 38 };
+    const sidebarFg = hexToRgb(themeLoader.getColor('sideBar.foreground')) || editorFg || { r: 204, g: 204, b: 204 };
+    const titleFg = hexToRgb(themeLoader.getColor('sideBarTitle.foreground')) || sidebarFg;
+    const selectionBg = hexToRgb(themeLoader.getColor('list.activeSelectionBackground')) || { r: Math.min(255, sidebarBg.r + 30), g: Math.min(255, sidebarBg.g + 30), b: Math.min(255, sidebarBg.b + 30) };
+    const selectionFg = hexToRgb(themeLoader.getColor('list.activeSelectionForeground')) || sidebarFg;
+    const hoverBg = hexToRgb(themeLoader.getColor('list.hoverBackground')) || { r: Math.min(255, sidebarBg.r + 15), g: Math.min(255, sidebarBg.g + 15), b: Math.min(255, sidebarBg.b + 15) };
+    const focusBorder = hexToRgb(themeLoader.getColor('focusBorder')) || sidebarFg;
     
     let output = '';
     
@@ -570,12 +573,15 @@ export class FileTree implements MouseHandler {
       b: Math.floor(selectionFg.b * 0.7) 
     };
     
-    // Git status colors from theme
-    const gitAddedFg = hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || { r: 129, g: 199, b: 132 };
-    const gitModifiedFg = hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || { r: 224, g: 175, b: 104 };
-    const gitDeletedFg = hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || { r: 229, g: 115, b: 115 };
-    const gitUntrackedFg = hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || { r: 115, g: 191, b: 105 };
-    const gitConflictFg = hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || { r: 255, g: 123, b: 114 };
+    // Git status colors from theme - fallback to gutter colors or derive from foreground
+    const gutterAdded = hexToRgb(themeLoader.getColor('editorGutter.addedBackground'));
+    const gutterModified = hexToRgb(themeLoader.getColor('editorGutter.modifiedBackground'));
+    const gutterDeleted = hexToRgb(themeLoader.getColor('editorGutter.deletedBackground'));
+    const gitAddedFg = hexToRgb(themeLoader.getColor('gitDecoration.addedResourceForeground')) || gutterAdded || sidebarFg;
+    const gitModifiedFg = hexToRgb(themeLoader.getColor('gitDecoration.modifiedResourceForeground')) || gutterModified || sidebarFg;
+    const gitDeletedFg = hexToRgb(themeLoader.getColor('gitDecoration.deletedResourceForeground')) || gutterDeleted || sidebarFg;
+    const gitUntrackedFg = hexToRgb(themeLoader.getColor('gitDecoration.untrackedResourceForeground')) || gutterAdded || sidebarFg;
+    const gitConflictFg = hexToRgb(themeLoader.getColor('gitDecoration.conflictingResourceForeground')) || gutterDeleted || sidebarFg;
     
     // Subtle background tints for git status (blend with sidebar background)
     const blendBg = (color: { r: number; g: number; b: number }, amount: number) => ({
@@ -662,9 +668,10 @@ export class FileTree implements MouseHandler {
     // Draw help hint at bottom when focused
     if (this.isFocused) {
       const hintY = this.rect.y + this.rect.height - helpHeight;
-      const hintBg = { r: 45, g: 45, b: 48 }; // Slightly lighter than sidebar
-      const hintFg = { r: 150, g: 150, b: 150 };
-      const accentFg = { r: 100, g: 180, b: 255 };
+      // Derive hint colors from sidebar colors
+      const hintBg = { r: Math.min(255, sidebarBg.r + 10), g: Math.min(255, sidebarBg.g + 10), b: Math.min(255, sidebarBg.b + 10) };
+      const hintFg = { r: Math.floor(sidebarFg.r * 0.7), g: Math.floor(sidebarFg.g * 0.7), b: Math.floor(sidebarFg.b * 0.7) };
+      const accentFg = focusBorder;
       
       if (this.dialogMode !== 'none') {
         // Draw dialog
