@@ -353,7 +353,7 @@ export class AIApprovalDialog extends BaseDialog {
   static createApprovalEntry(
     toolName: string,
     scope: ApprovalScope,
-    arguments?: Record<string, unknown>
+    toolArgs?: Record<string, unknown>
   ): ApprovalEntry {
     const entry: ApprovalEntry = {
       toolName,
@@ -363,7 +363,7 @@ export class AIApprovalDialog extends BaseDialog {
 
     // For 'always' scope, we might want to store the argument pattern
     // For now, we approve the tool name regardless of arguments
-    if (scope === 'always' && arguments) {
+    if (scope === 'always' && toolArgs) {
       // Could add argument pattern matching here
     }
 
