@@ -201,7 +201,7 @@ export class HttpTransport {
       },
     });
 
-    this._port = this._httpServer.port;
+    this._port = this._httpServer.port ?? this._port;
     this.debugLog(`Started on port ${this._port}`);
     return this._port;
   }

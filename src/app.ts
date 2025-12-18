@@ -236,6 +236,7 @@ export class App {
         // Unfocus other components when file tree gains focus
         gitPanel.setFocused(false);
         terminalPane.setFocused(false);
+        aiPanel.setFocused(false);
       });
 
       // Set up git panel callbacks
@@ -252,6 +253,7 @@ export class App {
         // Unfocus other components when git panel gains focus
         fileTree.setFocused(false);
         terminalPane.setFocused(false);
+        aiPanel.setFocused(false);
       });
       gitPanel.onCommitRequest(() => {
         this.showCommitDialog();
@@ -1860,6 +1862,7 @@ export class App {
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(searchWidget);
     mouseManager.registerHandler(terminalPane);  // Terminal pane for embedded terminal
+    mouseManager.registerHandler(aiPanel);       // AI panel for Claude Code integration
     mouseManager.registerHandler(paneManager);  // Pane manager handles tab bars and editor panes
     mouseManager.registerHandler(gitPanel);     // Git panel for source control
     mouseManager.registerHandler(fileTree);
@@ -1928,10 +1931,11 @@ export class App {
 
     // Handle mouse clicks in documents
     paneManager.onDocumentClick((doc, position, clickCount, event) => {
-      // Clicking in editor unfocuses terminal, file tree, and git panel
+      // Clicking in editor unfocuses terminal, file tree, git panel, and AI panel
       terminalPane.setFocused(false);
       fileTree.setFocused(false);
       gitPanel.setFocused(false);
+      aiPanel.setFocused(false);
       
       if (event.meta) {
         // Cmd+Click adds cursor
@@ -2830,6 +2834,9 @@ export class App {
           }
           fileTree.setVisible(true);
           fileTree.setFocused(true);
+          aiPanel.setFocused(false);
+          terminalPane.setFocused(false);
+          gitPanel.setFocused(false);
         }
       },
       {
@@ -2839,6 +2846,8 @@ export class App {
         handler: () => {
           fileTree.setFocused(false);
           terminalPane.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
         }
       },
       {
@@ -2854,6 +2863,8 @@ export class App {
             }
             terminalPane.setFocused(true);
             fileTree.setFocused(false);
+            aiPanel.setFocused(false);
+            gitPanel.setFocused(false);
           } else {
             terminalPane.setFocused(false);
           }
@@ -2872,6 +2883,8 @@ export class App {
           await terminalPane.createTerminal();
           terminalPane.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
           renderer.scheduleRender();
         }
       },
@@ -2888,6 +2901,8 @@ export class App {
           }
           terminalPane.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
           renderer.scheduleRender();
         }
       },
@@ -2916,7 +2931,14 @@ export class App {
           layoutManager.toggleAIPanel();
 
           if (!wasVisible) {
-            // AI panel is now visible - start AI and focus
+            // AI panel is now visible - set rect and state immediately
+            const aiPanelRect = layoutManager.getAIPanelRect();
+            if (aiPanelRect) {
+              aiPanel.setRect(aiPanelRect);
+              aiPanel.setVisible(true);
+            }
+
+            // Focus AI panel and unfocus others
             aiPanel.setFocused(true);
             fileTree.setFocused(false);
             gitPanel.setFocused(false);
@@ -2928,6 +2950,7 @@ export class App {
             }
           } else {
             // AI panel is now hidden - unfocus
+            aiPanel.setVisible(false);
             aiPanel.setFocused(false);
           }
         }
@@ -2961,6 +2984,9 @@ export class App {
             // Don't hide file tree - they can coexist in split sidebar
             gitPanel.setVisible(true);
             gitPanel.setFocused(true);
+            fileTree.setFocused(false);
+            aiPanel.setFocused(false);
+            terminalPane.setFocused(false);
             await gitPanel.refresh();
           } else {
             gitPanel.setVisible(false);
@@ -3099,6 +3125,8 @@ export class App {
           gitPanel.setVisible(true);
           gitPanel.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          terminalPane.setFocused(false);
           await gitPanel.refresh();
           renderer.scheduleRender();
         }
