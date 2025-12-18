@@ -101,8 +101,9 @@ export class TabBar implements MouseHandler {
     let activeFg = hexToRgb(themeLoader.getColor('tab.activeForeground')) || { r: 198, g: 208, b: 245 };
     let inactiveFg = hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
     const borderColor = hexToRgb(themeLoader.getColor('tab.border')) || { r: 35, g: 38, b: 52 };
-    const dirtyColor = { r: 231, g: 130, b: 132 }; // Catppuccin red
-    const missingColor = { r: 243, g: 139, b: 168 }; // Brighter red for missing files
+    // Use theme colors for dirty/missing indicators - fallback to reasonable defaults
+    const dirtyColor = hexToRgb(themeLoader.getColor('editorGutter.modifiedBackground')) || { r: 229, g: 192, b: 123 };
+    const missingColor = hexToRgb(themeLoader.getColor('editorGutter.deletedBackground')) || { r: 224, g: 108, b: 117 };
     const strikethrough = '\x1b[9m';
     const noStrikethrough = '\x1b[29m';
 

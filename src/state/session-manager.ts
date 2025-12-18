@@ -5,9 +5,9 @@
  * Sessions are tied to workspace paths or can be named for explicit management.
  *
  * Storage locations:
- *   - ~/.ultra/sessions/paths/<hash>.json - Auto sessions by workspace path
- *   - ~/.ultra/sessions/named/<name>.json - Named sessions
- *   - ~/.ultra/sessions/last-session.json - Tracks last opened session
+ *   - <configDir>/sessions/paths/<hash>.json - Auto sessions by workspace path
+ *   - <configDir>/sessions/named/<name>.json - Named sessions
+ *   - <configDir>/sessions/last-session.json - Tracks last opened session
  *
  * Features:
  *   - Auto-save every 30 seconds
@@ -21,6 +21,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { debugLog } from '../debug.ts';
 import { settings } from '../config/settings.ts';
+import { userConfigManager } from '../config/user-config.ts';
 
 /** Version of the session file format */
 const SESSION_VERSION = 1;
@@ -152,15 +153,16 @@ export interface LastSessionRef {
  */
 export class SessionManager {
   private _debugName = 'SessionManager';
-  private sessionsDir: string;
-  private pathsDir: string;
-  private namedDir: string;
-  private lastSessionPath: string;
+  private sessionsDir: string = '';
+  private pathsDir: string = '';
+  private namedDir: string = '';
+  private lastSessionPath: string = '';
   private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
   private instanceId: string;
   private currentSessionPath: string | null = null;
   private currentWorkspaceRoot: string | null = null;
   private isDirty: boolean = false;
+  private initialized: boolean = false;
 
   /** Callbacks for session events */
   private onSessionLoadCallback?: (data: SessionData) => Promise<void>;
@@ -168,14 +170,23 @@ export class SessionManager {
   private onMultiInstanceWarningCallback?: (existingInstanceId: string) => void;
 
   constructor() {
-    const home = process.env.HOME || process.env.USERPROFILE || '';
-    this.sessionsDir = path.join(home, '.ultra', 'sessions');
+    // Generate unique instance ID for this process
+    this.instanceId = `${Date.now()}-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+  }
+
+  /**
+   * Initialize paths based on config directory
+   * Must be called after userConfigManager is initialized
+   */
+  private initializePaths(): void {
+    if (this.initialized) return;
+
+    const configDir = userConfigManager.getConfigDir();
+    this.sessionsDir = path.join(configDir, 'sessions');
     this.pathsDir = path.join(this.sessionsDir, 'paths');
     this.namedDir = path.join(this.sessionsDir, 'named');
     this.lastSessionPath = path.join(this.sessionsDir, 'last-session.json');
-
-    // Generate unique instance ID for this process
-    this.instanceId = `${Date.now()}-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
+    this.initialized = true;
   }
 
   protected debugLog(msg: string): void {
@@ -186,10 +197,13 @@ export class SessionManager {
    * Initialize session directories
    */
   async init(): Promise<void> {
+    // Initialize paths from config directory
+    this.initializePaths();
+
     try {
       await fs.promises.mkdir(this.pathsDir, { recursive: true });
       await fs.promises.mkdir(this.namedDir, { recursive: true });
-      this.debugLog('Session directories initialized');
+      this.debugLog(`Session directories initialized at ${this.sessionsDir}`);
     } catch (error) {
       this.debugLog(`Failed to create session directories: ${error}`);
     }
