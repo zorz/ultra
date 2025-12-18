@@ -1,72 +1,128 @@
 # Welcome to Ultra
 
-Ultra is a terminal-based code editor built with TypeScript and Bun.
+Ultra is a terminal-native code editor with modern IDE features, built with TypeScript and Bun.
 
-## Getting Started
+## Quick Start
 
-### Basic Navigation
+| Action | Shortcut |
+|--------|----------|
+| Command Palette | **Ctrl+P** |
+| Quick Open File | **Ctrl+]** |
+| Toggle Sidebar | **Ctrl+B** |
+| Toggle Terminal | **Ctrl+`** |
+| Toggle Git Panel | **Ctrl+Shift+G** |
 
-- **Ctrl+P** - Quick open file (fuzzy search)
-- **Ctrl+B** - Toggle sidebar
-- **Ctrl+\`** - Toggle terminal
-- **Ctrl+Shift+G** - Toggle git panel
+## Essential Shortcuts
 
 ### File Operations
 
-- **Ctrl+S** - Save file
-- **Ctrl+W** - Close tab
-- **Ctrl+N** - New file
-- **Ctrl+O** - Open file (with browser)
+| Action | Shortcut |
+|--------|----------|
+| Save | **Ctrl+S** |
+| Save As | **Ctrl+Shift+S** or **F4** |
+| New File | **Ctrl+N** |
+| Open File | **Ctrl+O** |
+| Close Tab | **Ctrl+W** |
+| Quit | **Ctrl+Q** |
+
+### Navigation
+
+| Action | Shortcut |
+|--------|----------|
+| Go to Line | **Ctrl+G** |
+| Go to Definition | **F12** |
+| Find References | **Shift+F12** |
+| Word Left/Right | **Alt+Left/Right** |
+| File Start/End | **Ctrl+Home/End** |
+| Next/Prev Tab | **Ctrl+Alt+Right/Left** |
+| Go to Tab 1-9 | **Ctrl+1** through **Ctrl+9** |
 
 ### Editing
 
-- **Ctrl+F** - Find in file
-- **Ctrl+H** - Find and replace
-- **Ctrl+/** - Toggle line comment
-- **Ctrl+D** - Select next occurrence (multi-cursor)
-- **Tab** - Indent / Accept autocomplete
-- **Shift+Tab** - Outdent
+| Action | Shortcut |
+|--------|----------|
+| Find | **Ctrl+F** |
+| Find and Replace | **Ctrl+H** |
+| Find Next/Previous | **F3** / **Shift+F3** |
+| Select Line | **Ctrl+L** |
+| Select All | **Ctrl+Shift+A** |
+| Undo/Redo | **Ctrl+Z** / **Ctrl+Shift+Z** |
+| Indent/Outdent | **Tab** / **Shift+Tab** |
 
-### Git Integration
+### Multi-Cursor
 
-- **Ctrl+Shift+G** - Open git panel
-- Click gutter indicators to view inline diffs
-- In git panel:
-  - **s** - Stage file
-  - **u** - Unstage file
-  - **c** - Commit
-  - **r** - Revert changes
+| Action | Shortcut |
+|--------|----------|
+| Select Next Occurrence | **Ctrl+D** |
+| Select All Occurrences | **Ctrl+D A** |
+| Add Cursor Above | **Ctrl+U** |
+| Add Cursor Below | **Ctrl+J** |
+| Split Selection into Lines | **Ctrl+Shift+L** |
 
-### Command Palette
+### Split Panes
 
-Press **Ctrl+Shift+P** to open the command palette and search for any command.
+| Action | Shortcut |
+|--------|----------|
+| Split Vertical | **Ctrl+\\** |
+| Split Horizontal | **Ctrl+Shift+\\** |
+| Close Pane | **Ctrl+Shift+W** |
+| Next/Prev Pane | **Alt+]** / **Alt+[** |
 
-## LSP Support
+## Git Integration
 
-Ultra includes Language Server Protocol support for:
-- TypeScript/JavaScript
-- Python
-- Go
-- Rust
-- And more...
+Press **Ctrl+Shift+G** to open the git panel.
 
-Hover over symbols for documentation, use **F12** for "Go to Definition", and **Shift+F12** for "Find References".
+**In the git panel:**
+| Key | Action |
+|-----|--------|
+| **s** | Stage selected file |
+| **Shift+S** | Stage all files |
+| **u** | Unstage selected file |
+| **d** | Discard changes |
+| **c** | Open commit dialog |
+| **r** | Refresh status |
+| **j/k** | Navigate up/down |
+| **Enter** | Open file in editor |
+
+**Commit dialog:**
+- Type your commit message (supports multiple lines)
+- **Enter** - New line
+- **Ctrl+Enter** - Commit
+- **Escape** - Cancel
+
+**Gutter indicators:** Click the colored markers in the gutter to view inline diffs for changed lines.
+
+## LSP Features
+
+Ultra includes Language Server Protocol support for intelligent code features:
+
+- **Hover** - Move cursor over symbols for documentation
+- **Autocomplete** - Suggestions appear as you type (or press **Ctrl+Space**)
+- **Go to Definition** - **F12**
+- **Find References** - **Shift+F12**
+- **Rename Symbol** - **F2**
+
+Supported languages include TypeScript, JavaScript, Python, Go, Rust, and more.
 
 ## Configuration
 
-Settings and keybindings can be customized in:
-- `~/.ultra/settings.json`
-- `~/.ultra/keybindings.json`
+Customize Ultra by editing these files:
 
-Themes are located in:
-- `~/.ultra/themes/`
+| File | Purpose |
+|------|---------|
+| `~/.config/ultra/settings.json` | Editor settings |
+| `~/.config/ultra/keybindings.json` | Custom keybindings |
+| `~/.config/ultra/themes/` | VS Code-compatible themes |
 
-## Need Help?
+## Tips
 
-- Press **Ctrl+Shift+P** and type "help" to see available commands
-- Visit the documentation at: https://github.com/zorz/ultra
+- Press **Ctrl+P** to access any command via the command palette
+- Use **Ctrl+B** to toggle the file tree for more editing space
+- Click on folders in the file tree to expand/collapse them
+- The minimap on the right provides a code overview (toggle with **Ctrl+Shift+M**)
+- Focus different panels with **Ctrl+Shift+Arrow** keys
 
 ---
 
-**Tip:** You can change what file opens on startup by editing the `workbench.startupEditor` setting.
-Set it to `""` or `"none"` to start with an empty editor instead.
+**Startup Tip:** To change what opens on startup, edit `workbench.startupEditor` in settings.
+Set it to `"none"` to start with an empty editor.

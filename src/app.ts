@@ -34,7 +34,8 @@ import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnostics
 import { terminalPane } from './ui/components/terminal-pane.ts';
 import { gitIntegration } from './features/git/git-integration.ts';
 import { gitPanel } from './ui/components/git-panel.ts';
-import { defaultBootFile } from './config/defaults.ts';
+// Import boot file content directly (Bun embeds this at build time)
+import defaultBootFile from '../config/BOOT.md' with { type: 'text' };
 import { setDebugEnabled } from './debug.ts';
 
 // Helper function to ensure boot file exists
