@@ -307,17 +307,29 @@ export class App {
     this.isRunning = false;
     userConfigManager.destroy();
     fileTree.destroy();
-    
+
     // Stop file watcher
     this.stopFileWatcher();
-    
+
     // Stop git polling
     this.stopGitStatusPolling();
-    
+
     // Shutdown LSP servers
     lspManager.shutdown();
-    
+
     renderer.cleanup();
+  }
+
+  /** Exit code used to signal restart to wrapper script */
+  static readonly RESTART_EXIT_CODE = 75;
+
+  /**
+   * Restart the application by cleaning up and exiting with RESTART_EXIT_CODE.
+   * The wrapper script should detect this exit code and relaunch the app.
+   */
+  restart(): void {
+    this.stop();
+    process.exit(App.RESTART_EXIT_CODE);
   }
 
   /**
@@ -1859,6 +1871,12 @@ export class App {
         title: 'Quit',
         category: 'File',
         handler: () => this.stop()
+      },
+      {
+        id: 'ultra.restart',
+        title: 'Restart',
+        category: 'File',
+        handler: () => this.restart()
       },
       {
         id: 'ultra.closeTab',

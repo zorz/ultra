@@ -6,6 +6,7 @@
   { "key": "ctrl+shift+z", "command": "ultra.redo" },
   { "key": "ctrl+y", "command": "ultra.redo" },
   { "key": "ctrl+q", "command": "ultra.quit" },
+  { "key": "ctrl+r", "command": "ultra.restart" },
   { "key": "ctrl+w", "command": "ultra.closeTab" },
   { "key": "ctrl+n", "command": "ultra.newFile" },
   { "key": "ctrl+o", "command": "ultra.openFile" },

@@ -44,6 +44,10 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.quit"
   },
   {
+    "key": "ctrl+r",
+    "command": "ultra.restart"
+  },
+  {
     "key": "ctrl+w",
     "command": "ultra.closeTab"
   },
