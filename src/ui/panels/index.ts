@@ -37,3 +37,12 @@ export type { ContentFactory, ContentFactoryWithRestore } from './content-regist
 
 // Editor content
 export { EditorContent, type EditorContentState } from './editor-content.ts';
+
+// AI Chat content
+export {
+  AIChatContent,
+  createAIChatContent,
+  type AIProvider,
+  type AIProviderConfig,
+  type AIChatContentOptions,
+} from './ai-chat-content.ts';

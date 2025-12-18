@@ -92,6 +92,12 @@ export interface SessionUIState {
   activeSidebarPanel: 'files' | 'git' | 'search';
   /** Whether minimap is enabled */
   minimapEnabled: boolean;
+  /** Whether AI panel is visible */
+  aiPanelVisible?: boolean;
+  /** AI panel width */
+  aiPanelWidth?: number;
+  /** AI panel state (history buffer, etc.) */
+  aiPanelState?: Record<string, unknown>;
 }
 
 /**

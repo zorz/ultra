@@ -44,11 +44,11 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "ultra.quit"
   },
   {
-    "key": "ctrl+r",
+    "key": "ctrl+shift+r",
     "command": "ultra.restart"
   },
   {
-    "key": "ctrl+shift+r",
+    "key": "ctrl+r",
     "command": "ultra.rebuild"
   },
   {
@@ -467,6 +467,9 @@ export const defaultSettings: Record<string, any> = {
   "ultra.sidebar.width": 30,
   "ultra.ai.model": "claude-sonnet-4-20250514",
   "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}",
+  "ai.panel.defaultWidth": 80,
+  "ai.panel.maxWidthPercent": 50,
+  "ai.panel.initialPrompt": "You are a helpful software engineer working with another software engineer on a coding project using the Ultra IDE",
   "terminal.integrated.shell": "",
   "terminal.integrated.position": "bottom",
   "terminal.integrated.defaultHeight": 24,

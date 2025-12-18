@@ -1,8 +1,10 @@
 /**
  * Layout Management
- * 
+ *
  * Manages pane layout, splits, and component positioning.
  */
+
+import { settings } from '../config/settings.ts';
 
 export interface Rect {
   x: number;
@@ -285,13 +287,15 @@ export class LayoutManager {
   /**
    * Toggle AI panel
    */
-  toggleAIPanel(width: number = 40): void {
+  toggleAIPanel(width?: number): void {
     if (this.aiPanelVisible) {
       this.aiPanelVisible = false;
       this.aiPanelWidth = 0;
     } else {
       this.aiPanelVisible = true;
-      this.aiPanelWidth = Math.min(width, Math.floor(this._screenWidth * 0.4));
+      const defaultWidth = width ?? settings.get('ai.panel.defaultWidth') ?? 80;
+      const maxPercent = settings.get('ai.panel.maxWidthPercent') ?? 50;
+      this.aiPanelWidth = Math.min(defaultWidth, Math.floor(this._screenWidth * (maxPercent / 100)));
     }
     this.recalculateLayout();
   }
@@ -339,7 +343,8 @@ export class LayoutManager {
    */
   setAIPanelWidth(width: number): void {
     if (this.aiPanelVisible) {
-      this.aiPanelWidth = Math.max(20, Math.min(width, Math.floor(this._screenWidth * 0.5)));
+      const maxPercent = settings.get('ai.panel.maxWidthPercent') ?? 50;
+      this.aiPanelWidth = Math.max(20, Math.min(width, Math.floor(this._screenWidth * (maxPercent / 100))));
       this.recalculateLayout();
     }
   }

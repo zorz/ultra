@@ -34,6 +34,9 @@ import { lspManager, autocompletePopup, hoverTooltip, signatureHelp, diagnostics
 import { terminalPane } from './ui/components/terminal-pane.ts';
 import { gitIntegration } from './features/git/git-integration.ts';
 import { gitPanel } from './ui/components/git-panel.ts';
+import { aiPanel } from './ui/components/ai-panel.ts';
+import { aiIntegration } from './features/ai/ai-integration.ts';
+import { aiApprovalDialog } from './ui/components/ai-approval-dialog.ts';
 // Import boot file content directly (Bun embeds this at build time)
 import defaultBootFile from '../config/BOOT.md' with { type: 'text' };
 import { setDebugEnabled, debugLog } from './debug.ts';
@@ -123,6 +126,7 @@ export class App {
   constructor() {
     this.setupPaneManagerCallbacks();
     this.setupTerminalCallbacks();
+    this.setupAIPanelCallbacks();
     this.setupSessionManager();
   }
 
@@ -232,6 +236,7 @@ export class App {
         // Unfocus other components when file tree gains focus
         gitPanel.setFocused(false);
         terminalPane.setFocused(false);
+        aiPanel.setFocused(false);
       });
 
       // Set up git panel callbacks
@@ -248,6 +253,7 @@ export class App {
         // Unfocus other components when git panel gains focus
         fileTree.setFocused(false);
         terminalPane.setFocused(false);
+        aiPanel.setFocused(false);
       });
       gitPanel.onCommitRequest(() => {
         this.showCommitDialog();
@@ -408,6 +414,9 @@ export class App {
     // Stop git polling
     this.stopGitStatusPolling();
 
+    // Dispose AI panel
+    aiPanel.dispose();
+
     // Shutdown LSP servers
     lspManager.shutdown();
 
@@ -495,7 +504,9 @@ export class App {
         gitPanelVisible: saveUILayout ? gitPanel.isOpen() : false,
         gitPanelWidth: 30,
         activeSidebarPanel: 'files' as const,
-        minimapEnabled: saveUILayout ? settings.get('editor.minimap.enabled') : true
+        minimapEnabled: saveUILayout ? settings.get('editor.minimap.enabled') : true,
+        aiPanelVisible: saveUILayout ? layoutManager.isAIPanelVisible() : false,
+        aiPanelState: saveUILayout ? aiPanel.serialize() : undefined,
       };
 
       // Get layout
@@ -665,6 +676,19 @@ export class App {
 
         if (sessionData.ui.gitPanelVisible) {
           gitPanel.show();
+        }
+
+        // Restore AI panel state
+        if (sessionData.ui.aiPanelState) {
+          aiPanel.restore(sessionData.ui.aiPanelState);
+          if (sessionData.ui.aiPanelVisible) {
+            layoutManager.toggleAIPanel();
+            const aiPanelRect = layoutManager.getAIPanelRect();
+            if (aiPanelRect) {
+              aiPanel.setRect(aiPanelRect);
+              aiPanel.setVisible(true);
+            }
+          }
         }
       }
 
@@ -1212,6 +1236,33 @@ export class App {
         
         renderer.scheduleRender();
         return;
+      }
+
+      // Handle AI panel input when focused
+      if (aiPanel.isFocused() && layoutManager.isAIPanelVisible()) {
+        // Allow Ctrl+i to toggle AI panel even when focused
+        if (event.ctrl && event.key === 'I') {
+          layoutManager.toggleAIPanel();
+          aiPanel.setFocused(false);
+          renderer.scheduleRender();
+          return;
+        }
+
+        // Pass key to AI panel
+        const handled = aiPanel.handleKey(event);
+        if (handled) {
+          renderer.scheduleRender();
+          return;
+        }
+      }
+
+      // Handle AI approval dialog
+      if (aiApprovalDialog.isOpen()) {
+        const handled = aiApprovalDialog.handleKey(event);
+        if (handled) {
+          renderer.scheduleRender();
+          return;
+        }
       }
 
       // Convert our KeyEvent to ParsedKey format
@@ -1826,6 +1877,7 @@ export class App {
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(searchWidget);
     mouseManager.registerHandler(terminalPane);  // Terminal pane for embedded terminal
+    mouseManager.registerHandler(aiPanel);       // AI panel for Claude Code integration
     mouseManager.registerHandler(paneManager);  // Pane manager handles tab bars and editor panes
     mouseManager.registerHandler(gitPanel);     // Git panel for source control
     mouseManager.registerHandler(fileTree);
@@ -1894,10 +1946,11 @@ export class App {
 
     // Handle mouse clicks in documents
     paneManager.onDocumentClick((doc, position, clickCount, event) => {
-      // Clicking in editor unfocuses terminal, file tree, and git panel
+      // Clicking in editor unfocuses terminal, file tree, git panel, and AI panel
       terminalPane.setFocused(false);
       fileTree.setFocused(false);
       gitPanel.setFocused(false);
+      aiPanel.setFocused(false);
       
       if (event.meta) {
         // Cmd+Click adds cursor
@@ -1999,6 +2052,23 @@ export class App {
       // Unfocus other components when terminal gains focus
       fileTree.setFocused(false);
       gitPanel.setFocused(false);
+      aiPanel.setFocused(false);
+    });
+  }
+
+  /**
+   * Setup AI panel callbacks
+   */
+  private setupAIPanelCallbacks(): void {
+    // Re-render when AI output changes
+    aiPanel.onUpdate(() => {
+      renderer.scheduleRender();
+    });
+    aiPanel.onFocus(() => {
+      // Unfocus other components when AI panel gains focus
+      fileTree.setFocused(false);
+      gitPanel.setFocused(false);
+      terminalPane.setFocused(false);
     });
   }
 
@@ -2157,6 +2227,16 @@ export class App {
       terminalPane.render(ctx);
     }
 
+    // Render AI panel (if visible)
+    const aiPanelRect = layoutManager.getAIPanelRect();
+    if (aiPanelRect) {
+      aiPanel.setRect(aiPanelRect);
+      aiPanel.setVisible(true);
+      aiPanel.render(ctx);
+    } else {
+      aiPanel.setVisible(false);
+    }
+
     // Render panes (each pane has its own tab bar)
     this.debugLog('render: calling paneManager.setRect and render');
     paneManager.setRect(editorRect);
@@ -2204,6 +2284,9 @@ export class App {
     // Render dialogs (on top of everything)
     this.renderCloseConfirmDialog(ctx);
     this.renderExternalChangeDialog(ctx);
+
+    // Render AI approval dialog (on top of everything)
+    aiApprovalDialog.render(ctx);
 
     // Position cursor at the very end (after all rendering is done)
     // We render our own block cursor in the editor pane, so we just
@@ -2766,6 +2849,9 @@ export class App {
           }
           fileTree.setVisible(true);
           fileTree.setFocused(true);
+          aiPanel.setFocused(false);
+          terminalPane.setFocused(false);
+          gitPanel.setFocused(false);
         }
       },
       {
@@ -2775,6 +2861,8 @@ export class App {
         handler: () => {
           fileTree.setFocused(false);
           terminalPane.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
         }
       },
       {
@@ -2790,6 +2878,8 @@ export class App {
             }
             terminalPane.setFocused(true);
             fileTree.setFocused(false);
+            aiPanel.setFocused(false);
+            gitPanel.setFocused(false);
           } else {
             terminalPane.setFocused(false);
           }
@@ -2808,6 +2898,8 @@ export class App {
           await terminalPane.createTerminal();
           terminalPane.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
           renderer.scheduleRender();
         }
       },
@@ -2824,6 +2916,8 @@ export class App {
           }
           terminalPane.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          gitPanel.setFocused(false);
           renderer.scheduleRender();
         }
       },
@@ -2847,7 +2941,47 @@ export class App {
         id: 'ultra.toggleAIPanel',
         title: 'Toggle AI Panel',
         category: 'View',
-        handler: () => layoutManager.toggleAIPanel()
+        handler: async () => {
+          const wasVisible = layoutManager.isAIPanelVisible();
+          layoutManager.toggleAIPanel();
+
+          if (!wasVisible) {
+            // AI panel is now visible - set rect and state immediately
+            const aiPanelRect = layoutManager.getAIPanelRect();
+            if (aiPanelRect) {
+              aiPanel.setRect(aiPanelRect);
+              aiPanel.setVisible(true);
+            }
+
+            // Focus AI panel and unfocus others
+            aiPanel.setFocused(true);
+            fileTree.setFocused(false);
+            gitPanel.setFocused(false);
+            terminalPane.setFocused(false);
+
+            // Start the AI session if not already running
+            if (!aiPanel.isRunning()) {
+              await aiPanel.start();
+            }
+          } else {
+            // AI panel is now hidden - unfocus
+            aiPanel.setVisible(false);
+            aiPanel.setFocused(false);
+          }
+        }
+      },
+      {
+        id: 'ultra.focusAIPanel',
+        title: 'Focus AI Panel',
+        category: 'View',
+        handler: () => {
+          if (layoutManager.isAIPanelVisible()) {
+            aiPanel.setFocused(true);
+            fileTree.setFocused(false);
+            gitPanel.setFocused(false);
+            terminalPane.setFocused(false);
+          }
+        }
       },
 
       // Git commands
@@ -2865,6 +2999,9 @@ export class App {
             // Don't hide file tree - they can coexist in split sidebar
             gitPanel.setVisible(true);
             gitPanel.setFocused(true);
+            fileTree.setFocused(false);
+            aiPanel.setFocused(false);
+            terminalPane.setFocused(false);
             await gitPanel.refresh();
           } else {
             gitPanel.setVisible(false);
@@ -3003,6 +3140,8 @@ export class App {
           gitPanel.setVisible(true);
           gitPanel.setFocused(true);
           fileTree.setFocused(false);
+          aiPanel.setFocused(false);
+          terminalPane.setFocused(false);
           await gitPanel.refresh();
           renderer.scheduleRender();
         }
