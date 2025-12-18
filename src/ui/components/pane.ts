@@ -1539,21 +1539,32 @@ export class Pane implements MouseHandler {
   private screenToBuffer(screenX: number, screenY: number, editorRect: Rect): Position {
     const relativeY = screenY - editorRect.y;
     const relativeX = screenX - editorRect.x - this.gutterWidth;
+    const doc = this.getActiveDocument();
 
     if (this.isWordWrapEnabled()) {
       const absoluteScreenLine = this.scrollTop + relativeY;
       if (absoluteScreenLine < this.wrappedLines.length) {
         const wrap = this.wrappedLines[absoluteScreenLine]!;
+        const line = wrap.bufferLine;
+        const column = Math.max(0, wrap.startColumn + relativeX);
+        // Clamp column to actual line length
+        const lineLength = doc?.getLine(line)?.length ?? 0;
         return {
-          line: wrap.bufferLine,
-          column: Math.max(0, wrap.startColumn + relativeX)
+          line,
+          column: Math.min(column, lineLength)
         };
       }
     }
 
+    // Clamp line to valid range
+    const maxLine = Math.max(0, (doc?.lineCount ?? 1) - 1);
+    const line = Math.min(Math.max(0, this.scrollTop + relativeY), maxLine);
+    const column = Math.max(0, this.scrollLeft + relativeX);
+    // Clamp column to actual line length
+    const lineLength = doc?.getLine(line)?.length ?? 0;
     return {
-      line: Math.max(0, this.scrollTop + relativeY),
-      column: Math.max(0, this.scrollLeft + relativeX)
+      line,
+      column: Math.min(column, lineLength)
     };
   }
 

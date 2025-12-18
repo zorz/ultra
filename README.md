@@ -1,6 +1,6 @@
 # Ultra
 
-_v0.7.0_
+_v0.8.0_
 
 A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and modern IDE features. Built with Bun for maximum performance.
 
