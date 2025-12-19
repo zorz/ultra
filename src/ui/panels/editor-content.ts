@@ -775,16 +775,15 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   private renderEditor(ctx: RenderContext): void {
     const doc = this._document;
 
-    // Background
-    const bgRgb = hexToRgb(this.theme.background);
-    if (bgRgb) {
-      const bg = `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
-      for (let y = this.rect.y; y < this.rect.y + this.rect.height; y++) {
-        ctx.buffer(`\x1b[${y};${this.rect.x}H${bg}${' '.repeat(this.rect.width)}\x1b[0m`);
-      }
-    }
-
     if (!doc) {
+      // Only clear background when no document
+      const bgRgb = hexToRgb(this.theme.background);
+      if (bgRgb) {
+        const bg = `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
+        for (let y = this.rect.y; y < this.rect.y + this.rect.height; y++) {
+          ctx.buffer(`\x1b[${y};${this.rect.x}H${bg}${' '.repeat(this.rect.width)}\x1b[0m`);
+        }
+      }
       this.renderEmptyState(ctx);
       return;
     }
@@ -848,6 +847,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   ): void {
     let screenLine = 0;
     let wrapIndex = this.scrollTop;
+    const minimapWidth = this.minimapEnabled ? 10 : 0;
 
     while (screenLine < visibleLines && wrapIndex < this.wrappedLines.length) {
       const wrap = this.wrappedLines[wrapIndex]!;
@@ -870,8 +870,23 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
       if (wrap.bufferLine === inlineDiffLine &&
           (wrapIndex >= this.wrappedLines.length || this.wrappedLines[wrapIndex]!.bufferLine !== wrap.bufferLine) &&
           screenLine + inlineDiffHeight <= visibleLines) {
-        this.renderInlineDiff(ctx, this.rect.x, this.rect.y + screenLine, this.rect.width, inlineDiffHeight);
+        this.renderInlineDiff(ctx, this.rect.x, this.rect.y + screenLine, this.rect.width - minimapWidth, inlineDiffHeight);
         screenLine += inlineDiffHeight;
+      }
+    }
+
+    // Clear any remaining empty lines at the bottom
+    if (screenLine < visibleLines) {
+      const bgRgb = hexToRgb(this.theme.background);
+      const gutterBg = hexToRgb(this.theme.gutterBackground);
+      const bg = bgRgb ? `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m` : '';
+      const gutter = gutterBg ? `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m` : '';
+      const reset = '\x1b[0m';
+      const contentWidth = this.rect.width - this.gutterWidth - minimapWidth;
+
+      for (; screenLine < visibleLines; screenLine++) {
+        const screenY = this.rect.y + screenLine;
+        ctx.buffer(`\x1b[${screenY};${this.rect.x}H${gutter}${' '.repeat(this.gutterWidth)}${reset}${bg}${' '.repeat(contentWidth)}${reset}`);
       }
     }
   }
@@ -885,6 +900,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   ): void {
     let screenLine = 0;
     let bufferLine = this.scrollTop;
+    const minimapWidth = this.minimapEnabled ? 10 : 0;
 
     while (screenLine < visibleLines && bufferLine < doc.lineCount) {
       if (this.foldManager.isHidden(bufferLine)) {
@@ -900,8 +916,23 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
       bufferLine++;
 
       if (bufferLine - 1 === inlineDiffLine && screenLine + inlineDiffHeight <= visibleLines) {
-        this.renderInlineDiff(ctx, this.rect.x, this.rect.y + screenLine, this.rect.width, inlineDiffHeight);
+        this.renderInlineDiff(ctx, this.rect.x, this.rect.y + screenLine, this.rect.width - minimapWidth, inlineDiffHeight);
         screenLine += inlineDiffHeight;
+      }
+    }
+
+    // Clear any remaining empty lines at the bottom
+    if (screenLine < visibleLines) {
+      const bgRgb = hexToRgb(this.theme.background);
+      const gutterBg = hexToRgb(this.theme.gutterBackground);
+      const bg = bgRgb ? `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m` : '';
+      const gutter = gutterBg ? `\x1b[48;2;${gutterBg.r};${gutterBg.g};${gutterBg.b}m` : '';
+      const reset = '\x1b[0m';
+      const contentWidth = this.rect.width - this.gutterWidth - minimapWidth;
+
+      for (; screenLine < visibleLines; screenLine++) {
+        const screenY = this.rect.y + screenLine;
+        ctx.buffer(`\x1b[${screenY};${this.rect.x}H${gutter}${' '.repeat(this.gutterWidth)}${reset}${bg}${' '.repeat(contentWidth)}${reset}`);
       }
     }
   }
