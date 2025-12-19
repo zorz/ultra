@@ -1207,9 +1207,22 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     // Convert screen position to buffer position
     const position = this.screenToBufferPosition(event.x, event.y);
 
-    if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED') {
-      // Check for gutter clicks
-      if (event.x < this.rect.x + this.gutterWidth) {
+    // Handle left button clicks (single, double, triple)
+    const isLeftClick = event.name === 'MOUSE_LEFT_BUTTON_PRESSED' ||
+                        event.name === 'MOUSE_LEFT_BUTTON_PRESSED_DOUBLE' ||
+                        event.name === 'MOUSE_LEFT_BUTTON_PRESSED_TRIPLE';
+
+    if (isLeftClick) {
+      // Derive click count from event name
+      let clickCount = 1;
+      if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED_DOUBLE') {
+        clickCount = 2;
+      } else if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED_TRIPLE') {
+        clickCount = 3;
+      }
+
+      // Check for gutter clicks (only on single click)
+      if (clickCount === 1 && event.x < this.rect.x + this.gutterWidth) {
         const gutterCol = event.x - this.rect.x;
 
         // Git indicator column (first column)
@@ -1233,7 +1246,6 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
 
       // Regular click in content area
       if (this.onClickCallback) {
-        const clickCount = 1; // Would need click detection logic for double/triple click
         this.onClickCallback(position, clickCount, event);
       }
       return true;

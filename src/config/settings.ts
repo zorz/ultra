@@ -42,6 +42,10 @@ export interface EditorSettings {
   'git.diffContextLines': number;
   'terminal.integrated.openOnStartup': boolean;
   'terminal.integrated.spawnOnStartup': boolean;
+  'ai.panel.defaultWidth': number;
+  'ai.panel.maxWidthPercent': number;
+  'ai.panel.openOnStartup': boolean;
+  'ai.panel.initialPrompt': string;
   // Session settings
   /** Whether to restore sessions on startup */
   'session.restoreOnStartup': boolean;
@@ -100,6 +104,10 @@ const defaultSettings: EditorSettings = {
   'git.diffContextLines': 3,
   'terminal.integrated.openOnStartup': true,
   'terminal.integrated.spawnOnStartup': true,
+  'ai.panel.defaultWidth': 80,
+  'ai.panel.maxWidthPercent': 50,
+  'ai.panel.openOnStartup': true,
+  'ai.panel.initialPrompt': 'You are a helpful software engineer working with another software engineer on a coding project using the Ultra IDE',
   // Session settings
   'session.restoreOnStartup': true,
   'session.autoSave': true,

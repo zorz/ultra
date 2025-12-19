@@ -135,6 +135,14 @@ export class Pane implements MouseHandler {
     });
 
     editorContent.onFoldToggle((line) => {
+      // Directly toggle the fold on the clicked line
+      const foldManager = editorContent.getFoldManager();
+      if (foldManager.isFolded(line)) {
+        foldManager.unfold(line);
+      } else if (foldManager.canFold(line)) {
+        foldManager.fold(line);
+      }
+      // Also call external callback if registered
       if (this.onFoldToggleCallback) {
         this.onFoldToggleCallback(line);
       }

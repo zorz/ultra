@@ -907,15 +907,27 @@ export class App {
     if (settings.get('terminal.integrated.openOnStartup')) {
       if (!layoutManager.isTerminalVisible()) {
         const position = settings.get('terminal.integrated.position') || 'bottom';
-        const size = position === 'bottom' || position === 'top' 
+        const size = position === 'bottom' || position === 'top'
           ? settings.get('terminal.integrated.defaultHeight') || 12
           : settings.get('terminal.integrated.defaultWidth') || 40;
         layoutManager.toggleTerminal(size);
       }
-      
+
       // Spawn a terminal shell if configured
       if (settings.get('terminal.integrated.spawnOnStartup')) {
         terminalPane.createTerminal();
+      }
+    }
+
+    // Handle AI panel visibility on startup
+    if (settings.get('ai.panel.openOnStartup')) {
+      if (!layoutManager.isAIPanelVisible()) {
+        layoutManager.toggleAIPanel();
+        const aiPanelRect = layoutManager.getAIPanelRect();
+        if (aiPanelRect) {
+          aiPanel.setRect(aiPanelRect);
+          aiPanel.setVisible(true);
+        }
       }
     }
   }
@@ -2022,9 +2034,9 @@ export class App {
       }
     });
 
-    // Handle git gutter clicks
+    // Handle git gutter clicks (line is 0-based from EditorContent, convert to 1-based)
     paneManager.onGitGutterClick((line) => {
-      this.showGitDiffPopup(line);
+      this.showGitDiffPopup(line + 1);
     });
 
     // Handle inline diff stage action

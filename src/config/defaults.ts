@@ -469,6 +469,7 @@ export const defaultSettings: Record<string, any> = {
   "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}",
   "ai.panel.defaultWidth": 80,
   "ai.panel.maxWidthPercent": 50,
+  "ai.panel.openOnStartup": true,
   "ai.panel.initialPrompt": "You are a helpful software engineer working with another software engineer on a coding project using the Ultra IDE",
   "terminal.integrated.shell": "",
   "terminal.integrated.position": "bottom",
