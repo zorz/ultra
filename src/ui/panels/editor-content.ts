@@ -1175,8 +1175,8 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     const headerText = ` ${fileName} - Line ${this.inlineDiff.line + 1} `;
     const buttons = ' 󰐕 Stage  󰜺 Revert  󰅖 Close ';
     ctx.buffer(`\x1b[${y};${x}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${headerText}${reset}`);
-    // Draw buttons at the right side (account for icons being double-width: 3 icons * 1 extra col = 3)
-    const buttonsX = x + width - buttons.length - 3;
+    // Draw buttons at the right side
+    const buttonsX = x + width - buttons.length - 9;
     ctx.buffer(`\x1b[${y};${buttonsX}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${buttons}${reset}`);
 
     // Draw content area
@@ -1271,23 +1271,20 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
       // Check for inline diff header button clicks
       if (clickCount === 1 && this.inlineDiff.visible && event.y === this.inlineDiffScreenY) {
         // Button string: ' 󰐕 Stage  󰜺 Revert  󰅖 Close '
-        // Buttons are positioned at the right. Each icon is 2 cols visually.
+        // Buttons are positioned at right edge - icons are double-width (3 icons = 3 extra cols)
         const buttons = ' 󰐕 Stage  󰜺 Revert  󰅖 Close ';
-        const buttonsVisualWidth = buttons.length + 3; // 3 icons * 1 extra col each
-        const buttonsStartX = this.rect.x + this.inlineDiffWidth - buttonsVisualWidth;
+        const buttonsStartX = this.rect.x + this.inlineDiffWidth - buttons.length - 3;
 
         if (event.x >= buttonsStartX) {
           const relX = event.x - buttonsStartX;
-          // ' 󰐕 Stage  ' = 11 visual cols (icon=2, rest=9)
-          // ' 󰜺 Revert  ' = 12 visual cols (icon=2, rest=10)
-          // ' 󰅖 Close ' = 10 visual cols (icon=2, rest=8)
-          if (relX < 11) {
+          // Count chars: ' 󰐕 Stage  ' = 10, '󰜺 Revert  ' = 10, '󰅖 Close ' = 8
+          if (relX < 10) {
             // Stage button clicked
             if (this.onInlineDiffStageCallback) {
               this.onInlineDiffStageCallback(this.inlineDiff.filePath, this.inlineDiff.line);
             }
             return true;
-          } else if (relX < 23) {
+          } else if (relX < 20) {
             // Revert button clicked
             if (this.onInlineDiffRevertCallback) {
               this.onInlineDiffRevertCallback(this.inlineDiff.filePath, this.inlineDiff.line);
