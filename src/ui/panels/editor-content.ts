@@ -150,6 +150,9 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     height: 10,
     filePath: '',
   };
+  // Track inline diff screen position for click handling
+  private inlineDiffScreenY: number = -1;
+  private inlineDiffWidth: number = 0;
 
   // Callbacks
   private onClickCallback?: (position: Position, clickCount: number, event: MouseEvent) => void;
@@ -642,6 +645,8 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
    */
   hideInlineDiff(): void {
     this.inlineDiff.visible = false;
+    this.inlineDiffScreenY = -1;
+    this.inlineDiffWidth = 0;
   }
 
   /**
@@ -1130,6 +1135,10 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   }
 
   private renderInlineDiff(ctx: RenderContext, x: number, y: number, width: number, height: number): void {
+    // Store screen position and width for click handling
+    this.inlineDiffScreenY = y;
+    this.inlineDiffWidth = width;
+
     const theme = themeLoader.getCurrentTheme();
     if (!theme) return;
 
@@ -1159,12 +1168,16 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
       return rgb ? `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m` : '';
     };
 
-    // Draw header with title and action hints
+    // Draw header with title and action buttons (using Nerd Font icons)
+    // First clear the entire header line with background, then draw text on top
+    ctx.buffer(`\x1b[${y};${x}H${bgAnsi(headerBg)}${' '.repeat(width)}${reset}`);
     const fileName = this.inlineDiff.filePath.split('/').pop() || 'diff';
     const headerText = ` ${fileName} - Line ${this.inlineDiff.line + 1} `;
-    const buttons = ' s:stage  r:revert  Esc:close ';
-    const headerPadding = ' '.repeat(Math.max(0, width - headerText.length - buttons.length));
-    ctx.buffer(`\x1b[${y};${x}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${headerText}${headerPadding}${buttons}${reset}`);
+    const buttons = ' 󰐕 Stage  󰜺 Revert  󰅖 Close ';
+    ctx.buffer(`\x1b[${y};${x}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${headerText}${reset}`);
+    // Draw buttons at the right side (account for icons being double-width: 3 icons * 1 extra col = 3)
+    const buttonsX = x + width - buttons.length - 3;
+    ctx.buffer(`\x1b[${y};${buttonsX}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${buttons}${reset}`);
 
     // Draw content area
     const contentHeight = height - 2;  // Minus header and footer
@@ -1253,6 +1266,39 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
         clickCount = 2;
       } else if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED_TRIPLE') {
         clickCount = 3;
+      }
+
+      // Check for inline diff header button clicks
+      if (clickCount === 1 && this.inlineDiff.visible && event.y === this.inlineDiffScreenY) {
+        // Button string: ' 󰐕 Stage  󰜺 Revert  󰅖 Close '
+        // Buttons are positioned at the right. Each icon is 2 cols visually.
+        const buttons = ' 󰐕 Stage  󰜺 Revert  󰅖 Close ';
+        const buttonsVisualWidth = buttons.length + 3; // 3 icons * 1 extra col each
+        const buttonsStartX = this.rect.x + this.inlineDiffWidth - buttonsVisualWidth;
+
+        if (event.x >= buttonsStartX) {
+          const relX = event.x - buttonsStartX;
+          // ' 󰐕 Stage  ' = 11 visual cols (icon=2, rest=9)
+          // ' 󰜺 Revert  ' = 12 visual cols (icon=2, rest=10)
+          // ' 󰅖 Close ' = 10 visual cols (icon=2, rest=8)
+          if (relX < 11) {
+            // Stage button clicked
+            if (this.onInlineDiffStageCallback) {
+              this.onInlineDiffStageCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+            }
+            return true;
+          } else if (relX < 23) {
+            // Revert button clicked
+            if (this.onInlineDiffRevertCallback) {
+              this.onInlineDiffRevertCallback(this.inlineDiff.filePath, this.inlineDiff.line);
+            }
+            return true;
+          } else {
+            // Close button clicked
+            this.hideInlineDiff();
+            return true;
+          }
+        }
       }
 
       // Check for gutter clicks (only on single click)

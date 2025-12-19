@@ -108,6 +108,13 @@ export class App {
     fileName: string;
   } = { isOpen: false, documentId: null, fileName: '' };
 
+  // Revert confirmation dialog state
+  private revertConfirmDialog: {
+    isOpen: boolean;
+    filePath: string;
+    line: number;
+  } = { isOpen: false, filePath: '', line: 0 };
+
   // Debug logging
   private debugEnabled: boolean = false;
 
@@ -968,6 +975,21 @@ export class App {
         }
         if (event.key === 'C' || event.key === 'ESCAPE') {
           await this.handleCloseConfirmResponse('cancel');
+          return;
+        }
+        // Consume all other keys while dialog is open
+        renderer.scheduleRender();
+        return;
+      }
+
+      // Handle revert confirmation dialog
+      if (this.revertConfirmDialog.isOpen) {
+        if (event.key === 'Y' || event.key === 'ENTER') {
+          await this.handleRevertConfirmResponse(true);
+          return;
+        }
+        if (event.key === 'N' || event.key === 'ESCAPE') {
+          await this.handleRevertConfirmResponse(false);
           return;
         }
         // Consume all other keys while dialog is open
@@ -2051,21 +2073,14 @@ export class App {
       }
     });
 
-    // Handle inline diff revert action
-    paneManager.onInlineDiffRevert(async (filePath, _line) => {
-      const result = await gitIntegration.revertFile(filePath);
-      if (result) {
-        statusBar.setMessage('Reverted changes', 2000);
-        const pane = paneManager.getActivePane();
-        pane.hideInlineDiff();
-        // Reload the file
-        const doc = this.getActiveDocument();
-        if (doc) {
-          await doc.reload();
-        }
-        await this.updateGitStatus();
-        renderer.scheduleRender();
-      }
+    // Handle inline diff revert action - show confirmation dialog
+    paneManager.onInlineDiffRevert(async (filePath, line) => {
+      this.revertConfirmDialog = {
+        isOpen: true,
+        filePath,
+        line
+      };
+      renderer.scheduleRender();
     });
   }
 
@@ -2317,6 +2332,7 @@ export class App {
 
     // Render dialogs (on top of everything)
     this.renderCloseConfirmDialog(ctx);
+    this.renderRevertConfirmDialog(ctx);
     this.renderExternalChangeDialog(ctx);
 
     // Render AI approval dialog (on top of everything)
@@ -4314,6 +4330,30 @@ export class App {
   }
 
   /**
+   * Handle revert confirmation dialog response
+   */
+  private async handleRevertConfirmResponse(confirmed: boolean): Promise<void> {
+    const { filePath } = this.revertConfirmDialog;
+    this.revertConfirmDialog = { isOpen: false, filePath: '', line: 0 };
+
+    if (confirmed && filePath) {
+      const result = await gitIntegration.revertFile(filePath);
+      if (result) {
+        statusBar.setMessage('Reverted changes', 2000);
+        const pane = paneManager.getActivePane();
+        pane.hideInlineDiff();
+        // Reload the file
+        const doc = this.getActiveDocument();
+        if (doc) {
+          await doc.reload();
+        }
+        await this.updateGitStatus();
+      }
+    }
+    renderer.scheduleRender();
+  }
+
+  /**
    * Render close confirmation dialog
    */
   private renderCloseConfirmDialog(ctx: RenderContext): void {
@@ -4354,6 +4394,48 @@ export class App {
     const options = '(S)ave  (D)iscard  (C)ancel';
     const optX = dialogX + Math.floor((dialogWidth - options.length) / 2);
     ctx.drawStyled(optX, dialogY + 4, options, '#98c379', bgColor);
+  }
+
+  /**
+   * Render revert confirmation dialog
+   */
+  private renderRevertConfirmDialog(ctx: RenderContext): void {
+    if (!this.revertConfirmDialog.isOpen) return;
+
+    const dialogWidth = 50;
+    const dialogHeight = 7;
+    const dialogX = Math.floor((renderer.width - dialogWidth) / 2);
+    const dialogY = Math.floor((renderer.height - dialogHeight) / 2);
+
+    const bgColor = '#2d2d2d';
+    const borderColor = '#f38ba8';
+
+    // Background
+    ctx.fill(dialogX, dialogY, dialogWidth, dialogHeight, ' ', undefined, bgColor);
+
+    // Border
+    ctx.drawStyled(dialogX, dialogY, '╭' + '─'.repeat(dialogWidth - 2) + '╮', borderColor, bgColor);
+    for (let y = dialogY + 1; y < dialogY + dialogHeight - 1; y++) {
+      ctx.drawStyled(dialogX, y, '│', borderColor, bgColor);
+      ctx.drawStyled(dialogX + dialogWidth - 1, y, '│', borderColor, bgColor);
+    }
+    ctx.drawStyled(dialogX, dialogY + dialogHeight - 1, '╰' + '─'.repeat(dialogWidth - 2) + '╯', borderColor, bgColor);
+
+    // Title
+    const title = ' Revert Changes? ';
+    const titleX = dialogX + Math.floor((dialogWidth - title.length) / 2);
+    ctx.drawStyled(titleX, dialogY, title, '#f38ba8', bgColor);
+
+    // Message
+    const filename = this.revertConfirmDialog.filePath.split('/').pop() || 'file';
+    const msg = `Discard all changes to ${filename}?`;
+    const msgTruncated = msg.length > dialogWidth - 4 ? msg.slice(0, dialogWidth - 7) + '...' : msg;
+    ctx.drawStyled(dialogX + 2, dialogY + 2, msgTruncated, '#d4d4d4', bgColor);
+
+    // Options
+    const options = '(Y)es, Revert  (N)o, Cancel';
+    const optX = dialogX + Math.floor((dialogWidth - options.length) / 2);
+    ctx.drawStyled(optX, dialogY + 4, options, '#f38ba8', bgColor);
   }
 
   /**
