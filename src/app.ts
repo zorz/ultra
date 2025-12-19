@@ -1454,7 +1454,7 @@ export class App {
    */
   private notifyDocumentChange(doc: Document): void {
     if (!this.lspEnabled || !doc.filePath) return;
-    
+
     const uri = `file://${doc.filePath}`;
     lspManager.changeDocument(uri, doc.content);
   }
@@ -2034,9 +2034,9 @@ export class App {
       }
     });
 
-    // Handle git gutter clicks (line is 0-based from EditorContent, convert to 1-based)
+    // Handle git gutter clicks (line is already 1-based from EditorContent)
     paneManager.onGitGutterClick((line) => {
-      this.showGitDiffPopup(line + 1);
+      this.showGitDiffPopup(line);
     });
 
     // Handle inline diff stage action
@@ -4128,12 +4128,12 @@ export class App {
   /**
    * Activate a document in the currently active pane
    */
-  activateDocument(id: string): void {
+  async activateDocument(id: string): Promise<void> {
     const doc = this.documents.find(d => d.id === id);
     if (!doc) return;
 
     this.activeDocumentId = id;
-    
+
     // Get active pane and set the document
     const pane = paneManager.getActivePane();
     if (pane) {
@@ -4143,11 +4143,11 @@ export class App {
       }
       pane.setActiveDocument(id, doc.document);
     }
-    
+
     this.updateStatusBar();
-    
+
     // Update git gutter indicators for the new document
-    this.updateGitGutterIndicators();
+    await this.updateGitGutterIndicators();
   }
 
   /**
@@ -4495,18 +4495,21 @@ export class App {
   private async updateGitGutterIndicators(): Promise<void> {
     const doc = this.getActiveDocument();
     if (!doc || !doc.filePath) {
-      paneManager.getActivePane().clearGitLineChanges();
+      paneManager.getActivePane()?.clearGitLineChanges();
       return;
     }
-    
+
     // Compare current buffer content against HEAD (not disk content)
     const bufferContent = doc.content;
     const lineChanges = await gitIntegration.diffBufferLines(doc.filePath, bufferContent);
     this.debugLog(`[Git Gutter] File: ${doc.filePath}, Changes: ${lineChanges.length}, changes: ${JSON.stringify(lineChanges.slice(0, 10))}`);
     const pane = paneManager.getActivePane();
     this.debugLog(`[Git Gutter] Calling setGitLineChanges on pane: ${pane?.id}`);
-    pane.setGitLineChanges(lineChanges);
+    pane?.setGitLineChanges(lineChanges);
     this.debugLog(`[Git Gutter] setGitLineChanges called`);
+
+    // Schedule render to show the updated git indicators
+    renderer.scheduleRender();
   }
 
   /**
@@ -4533,8 +4536,8 @@ export class App {
       return;
     }
 
-    // Show inline diff in the pane (line is 1-based from git gutter)
-    await pane.showInlineDiff(doc.filePath, line - 1, diffContent);
+    // Show inline diff in the pane (line is 1-based from git gutter, convert to 0-based for editor)
+    pane.showInlineDiff(line - 1, diffContent.split('\n'), doc.filePath);
     renderer.scheduleRender();
   }
 

@@ -651,6 +651,23 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     return this.inlineDiff.visible;
   }
 
+  /**
+   * Get inline diff state (filePath and line).
+   */
+  getInlineDiffState(): { filePath: string; line: number } | null {
+    if (!this.inlineDiff.visible) return null;
+    return { filePath: this.inlineDiff.filePath, line: this.inlineDiff.line };
+  }
+
+  /**
+   * Scroll inline diff by delta lines.
+   */
+  scrollInlineDiff(delta: number): void {
+    if (!this.inlineDiff.visible) return;
+    const maxScroll = Math.max(0, this.inlineDiff.diffLines.length - this.inlineDiff.height + 2);
+    this.inlineDiff.scrollTop = Math.max(0, Math.min(this.inlineDiff.scrollTop + delta, maxScroll));
+  }
+
   // ==================== Callbacks ====================
 
   onClick(callback: (position: Position, clickCount: number, event: MouseEvent) => void): () => void {
@@ -908,7 +925,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     const reset = '\x1b[0m';
 
     // Render gutter (git indicator + line number + fold indicator)
-    const gitIndicator = this.getGitIndicator(bufferLine);
+    const gitIndicator = this.getGitIndicator(bufferLine + 1);  // Git uses 1-based line numbers
     const lineNumStr = String(bufferLine + 1).padStart(this.gutterWidth - 3, ' ');
     const foldIndicator = this.getFoldIndicator(bufferLine);
 
@@ -989,7 +1006,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
 
     // Gutter only shows line number on first wrap
     if (wrap.isFirstWrap) {
-      const gitIndicator = this.getGitIndicator(wrap.bufferLine);
+      const gitIndicator = this.getGitIndicator(wrap.bufferLine + 1);  // Git uses 1-based line numbers
       const lineNumStr = String(wrap.bufferLine + 1).padStart(this.gutterWidth - 3, ' ');
       const foldIndicator = this.getFoldIndicator(wrap.bufferLine);
       ctx.buffer(`\x1b[${screenY};${this.rect.x}H${gutterBgStr}${gitIndicator}${lineNumFg}${lineNumStr}${foldIndicator} ${reset}`);
@@ -1120,33 +1137,74 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     const bgColor = colors['editor.background'] || '#1e1e1e';
     const borderColor = colors['editorWidget.border'] || '#454545';
     const fgColor = colors['editor.foreground'] || '#d4d4d4';
+    const headerBg = colors['editorWidget.background'] || '#252526';
 
-    const bgRgb = hexToRgb(bgColor);
-    const borderRgb = hexToRgb(borderColor);
-    const fgRgb = hexToRgb(fgColor);
+    // Diff line colors with subtle background highlighting
+    const addedGutterColor = colors['editorGutter.addedBackground'] || '#a6e3a1';
+    const deletedGutterColor = colors['editorGutter.deletedBackground'] || '#f38ba8';
+    const addedBg = blendColors(bgColor, addedGutterColor, 0.15);
+    const deletedBg = blendColors(bgColor, deletedGutterColor, 0.15);
+    const addedFg = colors['gitDecoration.addedResourceForeground'] || addedGutterColor;
+    const deletedFg = colors['gitDecoration.deletedResourceForeground'] || deletedGutterColor;
 
-    if (!bgRgb || !borderRgb || !fgRgb) return;
-
-    const bg = `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
-    const border = `\x1b[38;2;${borderRgb.r};${borderRgb.g};${borderRgb.b}m`;
-    const fg = `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
     const reset = '\x1b[0m';
 
-    // Top border
-    ctx.buffer(`\x1b[${y};${x}H${bg}${border}${'─'.repeat(width)}${reset}`);
+    // Helper to create ANSI color codes
+    const bgAnsi = (color: string) => {
+      const rgb = hexToRgb(color);
+      return rgb ? `\x1b[48;2;${rgb.r};${rgb.g};${rgb.b}m` : '';
+    };
+    const fgAnsi = (color: string) => {
+      const rgb = hexToRgb(color);
+      return rgb ? `\x1b[38;2;${rgb.r};${rgb.g};${rgb.b}m` : '';
+    };
 
-    // Content
-    const visibleLines = Math.min(height - 2, this.inlineDiff.diffLines.length);
-    for (let i = 0; i < visibleLines; i++) {
-      const lineY = y + 1 + i;
-      const line = this.inlineDiff.diffLines[this.inlineDiff.scrollTop + i] || '';
-      const displayLine = line.slice(0, width).padEnd(width);
-      ctx.buffer(`\x1b[${lineY};${x}H${bg}${fg}${displayLine}${reset}`);
+    // Draw header with title and action hints
+    const fileName = this.inlineDiff.filePath.split('/').pop() || 'diff';
+    const headerText = ` ${fileName} - Line ${this.inlineDiff.line + 1} `;
+    const buttons = ' s:stage  r:revert  Esc:close ';
+    const headerPadding = ' '.repeat(Math.max(0, width - headerText.length - buttons.length));
+    ctx.buffer(`\x1b[${y};${x}H${bgAnsi(headerBg)}${fgAnsi(fgColor)}${headerText}${headerPadding}${buttons}${reset}`);
+
+    // Draw content area
+    const contentHeight = height - 2;  // Minus header and footer
+    const lines = this.inlineDiff.diffLines;
+
+    for (let i = 0; i < contentHeight; i++) {
+      const lineIdx = this.inlineDiff.scrollTop + i;
+      const screenY = y + 1 + i;
+
+      if (lineIdx < lines.length) {
+        const line = lines[lineIdx] || '';
+        let lineBg = bgColor;
+        let lineFg = fgColor;
+        let prefix = ' ';
+
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          lineBg = addedBg;
+          lineFg = addedFg;
+          prefix = '+';
+        } else if (line.startsWith('-') && !line.startsWith('---')) {
+          lineBg = deletedBg;
+          lineFg = deletedFg;
+          prefix = '-';
+        } else if (line.startsWith('@@')) {
+          lineFg = colors['textPreformat.foreground'] || '#d7ba7d';
+        }
+
+        const displayLine = (prefix + line.substring(1)).substring(0, width - 1).padEnd(width - 1);
+        ctx.buffer(`\x1b[${screenY};${x}H${bgAnsi(bgColor)}${fgAnsi(borderColor)}│${bgAnsi(lineBg)}${fgAnsi(lineFg)}${displayLine}${reset}`);
+      } else {
+        ctx.buffer(`\x1b[${screenY};${x}H${bgAnsi(bgColor)}${fgAnsi(borderColor)}│${' '.repeat(width - 1)}${reset}`);
+      }
     }
 
-    // Bottom border
-    const bottomY = y + height - 1;
-    ctx.buffer(`\x1b[${bottomY};${x}H${bg}${border}${'─'.repeat(width)}${reset}`);
+    // Draw footer with keybindings
+    const footerText = ' j/k:scroll ';
+    const footerY = y + height - 1;
+    const footerPadding = ' '.repeat(Math.max(0, width - footerText.length));
+    const descColor = colors['descriptionForeground'] || '#858585';
+    ctx.buffer(`\x1b[${footerY};${x}H${bgAnsi(headerBg)}${fgAnsi(descColor)}${footerPadding}${footerText}${reset}`);
   }
 
   // ==================== Mouse Handling ====================
@@ -1201,10 +1259,10 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
       if (clickCount === 1 && event.x < this.rect.x + this.gutterWidth) {
         const gutterCol = event.x - this.rect.x;
 
-        // Git indicator column (first column)
-        if (gutterCol === 0 && this.gitLineChanges.has(position.line)) {
+        // Git indicator column (first column) - Git uses 1-based line numbers
+        if (gutterCol === 0 && this.gitLineChanges.has(position.line + 1)) {
           if (this.onGitGutterClickCallback) {
-            this.onGitGutterClickCallback(position.line);
+            this.onGitGutterClickCallback(position.line + 1);  // Pass 1-based line number
           }
           return true;
         }

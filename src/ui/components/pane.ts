@@ -683,26 +683,36 @@ export class Pane implements MouseHandler {
     const activeContent = this.getActiveEditorContent();
     if (!activeContent || !activeContent.isInlineDiffVisible()) return false;
 
-    // EditorContent doesn't have key handling, so we implement it here
-    // by calling the appropriate methods
-    switch (key) {
-      case 'Escape':
+    const state = activeContent.getInlineDiffState();
+    const upperKey = key.toUpperCase();
+
+    switch (upperKey) {
+      case 'ESCAPE':
+      case 'C':
         this.hideInlineDiff();
         return true;
-      case 's':
-        if (this.onInlineDiffStageCallback) {
-          const doc = activeContent.getDocument();
-          if (doc && doc.filePath) {
-            // Get the inline diff line from EditorContent
-            // For now, we'll just use the callback if available
-          }
+      case 'S':
+        if (this.onInlineDiffStageCallback && state) {
+          this.onInlineDiffStageCallback(state.filePath, state.line);
         }
-        return false;
-      case 'r':
-        return false;
+        return true;
+      case 'R':
+        if (this.onInlineDiffRevertCallback && state) {
+          this.onInlineDiffRevertCallback(state.filePath, state.line);
+        }
+        return true;
+      case 'J':
+      case 'DOWN':
+        activeContent.scrollInlineDiff(1);
+        return true;
+      case 'K':
+      case 'UP':
+        activeContent.scrollInlineDiff(-1);
+        return true;
+      default:
+        // Capture all keys while inline diff is visible to prevent editor input
+        return true;
     }
-
-    return false;
   }
 
   // ==================== Gutter Width (delegated to EditorContent) ====================
