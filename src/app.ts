@@ -242,6 +242,7 @@ export class App {
       });
       fileTree.onFocus(() => {
         // Unfocus other components when file tree gains focus
+        paneManager.unfocusAllPanes();
         gitPanel.setFocused(false);
         terminalPane.setFocused(false);
         aiPanel.setFocused(false);
@@ -259,6 +260,7 @@ export class App {
       });
       gitPanel.onFocus(() => {
         // Unfocus other components when git panel gains focus
+        paneManager.unfocusAllPanes();
         fileTree.setFocused(false);
         terminalPane.setFocused(false);
         aiPanel.setFocused(false);
@@ -2094,6 +2096,7 @@ export class App {
     });
     terminalPane.onFocus(() => {
       // Unfocus other components when terminal gains focus
+      paneManager.unfocusAllPanes();
       fileTree.setFocused(false);
       gitPanel.setFocused(false);
       aiPanel.setFocused(false);
@@ -2110,6 +2113,7 @@ export class App {
     });
     aiPanel.onFocus(() => {
       // Unfocus other components when AI panel gains focus
+      paneManager.unfocusAllPanes();
       fileTree.setFocused(false);
       gitPanel.setFocused(false);
       terminalPane.setFocused(false);

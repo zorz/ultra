@@ -195,6 +195,15 @@ export class PaneManager implements MouseHandler {
     this.setActivePane(paneIds[prevIndex]!);
   }
 
+  /**
+   * Unfocus all panes (for when focus moves to sidebar/terminal/AI panel)
+   */
+  unfocusAllPanes(): void {
+    for (const pane of this.panes.values()) {
+      pane.setFocused(false);
+    }
+  }
+
   // ==================== Split Operations ====================
 
   /**

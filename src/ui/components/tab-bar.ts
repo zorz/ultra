@@ -7,6 +7,7 @@
 import type { RenderContext } from '../renderer.ts';
 import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
+import { renderer } from '../renderer.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
 import { hexToRgb } from '../colors.ts';
 
@@ -42,7 +43,13 @@ export class TabBar implements MouseHandler {
    * Set focus state (affects visual styling)
    */
   setFocused(focused: boolean): void {
+    const wasFocused = this.isFocused;
     this.isFocused = focused;
+
+    // Trigger re-render to update focus-dependent colors (background highlighting)
+    if (focused !== wasFocused) {
+      renderer.scheduleRender();
+    }
   }
 
   /**

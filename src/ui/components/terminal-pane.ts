@@ -6,7 +6,7 @@
  */
 
 import { PTY, type TerminalCell } from '../../terminal/pty.ts';
-import type { RenderContext } from '../renderer.ts';
+import { renderer, type RenderContext } from '../renderer.ts';
 import type { Rect } from '../layout.ts';
 import type { MouseHandler, MouseEvent } from '../mouse.ts';
 import { themeLoader } from '../themes/theme-loader.ts';
@@ -86,8 +86,15 @@ export class TerminalPane implements MouseHandler {
    * Set focus state
    */
   setFocused(focused: boolean): void {
+    const wasFocused = this.isFocused;
     this.isFocused = focused;
-    if (focused && this.onFocusCallback) {
+
+    // Trigger re-render to update focus-dependent colors (background highlighting)
+    if (focused !== wasFocused) {
+      renderer.scheduleRender();
+    }
+
+    if (focused && !wasFocused && this.onFocusCallback) {
       this.onFocusCallback();
     }
   }

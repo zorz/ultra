@@ -6,7 +6,7 @@
  */
 
 import type { Rect } from '../layout.ts';
-import type { RenderContext } from '../renderer.ts';
+import { renderer, type RenderContext } from '../renderer.ts';
 import type { KeyEvent } from '../../terminal/input.ts';
 import type { MouseEvent } from '../mouse.ts';
 import type {
@@ -234,6 +234,11 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
   setFocused(focused: boolean): void {
     const wasFocused = this._focused;
     this._focused = focused;
+
+    // Trigger re-render to update focus-dependent colors (background highlighting)
+    if (focused !== wasFocused) {
+      renderer.scheduleRender();
+    }
 
     if (focused && !wasFocused) {
       this._onFocusCallback?.();

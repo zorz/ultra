@@ -304,6 +304,11 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     const wasFocused = this.focused;
     this.focused = focused;
 
+    // Trigger re-render to update focus-dependent colors (background highlighting)
+    if (focused !== wasFocused) {
+      renderer.scheduleRender();
+    }
+
     if (focused && !wasFocused) {
       for (const cb of this.onFocusCallbacks) cb();
     }
