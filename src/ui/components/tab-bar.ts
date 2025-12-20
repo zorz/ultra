@@ -95,11 +95,16 @@ export class TabBar implements MouseHandler {
     const reset = '\x1b[0m';
     const moveTo = (px: number, py: number) => `\x1b[${py};${px}H`;
 
-    // Get theme colors
-    let inactiveBg = hexToRgb(themeLoader.getColor('tab.inactiveBackground')) || { r: 41, g: 44, b: 60 };
-    let activeBg = hexToRgb(themeLoader.getColor('tab.activeBackground')) || { r: 48, g: 52, b: 70 };
-    let activeFg = hexToRgb(themeLoader.getColor('tab.activeForeground')) || { r: 198, g: 208, b: 245 };
-    let inactiveFg = hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
+    // Get theme colors - adjust background brightness when focused (same as file-tree/git-panel)
+    const baseInactiveBg = themeLoader.getColor('tab.inactiveBackground');
+    const baseActiveBg = themeLoader.getColor('tab.activeBackground');
+    const inactiveBgColor = this.isFocused ? themeLoader.getFocusedBackground(baseInactiveBg) : baseInactiveBg;
+    const activeBgColor = this.isFocused ? themeLoader.getFocusedBackground(baseActiveBg) : baseActiveBg;
+
+    const inactiveBg = hexToRgb(inactiveBgColor) || { r: 41, g: 44, b: 60 };
+    const activeBg = hexToRgb(activeBgColor) || { r: 48, g: 52, b: 70 };
+    const activeFg = hexToRgb(themeLoader.getColor('tab.activeForeground')) || { r: 198, g: 208, b: 245 };
+    const inactiveFg = hexToRgb(themeLoader.getColor('tab.inactiveForeground')) || { r: 131, g: 139, b: 167 };
     const borderColor = hexToRgb(themeLoader.getColor('tab.border')) || { r: 35, g: 38, b: 52 };
     // Use theme colors for dirty/missing indicators - fallback to reasonable defaults
     const dirtyColor = hexToRgb(themeLoader.getColor('editorGutter.modifiedBackground')) || { r: 229, g: 192, b: 123 };
@@ -107,18 +112,9 @@ export class TabBar implements MouseHandler {
     const strikethrough = '\x1b[9m';
     const noStrikethrough = '\x1b[29m';
 
-    // Dim colors for unfocused pane
-    if (!this.isFocused) {
-      const dimFactor = 0.6;
-      inactiveBg = this.dimColor(inactiveBg, dimFactor);
-      activeBg = this.dimColor(activeBg, dimFactor);
-      activeFg = this.dimColor(activeFg, dimFactor);
-      inactiveFg = this.dimColor(inactiveFg, dimFactor);
-    }
-
     // Build entire tab bar as one string
     let output = moveTo(x, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) + ' '.repeat(width);
-    
+
     let currentX = x;
     const maxTabWidth = Math.min(30, Math.floor(width / Math.max(1, this.tabs.length)));
 

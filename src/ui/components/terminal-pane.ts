@@ -348,15 +348,17 @@ export class TerminalPane implements MouseHandler {
    * Render the title bar
    */
   private renderTitleBar(ctx: RenderContext): void {
-    const bgRgb = hexToRgb(this.titleBgColor);
+    // Adjust background brightness when focused (same as file-tree/git-panel/tab-bar)
+    const bgColor = this.isFocused ? themeLoader.getFocusedBackground(this.titleBgColor) : this.titleBgColor;
+    const bgRgb = hexToRgb(bgColor);
     const fgRgb = hexToRgb(this.titleFgColor);
-    
+
     // Background
     let output = `\x1b[${this.rect.y};${this.rect.x}H`;
     if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
     if (fgRgb) output += `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
     output += ' '.repeat(this.rect.width);
-    
+
     // Terminal tabs
     this.tabPositions = [];
     let x = this.rect.x;
@@ -420,8 +422,10 @@ export class TerminalPane implements MouseHandler {
     const buffer = terminal.pty.getBuffer();
     const cursor = terminal.pty.getCursor();
     const viewOffset = terminal.pty.getViewOffset();
-    
-    const defaultBg = hexToRgb(this.bgColor);
+
+    // Adjust background brightness when focused (same as file-tree/git-panel)
+    const bgColor = this.isFocused ? themeLoader.getFocusedBackground(this.bgColor) : this.bgColor;
+    const defaultBg = hexToRgb(bgColor);
     const defaultFg = hexToRgb(this.fgColor);
     
     for (let y = 0; y < contentRect.height; y++) {
@@ -490,9 +494,11 @@ export class TerminalPane implements MouseHandler {
    */
   private renderEmptyState(ctx: RenderContext): void {
     const contentRect = this.getTerminalContentRect();
-    const bg = hexToRgb(this.bgColor);
+    // Adjust background brightness when focused (same as file-tree/git-panel)
+    const bgColor = this.isFocused ? themeLoader.getFocusedBackground(this.bgColor) : this.bgColor;
+    const bg = hexToRgb(bgColor);
     const fg = hexToRgb(this.fgColor);
-    
+
     // Fill background
     for (let y = 0; y < contentRect.height; y++) {
       let output = `\x1b[${contentRect.y + y};${contentRect.x}H`;
@@ -501,12 +507,12 @@ export class TerminalPane implements MouseHandler {
       output += '\x1b[0m';
       ctx.buffer(output);
     }
-    
+
     // Center message
     const message = 'Press Ctrl+Shift+` to create a new terminal';
     const x = contentRect.x + Math.floor((contentRect.width - message.length) / 2);
     const y = contentRect.y + Math.floor(contentRect.height / 2);
-    
+
     let output = `\x1b[${y};${x}H`;
     if (bg) output += `\x1b[48;2;${bg.r};${bg.g};${bg.b}m`;
     if (fg) output += `\x1b[38;2;${fg.r};${fg.g};${fg.b}m`;

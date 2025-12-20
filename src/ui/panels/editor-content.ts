@@ -629,12 +629,20 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   // ==================== Theme ====================
 
   private updateTheme(): void {
+    // Get base colors from theme
+    const baseBg = themeLoader.getColor('editor.background') || defaultTheme.background;
+    const baseGutterBg = themeLoader.getColor('editorGutter.background') || themeLoader.getColor('editor.background') || defaultTheme.gutterBackground;
+
+    // Adjust background brightness when focused (same as file-tree/git-panel)
+    const background = this.focused ? themeLoader.getFocusedBackground(baseBg) : baseBg;
+    const gutterBackground = this.focused ? themeLoader.getFocusedBackground(baseGutterBg) : baseGutterBg;
+
     this.theme = {
-      background: themeLoader.getColor('editor.background') || defaultTheme.background,
+      background,
       foreground: themeLoader.getColor('editor.foreground') || defaultTheme.foreground,
       lineNumberForeground: themeLoader.getColor('editorLineNumber.foreground') || defaultTheme.lineNumberForeground,
       lineNumberActiveForeground: themeLoader.getColor('editorLineNumber.activeForeground') || defaultTheme.lineNumberActiveForeground,
-      gutterBackground: themeLoader.getColor('editorGutter.background') || themeLoader.getColor('editor.background') || defaultTheme.gutterBackground,
+      gutterBackground,
       selectionBackground: themeLoader.getColor('editor.selectionBackground') || defaultTheme.selectionBackground,
       cursorForeground: themeLoader.getColor('editorCursor.foreground') || defaultTheme.cursorForeground,
       lineHighlightBackground: themeLoader.getColor('editor.lineHighlightBackground') || defaultTheme.lineHighlightBackground,

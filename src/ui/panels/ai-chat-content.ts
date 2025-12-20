@@ -102,8 +102,6 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
   private _cursorColor: string = '#00d4ff';
   private _headerBgColor: string = '#16213e';
   private _headerFgColor: string = '#e0e0e0';
-  private _focusBorderColor: string = '#00d4ff';
-  private _unfocusedBorderColor: string = '#444444';
 
   // Callbacks
   private _onUpdateCallback?: () => void;
@@ -183,8 +181,6 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
     this._cursorColor = themeLoader.getColor('terminalCursor.foreground') || '#00d4ff';
     this._headerBgColor = themeLoader.getColor('tab.activeBackground') || '#16213e';
     this._headerFgColor = themeLoader.getColor('tab.activeForeground') || '#e0e0e0';
-    this._focusBorderColor = themeLoader.getColor('focusBorder') || '#00d4ff';
-    this._unfocusedBorderColor = themeLoader.getColor('tab.inactiveBackground') || '#444444';
   }
 
   // ==================== PanelContent Interface ====================
@@ -700,25 +696,20 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
   }
 
   private renderHeader(ctx: RenderContext): void {
-    const bgRgb = hexToRgb(this._headerBgColor);
+    // Adjust background brightness when focused (same as file-tree/git-panel/tab-bar)
+    const bgColor = this._focused ? themeLoader.getFocusedBackground(this._headerBgColor) : this._headerBgColor;
+    const bgRgb = hexToRgb(bgColor);
     const fgRgb = hexToRgb(this._headerFgColor);
-    const borderColor = this._focused ? this._focusBorderColor : this._unfocusedBorderColor;
-    const borderRgb = hexToRgb(borderColor);
 
     let output = `\x1b[${this._rect.y};${this._rect.x}H`;
 
-    // Focus indicator - left border character
-    if (borderRgb) output += `\x1b[38;2;${borderRgb.r};${borderRgb.g};${borderRgb.b}m`;
-    if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
-    output += this._focused ? '▐' : '│';
-
-    // Background for rest of header
+    // Background for header
     if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
     if (fgRgb) output += `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
-    output += ' '.repeat(this._rect.width - 1);
+    output += ' '.repeat(this._rect.width);
 
     // Title
-    output += `\x1b[${this._rect.y};${this._rect.x + 1}H`;
+    output += `\x1b[${this._rect.y};${this._rect.x}H`;
     if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
     if (fgRgb) output += `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
 
@@ -732,11 +723,6 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
     if (bgRgb) output += `\x1b[48;2;${bgRgb.r};${bgRgb.g};${bgRgb.b}m`;
     if (fgRgb) output += `\x1b[38;2;${fgRgb.r};${fgRgb.g};${fgRgb.b}m`;
     output += ` ${title}`;
-
-    // Focus indicator text
-    if (this._focused) {
-      output += `\x1b[1m FOCUSED\x1b[22m`;
-    }
 
     // Controls on right side
     const controls = this._isRunning ? '[Ctrl+C: interrupt]' : '[Enter: start]';
@@ -776,7 +762,9 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
 
     const buffer = this._pty.getBuffer();
 
-    const defaultBg = this.getCachedRgb(this._bgColor);
+    // Adjust background brightness when focused (same as file-tree/git-panel)
+    const bgColor = this._focused ? themeLoader.getFocusedBackground(this._bgColor) : this._bgColor;
+    const defaultBg = hexToRgb(bgColor);
     const defaultFg = this.getCachedRgb(this._fgColor);
 
     // Pre-calculate default background escape sequence
@@ -864,7 +852,9 @@ export class AIChatContent implements ScrollablePanelContent, FocusablePanelCont
   }
 
   private renderEmptyState(ctx: RenderContext, contentRect: Rect): void {
-    const bg = this.getCachedRgb(this._bgColor);
+    // Adjust background brightness when focused (same as file-tree/git-panel)
+    const bgColor = this._focused ? themeLoader.getFocusedBackground(this._bgColor) : this._bgColor;
+    const bg = hexToRgb(bgColor);
     const fg = this.getCachedRgb(this._fgColor);
 
     // Pre-calculate escape sequences

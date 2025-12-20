@@ -196,13 +196,25 @@ export class ThemeLoader {
   }
 
   /**
-   * Get a focused version of a background color
-   * Makes it slightly lighter for dark themes, slightly darker for light themes
+   * Get a focused version of a background color.
+   * Makes it slightly lighter for dark themes, slightly darker for light themes.
+   * The adjustment is intentionally subtle (3%) to avoid overwhelming the UI.
    */
   getFocusedBackground(baseColor: string): string {
     const isDark = this.isThemeDark();
-    const adjustAmount = isDark ? 8 : -8; // Adjust by 8% brightness
+    const adjustAmount = isDark ? 3 : -3; // Subtle 3% brightness adjustment
     return this.adjustBrightness(baseColor, adjustAmount);
+  }
+
+  /**
+   * Get a subtle focus accent color for borders/indicators.
+   * Returns a slightly dimmed version of the focus border color.
+   * Use this for left-edge focus borders on panels.
+   */
+  getFocusAccentColor(): string {
+    const focusBorder = this.getColor('focusBorder');
+    // Dim the focus border color to 80% - subtle but still visible
+    return this.adjustBrightness(focusBorder, -20);
   }
 
   /**
