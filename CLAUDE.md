@@ -154,7 +154,7 @@ For commands that need text output, use `.text()`:
 const result = await $`git -C ${workspaceRoot} branch`.text();
 ```
 
-Git commands should never open an editor (vi/vim). The git-integration module sets `GIT_EDITOR=true` globally.
+Git commands should never open an editor (vi/vim). **NOTE:** `GIT_EDITOR=true` should be set but is currently missing from git-integration.ts - this is a known issue to fix.
 
 ### Event Callbacks
 
@@ -262,11 +262,66 @@ src/
 
 ## Testing
 
+Ultra uses Bun's built-in test runner. See `architecture/testing/` for comprehensive documentation.
+
+### Running Tests
+
 ```bash
 bun test                 # Run all tests
 bun test --watch         # Watch mode
+bun test tests/unit/     # Unit tests only
+bun test tests/integration/  # Integration tests only
+bun test tests/e2e/      # End-to-end tests only
+bun test --update-snapshots  # Update snapshot files
 bun run typecheck        # TypeScript type checking
 ```
+
+### Test Structure
+
+```
+tests/
+├── unit/                # Service method tests
+├── integration/         # ECP adapter tests (JSON-RPC)
+├── e2e/                 # Full workflow tests
+├── fixtures/            # Test data (documents, configs, git repos)
+├── snapshots/           # Snapshot files (auto-generated)
+└── helpers/             # Test utilities (TestECPClient, etc.)
+```
+
+### TestECPClient
+
+The `TestECPClient` class enables testing ECP methods without terminal I/O:
+
+```typescript
+import { TestECPClient } from '@test/ecp-client.ts';
+
+test('document editing', async () => {
+  const client = new TestECPClient();
+
+  const { documentId } = await client.request('document/open', {
+    uri: 'memory://test.txt',
+    content: 'hello'
+  });
+
+  await client.request('document/insert', {
+    documentId,
+    position: { line: 0, column: 5 },
+    text: ' world'
+  });
+
+  const { content } = await client.request('document/content', { documentId });
+  expect(content).toBe('hello world');
+
+  await client.shutdown();
+});
+```
+
+### Test Documentation
+
+- [Testing Overview](./architecture/testing/overview.md) - Strategy and structure
+- [TestECPClient Design](./architecture/testing/test-client.md) - Client class API
+- [Test Patterns](./architecture/testing/patterns.md) - Unit, integration, e2e, snapshots
+- [Fixtures Guide](./architecture/testing/fixtures.md) - Managing test data
 
 ## Running
 
@@ -275,3 +330,102 @@ bun run dev              # Development mode
 bun run dev --debug      # With debug logging
 bun run build            # Build executable
 ```
+
+## Ultra 1.0 Architecture
+
+Ultra 1.0 is being rearchitected into an **Editor Command Protocol (ECP) Server** model. See `architecture/` for detailed documentation.
+
+### Key Concepts
+
+1. **ECP Server**: Ultra core becomes a headless server using JSON-RPC 2.0
+2. **Services**: Modular services (Document, File, Git, LSP, Session, Syntax, Terminal)
+3. **Multiple Clients**: TUI, GUI, AI agents, or remote clients connect via ECP
+4. **Abstracted I/O**: File system, git, etc. are pluggable backends
+
+### Architecture Documentation
+
+```
+architecture/
+├── overview.md           # High-level architecture vision
+├── services/
+│   ├── document-service.md   # Buffer, cursor, undo (core editing)
+│   ├── file-service.md       # File system abstraction
+│   ├── git-service.md        # Version control
+│   ├── lsp-service.md        # Language server integration
+│   ├── session-service.md    # Settings, keybindings, state
+│   ├── syntax-service.md     # Syntax highlighting
+│   └── terminal-service.md   # Terminal I/O (TUI client only)
+└── testing/
+    ├── overview.md           # Testing strategy and structure
+    ├── test-client.md        # TestECPClient design
+    ├── patterns.md           # Unit, integration, e2e patterns
+    └── fixtures.md           # Test data management
+```
+
+### Known Issues to Fix During Migration
+
+These issues were identified during the architecture review:
+
+| Issue | Location | Description |
+|-------|----------|-------------|
+| `console.error` usage | Multiple files | Should use `debugLog()` instead |
+| Silent failures | Git, LSP, Config | Operations fail without error feedback |
+| Hardcoded tabSize | `document.ts:813` | Uses `2` instead of settings |
+| Defaults inconsistency | settings.ts vs defaults.ts | Theme, wordWrap values differ |
+| Fold state not saved | `app.ts:490` | TODO comment, always empty array |
+| Missing GIT_EDITOR | git-integration.ts | Not set despite CLAUDE.md claim |
+| No input validation | Settings | Any value accepted without validation |
+| Memory unbounded | CacheManager | No size limits, potential memory leak |
+| when clauses unused | keymap.ts | Context conditions not implemented |
+
+### Service Interface Pattern
+
+When creating new services, follow this pattern:
+
+```typescript
+// services/example/interface.ts
+interface ExampleService {
+  // Methods with clear contracts
+  doSomething(params: Params): Promise<Result>;
+
+  // Event subscription returning unsubscribe
+  onEvent(callback: EventCallback): Unsubscribe;
+}
+
+// services/example/local.ts
+class LocalExampleService implements ExampleService {
+  // Implementation
+}
+
+// services/example/adapter.ts
+class ExampleServiceAdapter {
+  // Maps ECP JSON-RPC calls to service methods
+  handleRequest(method: string, params: unknown): Promise<unknown>
+}
+
+// services/example/index.ts
+export { ExampleService } from './interface.ts';
+export { LocalExampleService } from './local.ts';
+export { ExampleServiceAdapter } from './adapter.ts';
+```
+
+### ECP Method Naming
+
+ECP methods use namespaced naming:
+
+```typescript
+"document/insert"     // Document operations
+"file/read"           // File operations
+"git/commit"          // Git operations
+"lsp/completion"      // LSP features
+"config/set"          // Configuration
+"session/save"        // Session management
+```
+
+### Migration Guidelines
+
+1. **Don't break existing functionality** - Current TUI must work during migration
+2. **Extract interfaces first** - Define service contracts before refactoring
+3. **Fix issues as you go** - Address known issues when touching files
+4. **Add tests** - New service code should have test coverage
+5. **Update this file** - Keep CLAUDE.md current with new patterns
