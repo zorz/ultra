@@ -331,7 +331,7 @@ export class UserConfigManager {
   async changeTheme(themeName: string): Promise<void> {
     // Update settings
     settings.update({ 'workbench.colorTheme': themeName } as any);
-    
+
     // Save to settings file
     try {
       const currentSettings = await settingsLoader.loadFromFile(this.settingsPath);
@@ -340,11 +340,38 @@ export class UserConfigManager {
     } catch {
       // Ignore save errors
     }
-    
+
     // Load the theme
     await this.loadTheme(themeName);
-    
+
     // Notify app
+    if (this.onReloadCallback) {
+      this.onReloadCallback();
+    }
+  }
+
+  /**
+   * Save a single setting to disk and update in-memory settings
+   */
+  async saveSetting(key: string, value: any): Promise<void> {
+    // Update in-memory settings
+    settings.update({ [key]: value } as any);
+
+    // Save to settings file
+    try {
+      const currentSettings = await settingsLoader.loadFromFile(this.settingsPath);
+      const newSettings = { ...currentSettings, [key]: value };
+      await this.writeFile(this.settingsPath, JSON.stringify(newSettings, null, 2));
+    } catch (error) {
+      console.error(`Failed to save setting ${key}:`, error);
+    }
+
+    // If theme changed, reload it
+    if (key === 'workbench.colorTheme') {
+      await this.loadTheme(value);
+    }
+
+    // Notify app to re-render
     if (this.onReloadCallback) {
       this.onReloadCallback();
     }

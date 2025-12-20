@@ -37,7 +37,9 @@ import { gitPanel } from './ui/components/git-panel.ts';
 import { aiPanel } from './ui/components/ai-panel.ts';
 import { aiIntegration } from './features/ai/ai-integration.ts';
 import { aiApprovalDialog } from './ui/components/ai-approval-dialog.ts';
-import { settingsDialog } from './ui/components/settings-dialog.ts';
+import { settingsDialog, type SettingItem } from './ui/components/settings-dialog.ts';
+import { booleanToggleDialog } from './ui/components/boolean-toggle-dialog.ts';
+import { settingInputDialog } from './ui/components/setting-input-dialog.ts';
 // Import boot file content directly (Bun embeds this at build time)
 import defaultBootFile from '../config/BOOT.md' with { type: 'text' };
 import { setDebugEnabled, debugLog } from './debug.ts';
@@ -196,6 +198,7 @@ export class App {
       this.setupKeyboardHandler();
       this.setupMouseHandler();
       this.setupRenderCallback();
+      this.setupSettingsCallbacks();
 
       // Register commands
       this.debugLog('Registering commands...');
@@ -1168,6 +1171,21 @@ export class App {
         return;
       }
 
+      // Handle setting editor dialogs (higher priority than settings dialog)
+      if (booleanToggleDialog.isOpen()) {
+        if (booleanToggleDialog.handleKey(event)) {
+          renderer.scheduleRender();
+          return;
+        }
+      }
+
+      if (settingInputDialog.isOpen()) {
+        if (settingInputDialog.handleKey(event)) {
+          renderer.scheduleRender();
+          return;
+        }
+      }
+
       // Handle settings dialog input if it's open
       if (settingsDialog.isOpen()) {
         if (settingsDialog.handleKey(event)) {
@@ -1930,8 +1948,10 @@ export class App {
 
     // Register mouse handlers (order matters - first handlers get priority)
     mouseManager.registerHandler(commitDialog);
-    mouseManager.registerHandler(settingsDialog);
     mouseManager.registerHandler(commandPalette);
+    mouseManager.registerHandler(booleanToggleDialog);
+    mouseManager.registerHandler(settingInputDialog);
+    mouseManager.registerHandler(settingsDialog);
     mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
     mouseManager.registerHandler(searchWidget);
@@ -2206,6 +2226,141 @@ export class App {
   }
 
   /**
+   * Setup settings dialog callbacks
+   */
+  private setupSettingsCallbacks(): void {
+    settingsDialog.onSettingSelect(async (item: SettingItem) => {
+      const { meta, value } = item;
+      const editorRect = layoutManager.getEditorAreaRect();
+
+      switch (meta.type) {
+        case 'boolean':
+          // Show boolean toggle dialog
+          booleanToggleDialog.show({
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            settingKey: meta.key,
+            label: meta.label,
+            description: meta.description,
+            initialValue: value as boolean,
+            onConfirm: async (newValue: boolean) => {
+              await userConfigManager.saveSetting(meta.key, newValue);
+              statusBar.setMessage(`${meta.label}: ${newValue ? 'On' : 'Off'}`, 2000);
+              renderer.scheduleRender();
+            },
+            onCancel: () => {
+              renderer.scheduleRender();
+            }
+          });
+          break;
+
+        case 'number':
+          // Show number input dialog
+          settingInputDialog.show({
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            settingKey: meta.key,
+            label: meta.label,
+            description: meta.description,
+            initialValue: value as number,
+            inputType: 'number',
+            min: meta.min,
+            max: meta.max,
+            onConfirm: async (newValue: string | number) => {
+              await userConfigManager.saveSetting(meta.key, newValue);
+              statusBar.setMessage(`${meta.label}: ${newValue}`, 2000);
+              renderer.scheduleRender();
+            },
+            onCancel: () => {
+              renderer.scheduleRender();
+            }
+          });
+          break;
+
+        case 'string':
+          // Special case: Color theme uses the dedicated theme picker
+          if (meta.key === 'workbench.colorTheme') {
+            const themes = await userConfigManager.getAvailableThemes();
+            const currentTheme = settings.get('workbench.colorTheme') || 'catppuccin-frappe';
+
+            commandPalette.showWithItems(
+              themes.map(t => ({
+                id: t.name,
+                title: t.displayName,
+                category: t.isBuiltIn ? 'Built-in' : 'User',
+                handler: async () => {
+                  await userConfigManager.changeTheme(t.name);
+                }
+              })),
+              'Select Color Theme',
+              currentTheme,
+              editorRect.x,
+              editorRect.width
+            );
+            break;
+          }
+
+          // Show string input dialog for other string settings
+          settingInputDialog.show({
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width,
+            settingKey: meta.key,
+            label: meta.label,
+            description: meta.description,
+            initialValue: value as string,
+            inputType: 'string',
+            onConfirm: async (newValue: string | number) => {
+              await userConfigManager.saveSetting(meta.key, newValue);
+              statusBar.setMessage(`${meta.label} updated`, 2000);
+              renderer.scheduleRender();
+            },
+            onCancel: () => {
+              renderer.scheduleRender();
+            }
+          });
+          break;
+
+        case 'enum':
+          // Use command palette to show options
+          if (meta.options && meta.options.length > 0) {
+            const items = meta.options.map(opt => ({
+              id: opt,
+              title: opt,
+              category: meta.category,
+              handler: async () => {
+                await userConfigManager.saveSetting(meta.key, opt);
+                statusBar.setMessage(`${meta.label}: ${opt}`, 2000);
+                renderer.scheduleRender();
+              }
+            }));
+
+            commandPalette.showWithItems(
+              items,
+              `Select ${meta.label}`,
+              String(value),
+              editorRect.x,
+              editorRect.width
+            );
+          }
+          break;
+
+        default:
+          // For unsupported types (like 'object'), show a message
+          statusBar.setMessage(`Edit ${meta.key} in settings.json`, 3000);
+          break;
+      }
+
+      renderer.scheduleRender();
+    });
+  }
+
+  /**
    * Main render function
    */
   private render(ctx: RenderContext): void {
@@ -2327,11 +2482,15 @@ export class App {
     // Render file browser (on top of file picker)
     fileBrowser.render(ctx);
 
-    // Render command palette (on top of everything)
-    commandPalette.render(ctx);
-
-    // Render settings dialog (on top of command palette)
+    // Render settings dialog
     settingsDialog.render(ctx);
+
+    // Render setting editor dialogs (on top of settings dialog)
+    booleanToggleDialog.render(ctx);
+    settingInputDialog.render(ctx);
+
+    // Render command palette (on top of settings dialogs - used for enum settings)
+    commandPalette.render(ctx);
 
     // Render input dialog (on top of everything)
     inputDialog.render(ctx);
@@ -3727,6 +3886,8 @@ export class App {
           renderer.scheduleRender();
         }
       },
+
+      // Quick access to common settings (shortcuts that bypass settings dialog)
       {
         id: 'ultra.changeTheme',
         title: 'Change Color Theme',
@@ -3734,9 +3895,8 @@ export class App {
         handler: async () => {
           const themes = await userConfigManager.getAvailableThemes();
           const currentTheme = settings.get('workbench.colorTheme') || 'catppuccin-frappe';
-
-          // Show theme selector in command palette
           const editorRect = layoutManager.getEditorAreaRect();
+
           commandPalette.showWithItems(
             themes.map(t => ({
               id: t.name,
@@ -3754,7 +3914,31 @@ export class App {
           renderer.scheduleRender();
         }
       },
-      
+      {
+        id: 'ultra.toggleWordWrap',
+        title: 'Toggle Word Wrap',
+        category: 'Preferences',
+        handler: async () => {
+          const current = settings.get('editor.wordWrap');
+          const newValue = current === 'on' ? 'off' : 'on';
+          await userConfigManager.saveSetting('editor.wordWrap', newValue);
+          statusBar.setMessage(`Word Wrap: ${newValue}`, 2000);
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.toggleLineNumbers',
+        title: 'Toggle Line Numbers',
+        category: 'Preferences',
+        handler: async () => {
+          const current = settings.get('editor.lineNumbers');
+          const newValue = current === 'on' ? 'off' : 'on';
+          await userConfigManager.saveSetting('editor.lineNumbers', newValue);
+          statusBar.setMessage(`Line Numbers: ${newValue}`, 2000);
+          renderer.scheduleRender();
+        }
+      },
+
       // Additional editing commands
       {
         id: 'ultra.outdent',
