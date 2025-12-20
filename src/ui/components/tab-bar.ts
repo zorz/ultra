@@ -21,12 +21,26 @@ export interface Tab {
   isMissing?: boolean;
 }
 
+// Minimum characters for tab name (before truncation makes it unreadable)
+const MIN_TAB_NAME_CHARS = 3;
+// Minimum tab width: space + indicator + name + space + × + space
+const MIN_TAB_WIDTH = 2 + MIN_TAB_NAME_CHARS + 3;  // = 8
+// Width of scroll arrow buttons
+const SCROLL_ARROW_WIDTH = 3;  // " < " or " > "
+
 export class TabBar implements MouseHandler {
   private rect: Rect = { x: 1, y: 1, width: 80, height: 1 };
   private tabs: Tab[] = [];
   private activeTabId: string | null = null;
   private tabPositions: { id: string; startX: number; endX: number; closeX: number }[] = [];
   private isFocused: boolean = true;  // Whether this tab bar's pane is focused
+
+  // Scroll state
+  private scrollOffset: number = 0;  // Index of first visible tab
+  private hasLeftArrow: boolean = false;
+  private hasRightArrow: boolean = false;
+  private leftArrowX: number = 0;
+  private rightArrowX: number = 0;
 
   // Callbacks
   private onTabClickCallback?: (tabId: string) => void;
@@ -58,6 +72,10 @@ export class TabBar implements MouseHandler {
   setTabs(tabs: Tab[]): void {
     this.tabs = tabs;
     this.activeTabId = tabs.find(t => t.isActive)?.id || null;
+    // Ensure scroll offset is valid
+    this.clampScrollOffset();
+    // Ensure active tab is visible
+    this.ensureActiveTabVisible();
   }
 
   /**
@@ -67,6 +85,54 @@ export class TabBar implements MouseHandler {
     this.activeTabId = tabId;
     for (const tab of this.tabs) {
       tab.isActive = tab.id === tabId;
+    }
+    // Ensure the newly active tab is visible
+    this.ensureActiveTabVisible();
+  }
+
+  /**
+   * Clamp scroll offset to valid range
+   */
+  private clampScrollOffset(): void {
+    if (this.tabs.length === 0) {
+      this.scrollOffset = 0;
+    } else {
+      this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, this.tabs.length - 1));
+    }
+  }
+
+  /**
+   * Ensure the active tab is scrolled into view
+   */
+  private ensureActiveTabVisible(): void {
+    if (!this.activeTabId) return;
+
+    const activeIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+    if (activeIndex < 0) return;
+
+    // If active tab is before the scroll offset, scroll left to show it
+    if (activeIndex < this.scrollOffset) {
+      this.scrollOffset = activeIndex;
+    }
+    // Note: We can't easily check if it's past the visible area without knowing
+    // the rendered widths, so we'll handle that in the render method
+  }
+
+  /**
+   * Scroll tabs left (show earlier tabs)
+   */
+  scrollLeft(): void {
+    if (this.scrollOffset > 0) {
+      this.scrollOffset--;
+    }
+  }
+
+  /**
+   * Scroll tabs right (show later tabs)
+   */
+  scrollRight(): void {
+    if (this.scrollOffset < this.tabs.length - 1) {
+      this.scrollOffset++;
     }
   }
 
@@ -87,11 +153,85 @@ export class TabBar implements MouseHandler {
   }
 
   /**
+   * Calculate tab widths based on available space
+   * Returns array of { tab, width, contentWidth } for visible tabs
+   */
+  private calculateTabWidths(availableWidth: number): { tab: Tab; width: number; contentWidth: number }[] {
+    if (this.tabs.length === 0) return [];
+
+    const visibleTabs = this.tabs.slice(this.scrollOffset);
+    if (visibleTabs.length === 0) return [];
+
+    // Start with ideal widths (max 30 chars total per tab)
+    const MAX_TAB_WIDTH = 30;
+    const FIXED_CHARS = 5;  // space + indicator(1) + space + × + space
+
+    // Calculate ideal widths for all visible tabs
+    let tabWidths = visibleTabs.map(tab => {
+      const idealNameWidth = tab.fileName.length;
+      const idealTotal = Math.min(MAX_TAB_WIDTH, idealNameWidth + FIXED_CHARS);
+      return { tab, width: idealTotal, contentWidth: idealTotal - FIXED_CHARS };
+    });
+
+    // Calculate total width needed
+    const separatorWidth = 1;  // │ between tabs
+    const totalNeeded = tabWidths.reduce((sum, t) => sum + t.width, 0) +
+                        (tabWidths.length - 1) * separatorWidth;
+
+    // If everything fits, return as-is
+    if (totalNeeded <= availableWidth) {
+      return tabWidths;
+    }
+
+    // Need to shrink tabs - calculate how much space we have per tab
+    const avgWidthPerTab = Math.floor((availableWidth - (tabWidths.length - 1) * separatorWidth) / tabWidths.length);
+
+    // If average is less than minimum, we need to show fewer tabs
+    if (avgWidthPerTab < MIN_TAB_WIDTH) {
+      // Calculate how many tabs can fit at minimum width
+      const maxTabs = Math.floor((availableWidth + separatorWidth) / (MIN_TAB_WIDTH + separatorWidth));
+      tabWidths = tabWidths.slice(0, Math.max(1, maxTabs));
+
+      // Recalculate with fewer tabs
+      const newAvgWidth = Math.floor((availableWidth - (tabWidths.length - 1) * separatorWidth) / tabWidths.length);
+      tabWidths = tabWidths.map(t => ({
+        tab: t.tab,
+        width: Math.max(MIN_TAB_WIDTH, Math.min(newAvgWidth, t.width)),
+        contentWidth: Math.max(MIN_TAB_NAME_CHARS, Math.min(newAvgWidth - FIXED_CHARS, t.contentWidth))
+      }));
+    } else {
+      // Shrink all tabs proportionally
+      tabWidths = tabWidths.map(t => ({
+        tab: t.tab,
+        width: Math.max(MIN_TAB_WIDTH, Math.min(avgWidthPerTab, t.width)),
+        contentWidth: Math.max(MIN_TAB_NAME_CHARS, Math.min(avgWidthPerTab - FIXED_CHARS, t.contentWidth))
+      }));
+    }
+
+    // Final pass: fit as many tabs as possible
+    let usedWidth = 0;
+    const result: typeof tabWidths = [];
+    for (const t of tabWidths) {
+      const neededWidth = t.width + (result.length > 0 ? separatorWidth : 0);
+      if (usedWidth + neededWidth <= availableWidth) {
+        result.push(t);
+        usedWidth += neededWidth;
+      } else {
+        break;
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Render the tab bar
    */
   render(ctx: RenderContext): void {
     const { x, y, width } = this.rect;
     this.tabPositions = [];
+    this.hasLeftArrow = false;
+    this.hasRightArrow = false;
 
     // Guard against invalid dimensions
     if (width <= 0) return;
@@ -119,24 +259,60 @@ export class TabBar implements MouseHandler {
     const strikethrough = '\x1b[9m';
     const noStrikethrough = '\x1b[29m';
 
+    // Determine if we need scroll arrows
+    const needsLeftArrow = this.scrollOffset > 0;
+    const tabAreaStart = x + (needsLeftArrow ? SCROLL_ARROW_WIDTH : 0);
+
+    // Calculate available width for tabs (reserve space for potential right arrow)
+    let availableWidth = width - (needsLeftArrow ? SCROLL_ARROW_WIDTH : 0);
+
+    // Calculate tab widths
+    const tabWidths = this.calculateTabWidths(availableWidth - SCROLL_ARROW_WIDTH);
+
+    // Determine if we need a right arrow (more tabs after the visible ones)
+    const visibleTabCount = tabWidths.length;
+    const needsRightArrow = (this.scrollOffset + visibleTabCount) < this.tabs.length;
+
+    // If we don't need right arrow, recalculate with full width
+    const finalTabWidths = needsRightArrow ? tabWidths : this.calculateTabWidths(availableWidth);
+
+    // Check if active tab is visible; if not, adjust scroll
+    const activeIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+    if (activeIndex >= 0) {
+      const visibleEndIndex = this.scrollOffset + finalTabWidths.length;
+      if (activeIndex >= visibleEndIndex) {
+        // Active tab is past visible area, scroll right
+        this.scrollOffset = activeIndex - finalTabWidths.length + 1;
+        if (this.scrollOffset < 0) this.scrollOffset = 0;
+        // Re-render with new scroll position
+        this.render(ctx);
+        return;
+      }
+    }
+
     // Build entire tab bar as one string
     let output = moveTo(x, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) + ' '.repeat(width);
 
-    let currentX = x;
-    const maxTabWidth = Math.min(30, Math.floor(width / Math.max(1, this.tabs.length)));
+    // Render left arrow if needed
+    if (needsLeftArrow) {
+      this.hasLeftArrow = true;
+      this.leftArrowX = x;
+      output += moveTo(x, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) +
+                fgRgb(activeFg.r, activeFg.g, activeFg.b) + ' ◀ ';
+    }
 
-    for (const tab of this.tabs) {
-      const tabContent = this.formatTabContent(tab, maxTabWidth - 5);  // -5 for padding and close button area
-      const tabWidth = tabContent.length + 5;  // space + content + space + × + space
+    let currentX = tabAreaStart;
 
-      if (currentX + tabWidth > x + width) break;  // No more room
+    for (const { tab, width: tabWidth, contentWidth } of finalTabWidths) {
+      const tabContent = this.formatTabContent(tab, contentWidth);
+      const actualTabWidth = tabContent.length + 5;  // space + indicator + space + × + space
 
       // Track tab position for click handling (store close button start position)
-      const closeButtonX = currentX + tabWidth - 3;  // × takes last 3 chars including padding
+      const closeButtonX = currentX + actualTabWidth - 3;  // × takes last 3 chars including padding
       this.tabPositions.push({
         id: tab.id,
         startX: currentX,
-        endX: currentX + tabWidth,
+        endX: currentX + actualTabWidth,
         closeX: closeButtonX
       });
 
@@ -166,13 +342,21 @@ export class TabBar implements MouseHandler {
       output += ' ' + fgRgb(closeFg.r, closeFg.g, closeFg.b) + '×' + ' ';
 
       // Tab separator
-      currentX += tabWidth;
-      if (currentX < x + width) {
+      currentX += actualTabWidth;
+      if (currentX < x + width - (needsRightArrow ? SCROLL_ARROW_WIDTH : 0)) {
         output += moveTo(currentX, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) + fgRgb(borderColor.r, borderColor.g, borderColor.b) + '│';
         currentX += 1;
       }
     }
-    
+
+    // Render right arrow if needed
+    if (needsRightArrow) {
+      this.hasRightArrow = true;
+      this.rightArrowX = x + width - SCROLL_ARROW_WIDTH;
+      output += moveTo(this.rightArrowX, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) +
+                fgRgb(activeFg.r, activeFg.g, activeFg.b) + ' ▶ ';
+    }
+
     output += reset;
     ctx.buffer(output);
   }
@@ -203,6 +387,20 @@ export class TabBar implements MouseHandler {
 
   onMouseEvent(event: MouseEvent): boolean {
     if (event.name === 'MOUSE_LEFT_BUTTON_PRESSED') {
+      // Check if left arrow was clicked
+      if (this.hasLeftArrow && event.x >= this.leftArrowX && event.x < this.leftArrowX + SCROLL_ARROW_WIDTH) {
+        this.scrollLeft();
+        renderer.scheduleRender();
+        return true;
+      }
+
+      // Check if right arrow was clicked
+      if (this.hasRightArrow && event.x >= this.rightArrowX && event.x < this.rightArrowX + SCROLL_ARROW_WIDTH) {
+        this.scrollRight();
+        renderer.scheduleRender();
+        return true;
+      }
+
       // Find which tab was clicked
       for (const pos of this.tabPositions) {
         if (event.x >= pos.startX && event.x < pos.endX) {
@@ -230,6 +428,23 @@ export class TabBar implements MouseHandler {
           }
           return true;
         }
+      }
+    }
+
+    // Handle mouse wheel for scrolling tabs
+    if (event.name === 'MOUSE_WHEEL_UP') {
+      if (this.scrollOffset > 0) {
+        this.scrollLeft();
+        renderer.scheduleRender();
+        return true;
+      }
+    }
+
+    if (event.name === 'MOUSE_WHEEL_DOWN') {
+      if (this.hasRightArrow) {
+        this.scrollRight();
+        renderer.scheduleRender();
+        return true;
       }
     }
 
