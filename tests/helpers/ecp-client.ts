@@ -17,6 +17,8 @@ import { FileServiceImpl } from '../../src/services/file/service.ts';
 import { FileServiceAdapter } from '../../src/services/file/adapter.ts';
 import { GitCliService } from '../../src/services/git/cli.ts';
 import { GitServiceAdapter } from '../../src/services/git/adapter.ts';
+import { LocalSessionService } from '../../src/services/session/local.ts';
+import { SessionServiceAdapter } from '../../src/services/session/adapter.ts';
 
 /**
  * Options for creating a TestECPClient.
@@ -63,10 +65,13 @@ export class TestECPClient {
   private fileAdapter: FileServiceAdapter;
   private gitService: GitCliService;
   private gitAdapter: GitServiceAdapter;
+  private sessionService: LocalSessionService;
+  private sessionAdapter: SessionServiceAdapter;
   private notifications: ECPNotification[] = [];
   private requestId = 0;
   private captureNotifications: boolean;
   private workspaceRoot: string;
+  private initialized = false;
 
   constructor(options: TestECPClientOptions = {}) {
     this.workspaceRoot = options.workspaceRoot ?? process.cwd();
@@ -76,11 +81,13 @@ export class TestECPClient {
     this.documentService = new LocalDocumentService();
     this.fileService = new FileServiceImpl();
     this.gitService = new GitCliService();
+    this.sessionService = new LocalSessionService();
 
     // Initialize adapters
     this.documentAdapter = new DocumentServiceAdapter(this.documentService);
     this.fileAdapter = new FileServiceAdapter(this.fileService);
     this.gitAdapter = new GitServiceAdapter(this.gitService);
+    this.sessionAdapter = new SessionServiceAdapter(this.sessionService);
 
     // Capture notifications
     if (this.captureNotifications) {
@@ -90,6 +97,16 @@ export class TestECPClient {
       this.fileAdapter.setNotificationHandler((notification) => {
         this.notifications.push(notification);
       });
+    }
+  }
+
+  /**
+   * Initialize async services (call before using session methods).
+   */
+  async initSession(): Promise<void> {
+    if (!this.initialized) {
+      await this.sessionService.init(this.workspaceRoot);
+      this.initialized = true;
     }
   }
 
@@ -131,8 +148,8 @@ export class TestECPClient {
       };
     }
 
-    // GitServiceAdapter has a different response format
-    if (adapter instanceof GitServiceAdapter) {
+    // GitServiceAdapter and SessionServiceAdapter have a different response format
+    if (adapter instanceof GitServiceAdapter || adapter instanceof SessionServiceAdapter) {
       const result = await adapter.handleRequest(method, params);
       if ('error' in result) {
         return {
@@ -204,7 +221,7 @@ export class TestECPClient {
   /**
    * Get a service directly (for unit testing).
    */
-  getService<T>(name: 'document' | 'file' | 'git'): T {
+  getService<T>(name: 'document' | 'file' | 'git' | 'session'): T {
     switch (name) {
       case 'document':
         return this.documentService as unknown as T;
@@ -212,6 +229,8 @@ export class TestECPClient {
         return this.fileService as unknown as T;
       case 'git':
         return this.gitService as unknown as T;
+      case 'session':
+        return this.sessionService as unknown as T;
       default:
         throw new Error(`Unknown service: ${name}`);
     }
@@ -238,7 +257,7 @@ export class TestECPClient {
   /**
    * Route method to appropriate adapter.
    */
-  private getAdapterForMethod(method: string): DocumentServiceAdapter | FileServiceAdapter | GitServiceAdapter | null {
+  private getAdapterForMethod(method: string): DocumentServiceAdapter | FileServiceAdapter | GitServiceAdapter | SessionServiceAdapter | null {
     if (method.startsWith('document/')) {
       return this.documentAdapter;
     }
@@ -249,6 +268,11 @@ export class TestECPClient {
 
     if (method.startsWith('git/')) {
       return this.gitAdapter;
+    }
+
+    if (method.startsWith('config/') || method.startsWith('session/') ||
+        method.startsWith('keybindings/') || method.startsWith('theme/')) {
+      return this.sessionAdapter;
     }
 
     return null;
