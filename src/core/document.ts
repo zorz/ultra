@@ -164,6 +164,25 @@ export class Document {
     return this._buffer.length;
   }
 
+  /**
+   * Get the document version number.
+   * This increments on every buffer modification and enables O(1) change detection.
+   *
+   * Use this instead of comparing `content` strings to check if document has changed:
+   * ```typescript
+   * // GOOD: O(1) comparison
+   * if (doc.version !== this.lastVersion) { ... }
+   *
+   * // BAD: O(n) string comparison, slow for large files
+   * if (doc.content !== this.lastContent) { ... }
+   * ```
+   *
+   * @see Buffer.version - underlying implementation
+   */
+  get version(): number {
+    return this._buffer.version;
+  }
+
   getLine(lineNumber: number): string {
     return this._buffer.getLine(lineNumber);
   }

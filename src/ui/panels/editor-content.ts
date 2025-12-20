@@ -125,10 +125,20 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   // Word wrap state
   private wrappedLines: WrappedLine[] = [];
   private lastWrapWidth: number = 0;
-  private lastWrapContent: string = '';
+  /**
+   * Version number of document when wrapped lines were last computed.
+   * Used for O(1) change detection instead of O(n) content string comparison.
+   * @see Buffer.version for why this optimization matters
+   */
+  private lastWrapVersion: number = -1;
 
   // Syntax highlighting
-  private lastParsedContent: string = '';
+  /**
+   * Version number of document when syntax was last parsed.
+   * Used for O(1) change detection instead of O(n) content string comparison.
+   * @see Buffer.version for why this optimization matters
+   */
+  private lastParsedVersion: number = -1;
   private lastLanguage: string = '';
   private highlighterReady: boolean = false;
 
@@ -136,7 +146,12 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   private currentBracketMatch: BracketMatch | null = null;
 
   // Fold state
-  private lastFoldContent: string = '';
+  /**
+   * Version number of document when fold regions were last computed.
+   * Used for O(1) change detection instead of O(n) content string comparison.
+   * @see Buffer.version for why this optimization matters
+   */
+  private lastFoldVersion: number = -1;
 
   // Git line changes for gutter indicators
   private gitLineChanges: Map<number, GitLineChange['type']> = new Map();
@@ -489,14 +504,16 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
     }
 
     const textWidth = this.getVisibleColumnCount();
-    const content = doc.content;
+    const docVersion = doc.version;
 
-    if (textWidth === this.lastWrapWidth && content === this.lastWrapContent && this.wrappedLines.length > 0) {
+    // Use version-based change detection for O(1) comparison instead of O(n) string comparison.
+    // This is critical for scroll performance in large files (500+ lines).
+    if (textWidth === this.lastWrapWidth && docVersion === this.lastWrapVersion && this.wrappedLines.length > 0) {
       return;
     }
 
     this.lastWrapWidth = textWidth;
-    this.lastWrapContent = content;
+    this.lastWrapVersion = docVersion;
     this.wrappedLines = [];
 
     const lineCount = doc.lineCount;
@@ -714,9 +731,9 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
 
   onActivated(): void {
     if (this._document) {
-      // Reset parsed content to force re-parse since the singleton highlighter
+      // Reset parsed version to force re-parse since the singleton highlighter
       // may have tokens from a different document
-      this.lastParsedContent = '';
+      this.lastParsedVersion = -1;
       this.setupHighlighting(this._document);
     }
   }
@@ -805,18 +822,24 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   private renderContent(ctx: RenderContext, doc: Document): void {
     const visibleLines = this.rect.height;
 
+    // Use version-based change detection for O(1) comparison instead of O(n) string comparison.
+    // This is critical for scroll performance in large files (500+ lines).
+    // See Buffer.version for detailed explanation of this optimization.
+    const docVersion = doc.version;
+
     // Recompute fold regions if content changed
-    const content = doc.content;
-    if (content !== this.lastFoldContent) {
+    if (docVersion !== this.lastFoldVersion) {
+      const content = doc.content;
       const lines = content.split('\n');
       this.foldManager.computeRegions(lines);
-      this.lastFoldContent = content;
+      this.lastFoldVersion = docVersion;
     }
 
     // Parse content for syntax highlighting
-    if (this.highlighterReady && content !== this.lastParsedContent) {
+    if (this.highlighterReady && docVersion !== this.lastParsedVersion) {
+      const content = doc.content;
       shikiHighlighter.parse(content);
-      this.lastParsedContent = content;
+      this.lastParsedVersion = docVersion;
     }
 
     // Compute wrapped lines

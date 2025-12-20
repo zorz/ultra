@@ -1,12 +1,28 @@
 /**
  * Piece Table Buffer Implementation
- * 
+ *
  * A piece table is an efficient data structure for text editors that stores:
  * - Original content (immutable)
  * - Added content (append-only)
  * - A list of "pieces" that reference spans in either buffer
- * 
+ *
  * This allows O(1) insert/delete operations on average, with efficient undo/redo.
+ *
+ * ## Version Tracking (Performance Optimization)
+ *
+ * The buffer maintains a `_version` counter that increments on every modification.
+ * This enables O(1) change detection instead of O(n) content string comparison.
+ *
+ * **Why this matters:** Components like EditorContent need to detect content changes
+ * to invalidate caches (syntax highlighting, fold regions, etc.). Previously this
+ * was done by comparing full content strings, which is O(n) where n = file size.
+ * For large files (500+ lines), this caused jerky scrolling because every render
+ * frame triggered expensive string comparisons.
+ *
+ * **Usage:** Compare `buffer.version` (or `document.version`) instead of comparing
+ * content strings when checking if content has changed since last render/operation.
+ *
+ * @see EditorContent - uses version for fold/syntax cache invalidation
  */
 
 export interface Position {
@@ -37,6 +53,13 @@ export class Buffer {
   private pieces: Piece[];
   private lineCache: LineInfo[] | null = null;
   private _length: number = 0;
+
+  /**
+   * Version counter for O(1) change detection.
+   * Increments on every buffer modification (insert, delete, restore).
+   * Use this instead of comparing content strings to detect changes.
+   */
+  private _version: number = 0;
 
   constructor(initialContent: string = '') {
     this.originalBuffer = initialContent;
@@ -70,6 +93,15 @@ export class Buffer {
   get lineCount(): number {
     this.ensureLineCache();
     return this.lineCache!.length;
+  }
+
+  /**
+   * Get the buffer version number.
+   * This increments on every modification and can be used for O(1) change detection.
+   * Compare versions instead of content strings to check if buffer has changed.
+   */
+  get version(): number {
+    return this._version;
   }
 
   /**
@@ -390,10 +422,12 @@ export class Buffer {
   }
 
   /**
-   * Invalidate the line cache (call after any modification)
+   * Invalidate the line cache (call after any modification).
+   * Also increments the version counter for change detection.
    */
   private invalidateLineCache(): void {
     this.lineCache = null;
+    this._version++;
   }
 
   /**
