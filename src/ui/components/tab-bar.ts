@@ -25,8 +25,8 @@ export interface Tab {
 const MIN_TAB_NAME_CHARS = 3;
 // Minimum tab width: space + indicator + name + space + × + space
 const MIN_TAB_WIDTH = 2 + MIN_TAB_NAME_CHARS + 3;  // = 8
-// Width of scroll arrow buttons
-const SCROLL_ARROW_WIDTH = 3;  // " < " or " > "
+// Width of scroll arrow buttons (larger for easier clicking)
+const SCROLL_ARROW_WIDTH = 4;  // " ◀ " or " ▶ " with extra padding
 
 export class TabBar implements MouseHandler {
   private rect: Rect = { x: 1, y: 1, width: 80, height: 1 };
@@ -298,7 +298,7 @@ export class TabBar implements MouseHandler {
       this.hasLeftArrow = true;
       this.leftArrowX = x;
       output += moveTo(x, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) +
-                fgRgb(activeFg.r, activeFg.g, activeFg.b) + ' ◀ ';
+                fgRgb(activeFg.r, activeFg.g, activeFg.b) + ' ◀  ';
     }
 
     let currentX = tabAreaStart;
@@ -354,7 +354,7 @@ export class TabBar implements MouseHandler {
       this.hasRightArrow = true;
       this.rightArrowX = x + width - SCROLL_ARROW_WIDTH;
       output += moveTo(this.rightArrowX, y) + bgRgb(inactiveBg.r, inactiveBg.g, inactiveBg.b) +
-                fgRgb(activeFg.r, activeFg.g, activeFg.b) + ' ▶ ';
+                fgRgb(activeFg.r, activeFg.g, activeFg.b) + '  ▶ ';
     }
 
     output += reset;
@@ -428,23 +428,6 @@ export class TabBar implements MouseHandler {
           }
           return true;
         }
-      }
-    }
-
-    // Handle mouse wheel for scrolling tabs
-    if (event.name === 'MOUSE_WHEEL_UP') {
-      if (this.scrollOffset > 0) {
-        this.scrollLeft();
-        renderer.scheduleRender();
-        return true;
-      }
-    }
-
-    if (event.name === 'MOUSE_WHEEL_DOWN') {
-      if (this.hasRightArrow) {
-        this.scrollRight();
-        renderer.scheduleRender();
-        return true;
       }
     }
 
