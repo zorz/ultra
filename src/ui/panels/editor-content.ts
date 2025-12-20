@@ -117,6 +117,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   // Settings
   private minimapEnabled: boolean = true;
   private foldingEnabled: boolean = true;
+  private lineNumbersMode: 'on' | 'off' | 'relative' = 'on';
   private gutterWidth: number = 6;
 
   // Theme
@@ -198,6 +199,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   private loadSettings(): void {
     this.minimapEnabled = settings.get('editor.minimap.enabled') ?? true;
     this.foldingEnabled = settings.get('editor.folding') ?? true;
+    this.lineNumbersMode = settings.get('editor.lineNumbers') ?? 'on';
   }
 
   /**
@@ -206,6 +208,7 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   reloadSettings(): void {
     this.minimapEnabled = settings.get('editor.minimap.enabled') ?? true;
     this.foldingEnabled = settings.get('editor.folding') ?? true;
+    this.lineNumbersMode = settings.get('editor.lineNumbers') ?? 'on';
     this.minimap.loadSettings();
     // Update gutter width in case line numbers setting changed
     this.updateGutterWidth();
@@ -214,10 +217,10 @@ export class EditorContent implements ScrollablePanelContent, FocusablePanelCont
   }
 
   /**
-   * Get line numbers display mode
+   * Get cached line numbers display mode
    */
   private getLineNumbersMode(): 'on' | 'off' | 'relative' {
-    return settings.get('editor.lineNumbers') ?? 'on';
+    return this.lineNumbersMode;
   }
 
   private setupMinimapCallbacks(): void {
