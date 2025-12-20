@@ -2247,6 +2247,7 @@ export class App {
             initialValue: value as boolean,
             onConfirm: async (newValue: boolean) => {
               await userConfigManager.saveSetting(meta.key, newValue);
+              settingsDialog.refreshItems();
               statusBar.setMessage(`${meta.label}: ${newValue ? 'On' : 'Off'}`, 2000);
               renderer.scheduleRender();
             },
@@ -2272,6 +2273,7 @@ export class App {
             max: meta.max,
             onConfirm: async (newValue: string | number) => {
               await userConfigManager.saveSetting(meta.key, newValue);
+              settingsDialog.refreshItems();
               statusBar.setMessage(`${meta.label}: ${newValue}`, 2000);
               renderer.scheduleRender();
             },
@@ -2294,6 +2296,7 @@ export class App {
                 category: t.isBuiltIn ? 'Built-in' : 'User',
                 handler: async () => {
                   await userConfigManager.changeTheme(t.name);
+                  settingsDialog.refreshItems();
                 }
               })),
               'Select Color Theme',
@@ -2317,6 +2320,7 @@ export class App {
             inputType: 'string',
             onConfirm: async (newValue: string | number) => {
               await userConfigManager.saveSetting(meta.key, newValue);
+              settingsDialog.refreshItems();
               statusBar.setMessage(`${meta.label} updated`, 2000);
               renderer.scheduleRender();
             },
@@ -2335,6 +2339,7 @@ export class App {
               category: meta.category,
               handler: async () => {
                 await userConfigManager.saveSetting(meta.key, opt);
+                settingsDialog.refreshItems();
                 statusBar.setMessage(`${meta.label}: ${opt}`, 2000);
                 renderer.scheduleRender();
               }

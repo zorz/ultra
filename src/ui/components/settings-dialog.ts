@@ -155,6 +155,38 @@ export class SettingsDialog extends SearchableDialog<SettingItem> {
   }
 
   /**
+   * Refresh items with current setting values
+   * Call this after a setting has been changed to update the display
+   */
+  refreshItems(): void {
+    // Rebuild items with fresh values
+    const items = this.buildSettingItems();
+
+    // Preserve current search/selection state
+    const currentQuery = this._textInput.value;
+    const currentIndex = this._selectedIndex;
+
+    // Update items
+    this._items = items;
+
+    // Re-filter with current query
+    if (currentQuery) {
+      this._filteredItems = items
+        .map(item => ({ item, score: this.scoreItem(item, currentQuery) }))
+        .filter(si => si.score > 0)
+        .sort((a, b) => b.score - a.score);
+    } else {
+      this._filteredItems = items.map(item => ({ item, score: 0 }));
+    }
+
+    // Restore selection if possible
+    this._selectedIndex = Math.min(currentIndex, this._filteredItems.length - 1);
+    if (this._selectedIndex < 0) this._selectedIndex = 0;
+
+    this.debugLog('Items refreshed');
+  }
+
+  /**
    * Score a setting against the search query
    */
   protected scoreItem(item: SettingItem, query: string): number {

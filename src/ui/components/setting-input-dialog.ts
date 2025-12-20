@@ -40,7 +40,7 @@ export interface SettingInputConfig extends BaseDialogConfig {
   /** Maximum value for numbers */
   max?: number;
   /** Callback when confirmed */
-  onConfirm: (value: string | number) => void;
+  onConfirm: (value: string | number) => void | Promise<void>;
   /** Callback when cancelled */
   onCancel?: () => void;
 }
@@ -56,7 +56,7 @@ export class SettingInputDialog extends BaseDialog {
   private _min?: number;
   private _max?: number;
   private _textInput: TextInput;
-  private _onConfirm: ((value: string | number) => void) | null = null;
+  private _onConfirm: ((value: string | number) => void | Promise<void>) | null = null;
   private _onCancel: (() => void) | null = null;
   private _validationError: string = '';
 
@@ -131,7 +131,7 @@ export class SettingInputDialog extends BaseDialog {
   /**
    * Confirm and save
    */
-  confirm(): void {
+  async confirm(): Promise<void> {
     const validation = this.validate();
     if (!validation.valid) {
       this.debugLog(`Validation failed: ${validation.error}`);
@@ -144,7 +144,7 @@ export class SettingInputDialog extends BaseDialog {
     }
 
     if (this._onConfirm) {
-      this._onConfirm(value);
+      await this._onConfirm(value);
     }
     this._isVisible = false;
     this.debugLog(`Confirmed: ${value}`);
@@ -177,12 +177,20 @@ export class SettingInputDialog extends BaseDialog {
 
     // Confirm with Enter
     if (key === 'ENTER') {
+      // Fire and forget - the async confirm will complete in background
       this.confirm();
       return true;
     }
 
-    // Pass to text input
-    return this._textInput.handleKey(event);
+    // Pass to text input for character handling
+    const handled = this._textInput.handleKey(event);
+
+    // Re-validate on any change
+    if (handled) {
+      this.validate();
+    }
+
+    return handled;
   }
 
   /**
