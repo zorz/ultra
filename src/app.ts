@@ -37,6 +37,7 @@ import { gitPanel } from './ui/components/git-panel.ts';
 import { aiPanel } from './ui/components/ai-panel.ts';
 import { aiIntegration } from './features/ai/ai-integration.ts';
 import { aiApprovalDialog } from './ui/components/ai-approval-dialog.ts';
+import { settingsDialog } from './ui/components/settings-dialog.ts';
 // Import boot file content directly (Bun embeds this at build time)
 import defaultBootFile from '../config/BOOT.md' with { type: 'text' };
 import { setDebugEnabled, debugLog } from './debug.ts';
@@ -1167,6 +1168,14 @@ export class App {
         return;
       }
 
+      // Handle settings dialog input if it's open
+      if (settingsDialog.isOpen()) {
+        if (settingsDialog.handleKey(event)) {
+          renderer.scheduleRender();
+          return;
+        }
+      }
+
       // Handle search widget input if visible
       if (searchWidget.visible) {
         if (searchWidget.handleKey(event)) {
@@ -1921,6 +1930,7 @@ export class App {
 
     // Register mouse handlers (order matters - first handlers get priority)
     mouseManager.registerHandler(commitDialog);
+    mouseManager.registerHandler(settingsDialog);
     mouseManager.registerHandler(commandPalette);
     mouseManager.registerHandler(fileBrowser);
     mouseManager.registerHandler(filePicker);
@@ -2319,6 +2329,9 @@ export class App {
 
     // Render command palette (on top of everything)
     commandPalette.render(ctx);
+
+    // Render settings dialog (on top of command palette)
+    settingsDialog.render(ctx);
 
     // Render input dialog (on top of everything)
     inputDialog.render(ctx);
@@ -3943,6 +3956,21 @@ export class App {
           commandPalette.show(commands, renderer.width, renderer.height, editorRect.x, editorRect.width);
           commandPalette.onSelect(async (command) => {
             await commandRegistry.execute(command.id);
+          });
+          renderer.scheduleRender();
+        }
+      },
+      {
+        id: 'ultra.quickEditSettings',
+        title: 'Quick Edit Settings',
+        category: 'View',
+        handler: () => {
+          const editorRect = layoutManager.getEditorAreaRect();
+          settingsDialog.show({
+            screenWidth: renderer.width,
+            screenHeight: renderer.height,
+            editorX: editorRect.x,
+            editorWidth: editorRect.width
           });
           renderer.scheduleRender();
         }
