@@ -262,11 +262,66 @@ src/
 
 ## Testing
 
+Ultra uses Bun's built-in test runner. See `architecture/testing/` for comprehensive documentation.
+
+### Running Tests
+
 ```bash
 bun test                 # Run all tests
 bun test --watch         # Watch mode
+bun test tests/unit/     # Unit tests only
+bun test tests/integration/  # Integration tests only
+bun test tests/e2e/      # End-to-end tests only
+bun test --update-snapshots  # Update snapshot files
 bun run typecheck        # TypeScript type checking
 ```
+
+### Test Structure
+
+```
+tests/
+├── unit/                # Service method tests
+├── integration/         # ECP adapter tests (JSON-RPC)
+├── e2e/                 # Full workflow tests
+├── fixtures/            # Test data (documents, configs, git repos)
+├── snapshots/           # Snapshot files (auto-generated)
+└── helpers/             # Test utilities (TestECPClient, etc.)
+```
+
+### TestECPClient
+
+The `TestECPClient` class enables testing ECP methods without terminal I/O:
+
+```typescript
+import { TestECPClient } from '@test/ecp-client.ts';
+
+test('document editing', async () => {
+  const client = new TestECPClient();
+
+  const { documentId } = await client.request('document/open', {
+    uri: 'memory://test.txt',
+    content: 'hello'
+  });
+
+  await client.request('document/insert', {
+    documentId,
+    position: { line: 0, column: 5 },
+    text: ' world'
+  });
+
+  const { content } = await client.request('document/content', { documentId });
+  expect(content).toBe('hello world');
+
+  await client.shutdown();
+});
+```
+
+### Test Documentation
+
+- [Testing Overview](./architecture/testing/overview.md) - Strategy and structure
+- [TestECPClient Design](./architecture/testing/test-client.md) - Client class API
+- [Test Patterns](./architecture/testing/patterns.md) - Unit, integration, e2e, snapshots
+- [Fixtures Guide](./architecture/testing/fixtures.md) - Managing test data
 
 ## Running
 
@@ -292,14 +347,19 @@ Ultra 1.0 is being rearchitected into an **Editor Command Protocol (ECP) Server*
 ```
 architecture/
 ├── overview.md           # High-level architecture vision
-└── services/
-    ├── document-service.md   # Buffer, cursor, undo (core editing)
-    ├── file-service.md       # File system abstraction
-    ├── git-service.md        # Version control
-    ├── lsp-service.md        # Language server integration
-    ├── session-service.md    # Settings, keybindings, state
-    ├── syntax-service.md     # Syntax highlighting
-    └── terminal-service.md   # Terminal I/O (TUI client only)
+├── services/
+│   ├── document-service.md   # Buffer, cursor, undo (core editing)
+│   ├── file-service.md       # File system abstraction
+│   ├── git-service.md        # Version control
+│   ├── lsp-service.md        # Language server integration
+│   ├── session-service.md    # Settings, keybindings, state
+│   ├── syntax-service.md     # Syntax highlighting
+│   └── terminal-service.md   # Terminal I/O (TUI client only)
+└── testing/
+    ├── overview.md           # Testing strategy and structure
+    ├── test-client.md        # TestECPClient design
+    ├── patterns.md           # Unit, integration, e2e patterns
+    └── fixtures.md           # Test data management
 ```
 
 ### Known Issues to Fix During Migration
