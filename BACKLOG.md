@@ -49,6 +49,25 @@ Issues and improvements to address in future sessions.
   - Handling potentially large buffer sizes (compression or truncation)
   - Restoring buffer content when recreating the terminal session
 
+- [ ] **File tree keyboard shortcuts and file operations** - The file tree lacks keyboard shortcuts for common file operations. Need to add:
+  - `n` or `a` to create new file (inline rename input for name)
+  - `shift+n` or `shift+a` to create new folder
+  - `r` or `F2` to rename file/folder (inline rename input)
+  - `d` or `Delete` to delete file/folder (with confirmation dialog)
+  - `Enter` to open file / expand folder
+  - `Space` to preview file without opening
+  - The inline input should appear at the current selection position and handle escape to cancel
+
+- [ ] **Terminal scroll-up boundary jitter** - When scrolling up in the terminal and the viewport reaches the top line (no more scrollback), continued mouse scroll-up causes a weird up/down jitter movement. Instead, scrolling should lock in place when no further scrolling is possible. This only happens with scroll-up, not scroll-down.
+
+- [ ] **Additional git branch commands** - Add more git branch operations to the git panel and command palette:
+  - List branches (show in picker dialog)
+  - Switch branch (select from branch list)
+  - Create branch (name input dialog, optionally from current or selected branch)
+  - Merge branch (select branch to merge from list, handle conflicts)
+  - Delete branch (with confirmation, warn if not merged)
+  - These should integrate with the git service and provide proper error feedback
+
 ## Services
 
 ## ECP
