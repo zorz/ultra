@@ -30,6 +30,7 @@ import {
   createDialogManager,
   type Command,
   type FileEntry,
+  type StagedFile,
 } from '../overlays/index.ts';
 
 // Debug utilities
@@ -421,7 +422,7 @@ export class TUIClient {
         }
       },
       onCommit: () => {
-        this.window.showNotification('Commit dialog not yet implemented', 'info');
+        this.showCommitDialog();
       },
       onRefresh: () => {
         this.refreshGitStatus();
@@ -983,6 +984,11 @@ export class TUIClient {
     });
 
     // Git commands
+    this.commandHandlers.set('git.commit', async () => {
+      await this.showCommitDialog();
+      return true;
+    });
+
     this.commandHandlers.set('git.focusPanel', () => {
       this.focusGitPanel();
       return true;
@@ -1598,6 +1604,55 @@ export class TUIClient {
         false
       );
       this.scheduleRender();
+    }
+  }
+
+  /**
+   * Show git commit dialog.
+   */
+  private async showCommitDialog(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    // Get staged files from git status
+    let stagedFiles: StagedFile[] = [];
+    try {
+      const gitStatus = await gitCliService.status(this.workingDirectory);
+      stagedFiles = gitStatus.staged.map((file) => ({
+        path: file.path,
+        status: file.status === 'A' ? 'added' as const :
+                file.status === 'D' ? 'deleted' as const :
+                file.status === 'R' ? 'renamed' as const : 'modified' as const,
+      }));
+    } catch (error) {
+      this.log(`Failed to get git status: ${error}`);
+    }
+
+    if (stagedFiles.length === 0) {
+      this.window.showNotification('No staged changes to commit', 'warning');
+      return;
+    }
+
+    // Force render before showing dialog
+    this.render();
+
+    const result = await this.dialogManager.showCommit({
+      stagedFiles,
+      showConventionalHints: true,
+    });
+
+    if (result.confirmed && result.value) {
+      try {
+        // Perform the commit (or amend)
+        if (result.value.amend) {
+          await gitCliService.amend(this.workingDirectory, result.value.message);
+        } else {
+          await gitCliService.commit(this.workingDirectory, result.value.message);
+        }
+        this.window.showNotification('Changes committed successfully', 'success');
+        await this.refreshGitStatus();
+      } catch (error) {
+        this.window.showNotification(`Commit failed: ${error}`, 'error');
+      }
     }
   }
 
