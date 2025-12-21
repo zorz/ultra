@@ -77,6 +77,7 @@ console.log(`Generated ${outputFile}`);
 
 // Step 2: Compile the binary
 console.log("Compiling ultra binary...");
-await $`bun build --compile --target=bun-darwin-arm64 ./src/index.ts --outfile ultra`;
+// Mark node-pty as external since it may not be installed (we fall back to bun-pty)
+await $`bun build --compile --target=bun-darwin-arm64 --external node-pty ./src/index.ts --outfile ultra`;
 
 console.log("Build complete!");

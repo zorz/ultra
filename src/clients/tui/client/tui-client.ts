@@ -305,7 +305,11 @@ export class TUIClient {
   /**
    * Stop the TUI client.
    */
-  async stop(): Promise<void> {
+  /** Exit codes for restart commands */
+  static readonly EXIT_CODE_RESTART = 75;
+  static readonly EXIT_CODE_RESTART_REBUILD = 76;
+
+  async stop(exitCode?: number): Promise<void> {
     if (!this.running) return;
 
     this.running = false;
@@ -343,7 +347,13 @@ export class TUIClient {
 
     this.log('TUI Client stopped');
 
-    // Call exit callback
+    // Exit with code if specified (for restart commands)
+    // Do this before the exit callback to ensure the correct exit code
+    if (exitCode !== undefined) {
+      process.exit(exitCode);
+    }
+
+    // Call exit callback for normal exits
     this.onExitCallback?.();
   }
 
@@ -1229,8 +1239,15 @@ export class TUIClient {
 
     // App commands
     this.commandHandlers.set('workbench.quit', () => {
-      this.stop();
-      return true;
+      return this.stop().then(() => true);
+    });
+
+    this.commandHandlers.set('workbench.restart', () => {
+      return this.stop(TUIClient.EXIT_CODE_RESTART).then(() => true);
+    });
+
+    this.commandHandlers.set('workbench.restartAndRebuild', () => {
+      return this.stop(TUIClient.EXIT_CODE_RESTART_REBUILD).then(() => true);
     });
 
     // Folding commands
@@ -1999,6 +2016,8 @@ export class TUIClient {
     'workbench.openSettings': { label: 'Open Settings', category: 'Prefs' },
     'workbench.openKeybindings': { label: 'Open Keyboard Shortcuts', category: 'Prefs' },
     'workbench.quit': { label: 'Quit', category: 'App' },
+    'workbench.restart': { label: 'Restart', category: 'App' },
+    'workbench.restartAndRebuild': { label: 'Restart and Rebuild', category: 'App' },
     // Terminal
     'terminal.new': { label: 'New Terminal in Panel', category: 'Term' },
     'terminal.newInPane': { label: 'New Terminal in Pane', category: 'Term' },
@@ -2007,9 +2026,9 @@ export class TUIClient {
     'terminal.nextTab': { label: 'Next Terminal Tab', category: 'Term' },
     'terminal.previousTab': { label: 'Previous Terminal Tab', category: 'Term' },
     // Git
-    'git.commit': { label: 'Commit...', category: 'Git' },
-    'git.push': { label: 'Push', category: 'Git' },
-    'git.focusPanel': { label: 'Focus Git Panel', category: 'Git' },
+    'git.commit': { label: 'Git: Commit...', category: 'Git' },
+    'git.push': { label: 'Git: Push', category: 'Git' },
+    'git.focusPanel': { label: 'Git: Focus Panel', category: 'Git' },
     // Session
     'session.save': { label: 'Save Session', category: 'Session' },
     'session.saveAs': { label: 'Save Session As...', category: 'Session' },
