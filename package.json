@@ -9,8 +9,12 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
+    "dev:new": "bun run src/index.ts --new-tui",
+    "dev:new:debug": "bun run src/index.ts --new-tui --debug",
     "build": "bun run build.ts",
     "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "docs": "bunx typedoc",
     "docs:watch": "bunx typedoc --watch",
     "docs:serve": "bunx typedoc && bunx serve docs/api"

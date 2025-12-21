@@ -5,6 +5,8 @@
  * Settings and SessionManager classes.
  */
 
+import { mkdir, readdir, unlink } from 'fs/promises';
+import { createHash } from 'crypto';
 import { debugLog } from '../../debug.ts';
 import { Settings, type EditorSettings } from '../../config/settings.ts';
 import { SessionError, SessionErrorCode } from './errors.ts';
@@ -24,6 +26,20 @@ import type {
   SessionUIState,
   SessionLayoutNode,
 } from './types.ts';
+
+/**
+ * Session paths configuration.
+ */
+export interface SessionPathsConfig {
+  /** Sessions directory */
+  sessionsDir: string;
+  /** Workspace sessions directory */
+  workspaceSessionsDir: string;
+  /** Named sessions directory */
+  namedSessionsDir: string;
+  /** Last session reference file */
+  lastSessionFile: string;
+}
 
 /**
  * Default UI state for new sessions.
@@ -65,6 +81,14 @@ export class LocalSessionService implements SessionService {
   private currentThemeId: string = 'One Dark';
   private initialized = false;
 
+  // Session paths configuration
+  private sessionPaths: SessionPathsConfig | null = null;
+
+  // Auto-save support
+  private autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+  private isDirty = false;
+  private autoSaveInterval = 30000; // 30 seconds default
+
   // Event callbacks
   private settingChangeCallbacks = new Set<SettingChangeCallback>();
   private sessionChangeCallbacks = new Set<SessionChangeCallback>();
@@ -73,6 +97,22 @@ export class LocalSessionService implements SessionService {
   constructor() {
     this.settings = new Settings();
     this.loadBuiltinThemes();
+  }
+
+  /**
+   * Configure session storage paths.
+   * Must be called before saving/loading sessions.
+   */
+  setSessionPaths(paths: SessionPathsConfig): void {
+    this.sessionPaths = paths;
+    this.debugLog(`Session paths configured: ${paths.sessionsDir}`);
+  }
+
+  /**
+   * Get session paths configuration.
+   */
+  getSessionPaths(): SessionPathsConfig | null {
+    return this.sessionPaths;
   }
 
   protected debugLog(msg: string): void {
@@ -207,12 +247,23 @@ export class LocalSessionService implements SessionService {
       state.sessionName = name;
     }
 
-    // In a full implementation, this would persist to disk
-    // For now, we just store in memory and emit the event
+    // Update in-memory state
     this.currentSession = state;
 
-    // Get the consistent sessionId that loadSession will use to find this session
+    // Get the consistent sessionId
     const sessionId = this.getSessionId(state);
+
+    // Persist to disk if paths are configured
+    if (this.sessionPaths) {
+      try {
+        await this.persistSession(state, sessionId);
+        await this.updateLastSession(sessionId);
+        this.isDirty = false;
+      } catch (error) {
+        this.debugLog(`Failed to persist session: ${error}`);
+        throw error;
+      }
+    }
 
     this.emitSessionChange(sessionId, 'saved');
     this.debugLog(`Session saved: ${sessionId}`);
@@ -220,21 +271,231 @@ export class LocalSessionService implements SessionService {
     return sessionId;
   }
 
+  /**
+   * Persist session to disk.
+   */
+  private async persistSession(state: SessionState, sessionId: string): Promise<void> {
+    if (!this.sessionPaths) return;
+
+    // Determine target directory based on session type
+    const isNamed = !!state.sessionName;
+    const targetDir = isNamed
+      ? this.sessionPaths.namedSessionsDir
+      : this.sessionPaths.workspaceSessionsDir;
+
+    // Ensure directory exists
+    await mkdir(targetDir, { recursive: true });
+
+    // Determine filename
+    const filename = isNamed
+      ? `${this.sanitizeFilename(state.sessionName!)}.json`
+      : `${this.getWorkspaceHash(state.workspaceRoot)}.json`;
+
+    const filePath = `${targetDir}/${filename}`;
+
+    // Write session file
+    const content = JSON.stringify(state, null, 2);
+    await Bun.write(filePath, content);
+    this.debugLog(`Persisted session to: ${filePath}`);
+  }
+
+  /**
+   * Update the last-session.json reference file.
+   */
+  private async updateLastSession(sessionId: string): Promise<void> {
+    if (!this.sessionPaths) return;
+
+    // Ensure parent directory exists
+    await mkdir(this.sessionPaths.sessionsDir, { recursive: true });
+
+    const lastSessionData = {
+      sessionId,
+      workspaceRoot: this.workspaceRoot,
+      timestamp: new Date().toISOString(),
+    };
+
+    await Bun.write(
+      this.sessionPaths.lastSessionFile,
+      JSON.stringify(lastSessionData, null, 2)
+    );
+  }
+
+  /**
+   * Get a SHA256 hash of the workspace path (first 16 chars).
+   */
+  private getWorkspaceHash(workspacePath: string): string {
+    return createHash('sha256')
+      .update(workspacePath)
+      .digest('hex')
+      .slice(0, 16);
+  }
+
+  /**
+   * Sanitize a name for use as a filename.
+   */
+  private sanitizeFilename(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 50);
+  }
+
   async loadSession(sessionId: string): Promise<SessionState> {
-    // In a full implementation, this would load from disk
-    // For now, we return the current session if it matches
+    // First check in-memory cache
     if (this.currentSession && this.getSessionId(this.currentSession) === sessionId) {
       this.emitSessionChange(sessionId, 'loaded');
       return this.currentSession;
     }
 
+    // Try to load from disk
+    if (this.sessionPaths) {
+      const state = await this.loadSessionFromDisk(sessionId);
+      if (state) {
+        this.currentSession = state;
+        this.emitSessionChange(sessionId, 'loaded');
+        this.debugLog(`Session loaded: ${sessionId}`);
+        return state;
+      }
+    }
+
     throw SessionError.sessionNotFound(sessionId);
   }
 
+  /**
+   * Load a session from disk by ID.
+   */
+  private async loadSessionFromDisk(sessionId: string): Promise<SessionState | null> {
+    this.debugLog(`loadSessionFromDisk: ${sessionId}`);
+
+    if (!this.sessionPaths) {
+      this.debugLog('loadSessionFromDisk: No session paths configured');
+      return null;
+    }
+
+    // Determine if it's a named or workspace session
+    const isNamed = sessionId.startsWith('named-');
+
+    if (isNamed) {
+      // Named session: extract name from ID
+      const name = sessionId.slice(6); // Remove 'named-' prefix
+      const sanitizedName = this.sanitizeFilename(name);
+      const filePath = `${this.sessionPaths.namedSessionsDir}/${sanitizedName}.json`;
+      this.debugLog(`loadSessionFromDisk: Loading named session from ${filePath}`);
+      return this.loadSessionFile(filePath);
+    } else {
+      // Workspace session: extract hash or try to find by workspace
+      const hash = sessionId.startsWith('workspace-')
+        ? sessionId.slice(10) // Remove 'workspace-' prefix
+        : sessionId;
+
+      // Try direct hash lookup first
+      const directPath = `${this.sessionPaths.workspaceSessionsDir}/${hash}.json`;
+      this.debugLog(`loadSessionFromDisk: Trying direct path ${directPath}`);
+      const directResult = await this.loadSessionFile(directPath);
+      if (directResult) {
+        this.debugLog('loadSessionFromDisk: Found session at direct path');
+        return directResult;
+      }
+
+      // If workspace root is set, try hash of current workspace
+      if (this.workspaceRoot) {
+        const workspaceHash = this.getWorkspaceHash(this.workspaceRoot);
+        const workspacePath = `${this.sessionPaths.workspaceSessionsDir}/${workspaceHash}.json`;
+        this.debugLog(`loadSessionFromDisk: Trying workspace path ${workspacePath}`);
+        return this.loadSessionFile(workspacePath);
+      }
+    }
+
+    this.debugLog('loadSessionFromDisk: Session not found');
+    return null;
+  }
+
+  /**
+   * Load and parse a session file.
+   */
+  private async loadSessionFile(filePath: string): Promise<SessionState | null> {
+    try {
+      const file = Bun.file(filePath);
+      const exists = await file.exists();
+      this.debugLog(`loadSessionFile: ${filePath} (exists: ${exists})`);
+
+      if (!exists) {
+        return null;
+      }
+
+      const content = await file.text();
+      const state = JSON.parse(content) as SessionState;
+
+      // Validate version
+      if (!state.version || state.version < 1) {
+        this.debugLog(`Invalid session version in ${filePath}`);
+        return null;
+      }
+
+      this.debugLog(`loadSessionFile: Loaded session with ${state.documents?.length ?? 0} documents`);
+      return state;
+    } catch (error) {
+      this.debugLog(`Failed to load session file ${filePath}: ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Try to load the last session for the current workspace.
+   */
+  async tryLoadLastSession(): Promise<SessionState | null> {
+    this.debugLog(`tryLoadLastSession called for workspace: ${this.workspaceRoot}`);
+
+    if (!this.sessionPaths) {
+      this.debugLog('No session paths configured');
+      return null;
+    }
+    if (!this.workspaceRoot) {
+      this.debugLog('No workspace root set');
+      return null;
+    }
+
+    try {
+      // Read last-session.json
+      const file = Bun.file(this.sessionPaths.lastSessionFile);
+      this.debugLog(`Checking last session file: ${this.sessionPaths.lastSessionFile}`);
+
+      if (!(await file.exists())) {
+        this.debugLog('Last session file does not exist');
+        return null;
+      }
+
+      const content = await file.text();
+      const lastSession = JSON.parse(content) as {
+        sessionId: string;
+        workspaceRoot: string;
+        timestamp: string;
+      };
+
+      this.debugLog(`Last session found: id=${lastSession.sessionId}, workspace=${lastSession.workspaceRoot}`);
+
+      // Only load if it matches the current workspace
+      if (lastSession.workspaceRoot !== this.workspaceRoot) {
+        this.debugLog(`Last session workspace mismatch: expected ${this.workspaceRoot}, got ${lastSession.workspaceRoot}`);
+        return null;
+      }
+
+      // Load the session
+      this.debugLog(`Loading session: ${lastSession.sessionId}`);
+      const session = await this.loadSession(lastSession.sessionId);
+      this.debugLog(`Session loaded: ${session?.documents?.length ?? 0} documents`);
+      return session;
+    } catch (error) {
+      this.debugLog(`Failed to load last session: ${error}`);
+      return null;
+    }
+  }
+
   async listSessions(): Promise<SessionInfo[]> {
-    // In a full implementation, this would scan the sessions directory
     const sessions: SessionInfo[] = [];
 
+    // Include current session if exists
     if (this.currentSession) {
       sessions.push({
         id: this.getSessionId(this.currentSession),
@@ -246,19 +507,170 @@ export class LocalSessionService implements SessionService {
       });
     }
 
+    // Scan disk if paths configured
+    if (this.sessionPaths) {
+      const diskSessions = await this.scanSessionsFromDisk();
+
+      // Merge, avoiding duplicates
+      for (const session of diskSessions) {
+        if (!sessions.find((s) => s.id === session.id)) {
+          sessions.push(session);
+        }
+      }
+    }
+
+    // Sort by last modified (newest first)
+    sessions.sort((a, b) =>
+      new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+    );
+
     return sessions;
   }
 
+  /**
+   * Scan session files from disk.
+   */
+  private async scanSessionsFromDisk(): Promise<SessionInfo[]> {
+    if (!this.sessionPaths) return [];
+
+    const sessions: SessionInfo[] = [];
+
+    // Scan workspace sessions
+    try {
+      const workspaceDir = this.sessionPaths.workspaceSessionsDir;
+      const workspaceFiles = await this.safeReadDir(workspaceDir);
+
+      for (const file of workspaceFiles) {
+        if (!file.endsWith('.json')) continue;
+
+        const filePath = `${workspaceDir}/${file}`;
+        const state = await this.loadSessionFile(filePath);
+        if (state) {
+          sessions.push({
+            id: this.getSessionId(state),
+            name: `Workspace: ${this.getWorkspaceName(state.workspaceRoot)}`,
+            type: 'workspace',
+            workspaceRoot: state.workspaceRoot,
+            lastModified: state.timestamp,
+            documentCount: state.documents.length,
+          });
+        }
+      }
+    } catch (error) {
+      this.debugLog(`Failed to scan workspace sessions: ${error}`);
+    }
+
+    // Scan named sessions
+    try {
+      const namedDir = this.sessionPaths.namedSessionsDir;
+      const namedFiles = await this.safeReadDir(namedDir);
+
+      for (const file of namedFiles) {
+        if (!file.endsWith('.json')) continue;
+
+        const filePath = `${namedDir}/${file}`;
+        const state = await this.loadSessionFile(filePath);
+        if (state) {
+          sessions.push({
+            id: this.getSessionId(state),
+            name: state.sessionName || file.replace('.json', ''),
+            type: 'named',
+            workspaceRoot: state.workspaceRoot,
+            lastModified: state.timestamp,
+            documentCount: state.documents.length,
+          });
+        }
+      }
+    } catch (error) {
+      this.debugLog(`Failed to scan named sessions: ${error}`);
+    }
+
+    return sessions;
+  }
+
+  /**
+   * Safely read a directory, returning empty array if it doesn't exist.
+   */
+  private async safeReadDir(path: string): Promise<string[]> {
+    try {
+      return await readdir(path);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Extract a readable workspace name from path.
+   */
+  private getWorkspaceName(path: string): string {
+    const parts = path.split('/');
+    return parts[parts.length - 1] || path;
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
-    // In a full implementation, this would delete from disk
+    // Clear from memory if it's the current session
     if (this.currentSession && this.getSessionId(this.currentSession) === sessionId) {
       this.currentSession = null;
-      this.emitSessionChange(sessionId, 'deleted');
-      this.debugLog(`Session deleted: ${sessionId}`);
-      return;
+    }
+
+    // Delete from disk
+    if (this.sessionPaths) {
+      const deleted = await this.deleteSessionFromDisk(sessionId);
+      if (deleted) {
+        this.emitSessionChange(sessionId, 'deleted');
+        this.debugLog(`Session deleted: ${sessionId}`);
+        return;
+      }
     }
 
     throw SessionError.sessionNotFound(sessionId);
+  }
+
+  /**
+   * Delete a session file from disk.
+   */
+  private async deleteSessionFromDisk(sessionId: string): Promise<boolean> {
+    if (!this.sessionPaths) return false;
+
+    const isNamed = sessionId.startsWith('named-');
+
+    if (isNamed) {
+      const name = sessionId.slice(6);
+      const sanitizedName = this.sanitizeFilename(name);
+      const filePath = `${this.sessionPaths.namedSessionsDir}/${sanitizedName}.json`;
+
+      try {
+        await unlink(filePath);
+        return true;
+      } catch {
+        return false;
+      }
+    } else {
+      // Workspace session - need to find the file
+      const hash = sessionId.startsWith('workspace-')
+        ? sessionId.slice(10)
+        : sessionId;
+
+      const filePath = `${this.sessionPaths.workspaceSessionsDir}/${hash}.json`;
+
+      try {
+        await unlink(filePath);
+        return true;
+      } catch {
+        // Try finding by scanning
+        const files = await this.safeReadDir(this.sessionPaths.workspaceSessionsDir);
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue;
+          const fullPath = `${this.sessionPaths.workspaceSessionsDir}/${file}`;
+          const state = await this.loadSessionFile(fullPath);
+          if (state && this.getSessionId(state) === sessionId) {
+            await unlink(fullPath);
+            return true;
+          }
+        }
+        return false;
+      }
+    }
   }
 
   getCurrentSession(): SessionState | null {
@@ -270,8 +682,62 @@ export class LocalSessionService implements SessionService {
   }
 
   markSessionDirty(): void {
-    // In a full implementation, this would trigger auto-save
+    this.isDirty = true;
     this.debugLog('Session marked dirty');
+  }
+
+  /**
+   * Check if the session has unsaved changes.
+   */
+  isSessionDirty(): boolean {
+    return this.isDirty;
+  }
+
+  /**
+   * Start the auto-save timer.
+   */
+  startAutoSave(interval?: number): void {
+    // Stop any existing timer
+    this.stopAutoSave();
+
+    // Use provided interval or default
+    const saveInterval = interval ?? this.autoSaveInterval;
+    this.autoSaveInterval = saveInterval;
+
+    this.autoSaveTimer = setInterval(async () => {
+      if (this.isDirty && this.sessionPaths) {
+        try {
+          await this.saveSession();
+          this.debugLog('Auto-saved session');
+        } catch (error) {
+          this.debugLog(`Auto-save failed: ${error}`);
+        }
+      }
+    }, saveInterval);
+
+    this.debugLog(`Auto-save started (${saveInterval}ms interval)`);
+  }
+
+  /**
+   * Stop the auto-save timer.
+   */
+  stopAutoSave(): void {
+    if (this.autoSaveTimer) {
+      clearInterval(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+      this.debugLog('Auto-save stopped');
+    }
+  }
+
+  /**
+   * Set the auto-save interval.
+   */
+  setAutoSaveInterval(interval: number): void {
+    this.autoSaveInterval = interval;
+    // Restart timer if running
+    if (this.autoSaveTimer) {
+      this.startAutoSave(interval);
+    }
   }
 
   onSessionChange(callback: SessionChangeCallback): Unsubscribe {
@@ -293,14 +759,8 @@ export class LocalSessionService implements SessionService {
   }
 
   private generateSessionId(workspacePath: string): string {
-    // Simple hash for workspace path
-    let hash = 0;
-    for (let i = 0; i < workspacePath.length; i++) {
-      const char = workspacePath.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash;
-    }
-    return `workspace-${Math.abs(hash).toString(16)}`;
+    // Use the same hash as getWorkspaceHash for consistency
+    return `workspace-${this.getWorkspaceHash(workspacePath)}`;
   }
 
   private getSessionId(session: SessionState): string {
@@ -480,12 +940,17 @@ export class LocalSessionService implements SessionService {
   async init(workspaceRoot: string): Promise<void> {
     this.workspaceRoot = workspaceRoot;
     this.currentThemeId = this.getSetting('workbench.colorTheme');
-    this.currentSession = this.createEmptySession();
+    // Don't create an empty session here - let tryLoadLastSession() load from disk first
+    // If no session is found, setCurrentSession() will be called later
+    this.currentSession = null;
     this.initialized = true;
     this.debugLog(`Initialized with workspace: ${workspaceRoot}`);
   }
 
   async shutdown(): Promise<void> {
+    // Stop auto-save timer
+    this.stopAutoSave();
+
     // Save current session if we have one
     if (this.currentSession && this.workspaceRoot) {
       try {

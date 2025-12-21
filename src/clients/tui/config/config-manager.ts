@@ -48,6 +48,14 @@ export interface ConfigPaths {
   workspaceDir: string | null;
   /** Workspace settings file (<project>/.ultra/settings.json) */
   workspaceSettings: string | null;
+  /** Sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/) */
+  sessionsDir: string;
+  /** Workspace sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/workspaces/) */
+  workspaceSessionsDir: string;
+  /** Named sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/named/) */
+  namedSessionsDir: string;
+  /** Last session reference file (~/.ultra/<CONFIG_SUBDIR>/sessions/last-session.json) */
+  lastSessionFile: string;
 }
 
 // ============================================
@@ -73,6 +81,7 @@ export class TUIConfigManager {
   constructor(workingDirectory?: string) {
     const home = process.env.HOME || process.env.USERPROFILE || '';
     const userDir = `${home}/.ultra/${CONFIG_SUBDIR}`;
+    const sessionsDir = `${userDir}/sessions`;
 
     this.paths = {
       userDir,
@@ -80,6 +89,10 @@ export class TUIConfigManager {
       userKeybindings: `${userDir}/keybindings.json`,
       workspaceDir: workingDirectory ? `${workingDirectory}/.ultra` : null,
       workspaceSettings: workingDirectory ? `${workingDirectory}/.ultra/settings.json` : null,
+      sessionsDir,
+      workspaceSessionsDir: `${sessionsDir}/workspaces`,
+      namedSessionsDir: `${sessionsDir}/named`,
+      lastSessionFile: `${sessionsDir}/last-session.json`,
     };
   }
 
@@ -455,6 +468,10 @@ export class TUIConfigManager {
       { key: 'ctrl+q', command: 'workbench.quit' },
       { key: 'ctrl+,', command: 'workbench.openSettings' },
       { key: 'ctrl+shift+,', command: 'workbench.openKeybindings' },
+
+      // Session (note: no default keybinding for session.save - happens automatically)
+      { key: 'ctrl+k ctrl+s', command: 'session.saveAs' },
+      { key: 'ctrl+k ctrl+o', command: 'session.open' },
 
       // Folding
       { key: 'ctrl+shift+[', command: 'editor.fold' },

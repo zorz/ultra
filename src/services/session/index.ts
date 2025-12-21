@@ -44,7 +44,7 @@ export {
 export type { SessionService } from './interface.ts';
 
 // Implementation
-export { LocalSessionService, localSessionService } from './local.ts';
+export { LocalSessionService, localSessionService, type SessionPathsConfig } from './local.ts';
 
 // Adapter
 export { SessionServiceAdapter, SessionECPErrorCodes } from './adapter.ts';

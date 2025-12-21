@@ -45,6 +45,13 @@ import { localDocumentService, type DocumentService } from '../../../services/do
 import { fileService, type FileService } from '../../../services/file/index.ts';
 import { gitCliService } from '../../../services/git/index.ts';
 import { localSyntaxService, type SyntaxService, type HighlightToken } from '../../../services/syntax/index.ts';
+import {
+  localSessionService,
+  type SessionState,
+  type SessionDocumentState,
+  type SessionLayoutNode,
+  type SessionUIState,
+} from '../../../services/session/index.ts';
 
 // ============================================
 // Types
@@ -230,6 +237,9 @@ export class TUIClient {
     this.theme = this.loadThemeColors(themeName);
     this.log(`Theme: ${themeName}`);
 
+    // Initialize session service (before layout setup)
+    await this.initSessionService();
+
     // Initialize syntax service
     await this.syntaxService.waitForReady();
     this.syntaxService.setTheme(themeName);
@@ -250,6 +260,12 @@ export class TUIClient {
     // Setup initial layout
     await this.setupInitialLayout();
 
+    // Try to restore the last session
+    const restored = await this.tryRestoreSession();
+    if (restored) {
+      this.log('Restored previous session');
+    }
+
     // Start git status polling
     this.startGitStatusPolling();
 
@@ -269,6 +285,16 @@ export class TUIClient {
 
     // Stop git status polling
     this.stopGitStatusPolling();
+
+    // Save session before shutdown (serialize current state first)
+    try {
+      const state = this.serializeSession();
+      localSessionService.setCurrentSession(state);
+      await localSessionService.shutdown();
+      this.log('Session saved');
+    } catch (error) {
+      this.log(`Failed to save session: ${error}`);
+    }
 
     // Stop input handler
     this.inputHandler.stop();
@@ -575,6 +601,9 @@ export class TUIClient {
       // Update status bar with file info
       this.updateStatusBarFile(editor);
 
+      // Mark session dirty
+      this.markSessionDirty();
+
       this.log(`Opened file: ${uri}`);
       return editor;
     } catch (error) {
@@ -634,6 +663,9 @@ export class TUIClient {
       pane.removeElement(editor.id);
     }
 
+    // Mark session dirty
+    this.markSessionDirty();
+
     return true;
   }
 
@@ -658,6 +690,9 @@ export class TUIClient {
           }
 
           this.openDocuments.delete(uri);
+
+          // Mark session dirty
+          this.markSessionDirty();
         }
       }
     }
@@ -1077,6 +1112,22 @@ export class TUIClient {
 
     this.commandHandlers.set('git.focusPanel', () => {
       this.focusGitPanel();
+      return true;
+    });
+
+    // Session commands
+    this.commandHandlers.set('session.save', async () => {
+      await this.saveSession();
+      return true;
+    });
+
+    this.commandHandlers.set('session.saveAs', async () => {
+      await this.showSaveSessionDialog();
+      return true;
+    });
+
+    this.commandHandlers.set('session.open', async () => {
+      await this.showSessionPicker();
       return true;
     });
 
@@ -1762,6 +1813,65 @@ export class TUIClient {
   }
 
   /**
+   * Show dialog to save session with a name.
+   */
+  private async showSaveSessionDialog(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    const result = await this.dialogManager.showInput({
+      title: 'Save Session As',
+      prompt: 'Enter a name for this session:',
+      placeholder: 'my-session',
+    });
+
+    if (result.confirmed && result.value) {
+      await this.saveSession(result.value);
+    }
+  }
+
+  /**
+   * Show session picker dialog.
+   */
+  private async showSessionPicker(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const sessions = await localSessionService.listSessions();
+
+      if (sessions.length === 0) {
+        this.window.showNotification('No saved sessions found', 'info');
+        return;
+      }
+
+      // Build file entries for the file picker (reusing the dialog type)
+      const sessionEntries = sessions.map((s) => ({
+        path: s.id,
+        name: s.name,
+        directory: s.type === 'named' ? 'Named' : 'Workspace',
+        extension: undefined,
+      }));
+
+      const result = await this.dialogManager.showFilePicker({
+        files: sessionEntries,
+        placeholder: 'Search sessions...',
+        title: 'Open Session',
+      });
+
+      if (result.confirmed && result.value) {
+        try {
+          const session = await localSessionService.loadSession(result.value.path);
+          await this.restoreFromSession(session);
+          this.window.showNotification('Session loaded', 'success');
+        } catch (error) {
+          this.window.showNotification(`Failed to load session: ${error}`, 'error');
+        }
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to list sessions: ${error}`, 'error');
+    }
+  }
+
+  /**
    * Close the currently focused pane.
    */
   private closeCurrentPane(): void {
@@ -1775,6 +1885,8 @@ export class TUIClient {
         return;
       }
       this.window.closePane(pane.id);
+      // Mark session dirty
+      this.markSessionDirty();
     }
   }
 
@@ -1800,7 +1912,345 @@ export class TUIClient {
     // Focus the new pane
     if (newPane) {
       this.window.focusPane(newPane);
+      // Mark session dirty
+      this.markSessionDirty();
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Session Management
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Initialize the session service with paths and workspace.
+   */
+  private async initSessionService(): Promise<void> {
+    // Configure session paths from TUI config
+    const paths = this.configManager.getPaths();
+    localSessionService.setSessionPaths({
+      sessionsDir: paths.sessionsDir,
+      workspaceSessionsDir: paths.workspaceSessionsDir,
+      namedSessionsDir: paths.namedSessionsDir,
+      lastSessionFile: paths.lastSessionFile,
+    });
+
+    // Initialize with workspace
+    await localSessionService.init(this.workingDirectory);
+
+    // Start auto-save
+    localSessionService.startAutoSave(30000); // 30 seconds
+
+    this.log('Session service initialized');
+  }
+
+  /**
+   * Try to restore the last session for this workspace.
+   * Returns true if a session was restored.
+   */
+  private async tryRestoreSession(): Promise<boolean> {
+    try {
+      const session = await localSessionService.tryLoadLastSession();
+      if (session) {
+        await this.restoreFromSession(session);
+        this.log('Session restored');
+        return true;
+      }
+    } catch (error) {
+      this.log(`Failed to restore session: ${error}`);
+    }
+    return false;
+  }
+
+  /**
+   * Serialize the current TUI state to a SessionState.
+   */
+  private serializeSession(): SessionState {
+    // Use debugLog directly to ensure we see this even if this.debug is false
+    debugLog(`[TUIClient] Serializing session with ${this.openDocuments.size} open documents`);
+
+    const container = this.window.getPaneContainer();
+    const layoutConfig = container.serialize();
+
+    // Debug: log the raw layout
+    debugLog(`[TUIClient] Raw layout: ${JSON.stringify(layoutConfig)}`);
+
+    // Convert layout config to SessionLayoutNode format
+    const layout = this.convertLayoutToSessionFormat(layoutConfig);
+    debugLog(`[TUIClient] Converted layout: ${JSON.stringify(layout)}`);
+
+    // Serialize documents
+    const documents: SessionDocumentState[] = [];
+    let tabOrder = 0;
+
+    for (const [uri, docInfo] of this.openDocuments) {
+      debugLog(`[TUIClient] Serializing document: ${uri} (editorId: ${docInfo.editorId})`);
+      const editor = this.findEditorById(docInfo.editorId);
+      if (!editor) {
+        debugLog(`[TUIClient]   Editor not found for ${uri}`);
+        continue;
+      }
+
+      const state = editor.getState();
+      const pane = this.findPaneForElement(docInfo.editorId);
+      const cursor = editor.getCursor();
+
+      // Get unsaved content if modified
+      let unsavedContent: string | undefined;
+      if (editor.isModified()) {
+        unsavedContent = editor.getContent();
+      }
+
+      documents.push({
+        filePath: uri.replace(/^file:\/\//, ''),
+        scrollTop: state.scrollTop,
+        scrollLeft: 0,
+        cursorLine: cursor.line,
+        cursorColumn: cursor.column,
+        foldedRegions: state.foldedRegions ?? [],
+        paneId: pane?.id ?? 'main',
+        tabOrder: tabOrder++,
+        isActiveInPane: pane?.getActiveElement() === editor,
+        unsavedContent,
+      });
+      debugLog(`[TUIClient]   Document serialized: ${uri.replace(/^file:\/\//, '')}`);
+    }
+
+    debugLog(`[TUIClient] Serialized ${documents.length} documents`);
+
+    // Determine active document
+    const focusedElement = this.window.getFocusedElement();
+    let activeDocumentPath: string | null = null;
+    if (focusedElement instanceof DocumentEditor) {
+      const uri = focusedElement.getUri();
+      if (uri) {
+        activeDocumentPath = uri.replace(/^file:\/\//, '');
+      }
+    }
+
+    // Get active pane
+    const focusedPane = this.window.getFocusedPane();
+    const activePaneId = focusedPane?.id ?? 'main';
+
+    // Serialize UI state
+    const ui: SessionUIState = {
+      sidebarVisible: this.sidebarPaneId !== null,
+      sidebarWidth: this.configManager.getWithDefault('tui.sidebar.width', 30),
+      terminalVisible: false, // TODO: Track terminal state
+      terminalHeight: this.configManager.getWithDefault('tui.terminal.height', 12),
+      gitPanelVisible: false,
+      gitPanelWidth: 40,
+      activeSidebarPanel: 'files',
+      minimapEnabled: this.configManager.getWithDefault('editor.minimap.enabled', false),
+    };
+
+    return {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      instanceId: `${Date.now()}-${process.pid}`,
+      workspaceRoot: this.workingDirectory,
+      documents,
+      activeDocumentPath,
+      activePaneId,
+      layout,
+      ui,
+    };
+  }
+
+  /**
+   * Convert pane container layout to session format.
+   */
+  private convertLayoutToSessionFormat(
+    config: { mode?: string; id: string; direction?: string; children?: unknown[]; ratios?: number[] }
+  ): SessionLayoutNode {
+    if ('mode' in config && config.mode !== undefined) {
+      // PaneConfig (leaf node)
+      return {
+        type: 'leaf',
+        paneId: config.id,
+      };
+    }
+
+    // SplitConfig
+    const children = (config.children ?? []) as { mode?: string; id: string; direction?: string; children?: unknown[]; ratios?: number[] }[];
+    return {
+      type: config.direction === 'horizontal' ? 'horizontal' : 'vertical',
+      children: children.map((c) => this.convertLayoutToSessionFormat(c)),
+      ratios: config.ratios,
+    };
+  }
+
+  /**
+   * Restore TUI state from a SessionState.
+   */
+  private async restoreFromSession(session: SessionState): Promise<void> {
+    this.log(`Restoring session with ${session.documents.length} documents`);
+
+    const container = this.window.getPaneContainer();
+
+    // Collect all pane IDs needed from documents
+    const neededPaneIds = new Set<string>();
+    for (const doc of session.documents) {
+      neededPaneIds.add(doc.paneId);
+    }
+
+    // Check which panes already exist
+    const existingPanes = new Map<string, Pane>();
+    for (const pane of container.getPanes()) {
+      existingPanes.set(pane.id, pane);
+    }
+
+    // Create missing panes by splitting the editor pane
+    // We need to create panes in order (pane-3, pane-4, etc.)
+    const missingPaneIds = [...neededPaneIds].filter(id => !existingPanes.has(id)).sort();
+
+    if (missingPaneIds.length > 0) {
+      debugLog(`[TUIClient] Creating missing panes: ${missingPaneIds.join(', ')}`);
+
+      // Find the main editor pane to split from
+      let editorPane = this.getEditorPane();
+
+      for (const paneId of missingPaneIds) {
+        if (editorPane) {
+          // Split the editor pane to create a new pane
+          // Use vertical split (side by side) by default
+          const newPaneId = container.split('vertical', editorPane.id);
+          const newPane = container.getPane(newPaneId);
+
+          if (newPane) {
+            debugLog(`[TUIClient] Created pane ${newPaneId} (needed: ${paneId})`);
+            // Map the needed paneId to the actual new pane
+            existingPanes.set(paneId, newPane);
+          }
+        }
+      }
+    }
+
+    // Restore pane ratios from session layout
+    if (session.layout && session.layout.type !== 'leaf' && session.layout.ratios) {
+      container.adjustRatios('split-1', session.layout.ratios);
+      this.log(`Restored pane ratios: ${session.layout.ratios.join(', ')}`);
+
+      // Also restore nested split ratios if present
+      if (session.layout.children) {
+        this.restoreNestedRatios(container, session.layout.children, 2);
+      }
+    }
+
+    // Restore documents into their correct panes
+    for (const doc of session.documents) {
+      try {
+        const uri = `file://${doc.filePath}`;
+
+        // Check if file exists or if we have unsaved content
+        let content: string | undefined;
+        try {
+          const file = await this.fileService.read(uri);
+          content = file.content;
+        } catch {
+          if (doc.unsavedContent) {
+            content = doc.unsavedContent;
+          } else {
+            this.log(`Skipping missing file: ${doc.filePath}`);
+            continue;
+          }
+        }
+
+        // Find the target pane for this document
+        const targetPane = existingPanes.get(doc.paneId);
+
+        // Open the document in the correct pane
+        const editor = await this.openFile(uri, { focus: false, pane: targetPane ?? undefined });
+        if (!editor) continue;
+
+        // Restore content if we had unsaved changes
+        if (doc.unsavedContent && content !== doc.unsavedContent) {
+          editor.setContent(doc.unsavedContent);
+        }
+
+        // Restore cursor position
+        editor.setCursorPosition({ line: doc.cursorLine, column: doc.cursorColumn }, false);
+
+        // Restore scroll position
+        editor.scrollToLine(doc.scrollTop);
+
+        // Restore folded regions
+        if (doc.foldedRegions && doc.foldedRegions.length > 0) {
+          for (const line of doc.foldedRegions) {
+            editor.foldLine(line);
+          }
+        }
+      } catch (error) {
+        this.log(`Failed to restore document ${doc.filePath}: ${error}`);
+      }
+    }
+
+    // Focus the active document if specified
+    if (session.activeDocumentPath) {
+      const uri = `file://${session.activeDocumentPath}`;
+      const docInfo = this.openDocuments.get(uri);
+      if (docInfo) {
+        const editor = this.findEditorById(docInfo.editorId);
+        if (editor) {
+          this.window.focusElement(editor);
+        }
+      }
+    }
+
+    // Mark session as loaded in service
+    localSessionService.setCurrentSession(session);
+  }
+
+  /**
+   * Restore nested split ratios recursively.
+   */
+  private restoreNestedRatios(
+    container: ReturnType<Window['getPaneContainer']>,
+    children: SessionLayoutNode[],
+    splitIndex: number
+  ): void {
+    for (const child of children) {
+      if (child.type !== 'leaf' && child.ratios && child.children) {
+        const splitId = `split-${splitIndex}`;
+        try {
+          container.adjustRatios(splitId, child.ratios);
+          debugLog(`[TUIClient] Restored ratios for ${splitId}: ${child.ratios.join(', ')}`);
+        } catch {
+          // Split may not exist yet
+        }
+        // Recurse into nested children
+        this.restoreNestedRatios(container, child.children, splitIndex + 1);
+      }
+    }
+  }
+
+  /**
+   * Find the pane containing an element.
+   */
+  private findPaneForElement(elementId: string): Pane | null {
+    const container = this.window.getPaneContainer();
+    for (const pane of container.getPanes()) {
+      if (pane.getElement(elementId)) {
+        return pane;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Mark the session as dirty (needs saving).
+   */
+  private markSessionDirty(): void {
+    localSessionService.markSessionDirty();
+  }
+
+  /**
+   * Save the current session.
+   */
+  async saveSession(name?: string): Promise<void> {
+    const state = this.serializeSession();
+    localSessionService.setCurrentSession(state);
+    await localSessionService.saveSession(name);
+    this.window.showNotification('Session saved', 'success');
   }
 
   // ─────────────────────────────────────────────────────────────────────────

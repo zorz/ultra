@@ -327,6 +327,24 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
+   * Fold at a specific line.
+   */
+  foldLine(line: number): boolean {
+    if (!this.foldingEnabled) return false;
+
+    if (this.foldManager.canFold(line)) {
+      const result = this.foldManager.fold(line);
+      if (result) {
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    return false;
+  }
+
+  /**
    * Fold at the current cursor line.
    */
   foldAtCursor(): boolean {
