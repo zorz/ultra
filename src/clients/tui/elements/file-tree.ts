@@ -7,7 +7,6 @@
 import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
-import { darken, lighten } from '../../../ui/colors.ts';
 
 // ============================================
 // Types
@@ -363,18 +362,11 @@ export class FileTree extends BaseElement {
   render(buffer: ScreenBuffer): void {
     const { x, y, width, height } = this.bounds;
 
-    // Color hierarchy:
-    // - Unfocused panel: baseBg
-    // - Focused panel: slightly darker (subtle focus indicator)
-    // - Selected item (inactive): brighter than panel focus
-    // - Selected item (active): blue highlight
-    const baseBg = this.ctx.getThemeColor('sideBar.background', '#252526');
-    const focusBg = darken(baseBg, 12); // Darker when panel is focused
-    const bg = this.focused ? focusBg : baseBg;
-    const fg = this.ctx.getThemeColor('sideBar.foreground', '#cccccc');
-    const selectedBg = this.ctx.getThemeColor('list.activeSelectionBackground', '#094771');
+    // Use centralized focus colors for consistent focus indication
+    const bg = this.ctx.getBackgroundForFocus('sidebar', this.focused);
+    const fg = this.ctx.getForegroundForFocus('sidebar', this.focused);
+    const selectedBg = this.ctx.getSelectionBackground('sidebar', this.focused);
     const selectedFg = this.ctx.getThemeColor('list.activeSelectionForeground', '#ffffff');
-    const inactiveSelectionBg = lighten(baseBg, 18); // Brighter than both base and focus
     const gitModified = this.ctx.getThemeColor('gitDecoration.modifiedResourceForeground', '#e2c08d');
     const gitAdded = this.ctx.getThemeColor('gitDecoration.addedResourceForeground', '#81b88b');
     const gitDeleted = this.ctx.getThemeColor('gitDecoration.deletedResourceForeground', '#c74e39');
@@ -400,7 +392,7 @@ export class FileTree extends BaseElement {
 
       if (isSelected) {
         nodeFg = selectedFg;
-        nodeBg = this.focused ? selectedBg : inactiveSelectionBg;
+        nodeBg = selectedBg;
       }
 
       // Git status color

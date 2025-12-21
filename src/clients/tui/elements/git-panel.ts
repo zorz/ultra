@@ -7,7 +7,6 @@
 import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
-import { darken, lighten } from '../../../ui/colors.ts';
 
 // ============================================
 // Types
@@ -393,20 +392,13 @@ export class GitPanel extends BaseElement {
       return; // Nothing to render
     }
 
-    // Color hierarchy:
-    // - Unfocused panel: baseBg
-    // - Focused panel: slightly darker (subtle focus indicator)
-    // - Selected item (inactive): brighter than panel focus
-    // - Selected item (active): blue highlight
-    const baseBg = this.ctx.getThemeColor('sideBar.background', '#252526');
-    const focusBg = darken(baseBg, 12); // Darker when panel is focused
-    const bg = this.focused ? focusBg : baseBg;
-    const fg = this.ctx.getThemeColor('sideBar.foreground', '#cccccc');
+    // Use centralized focus colors for consistent focus indication
+    const bg = this.ctx.getBackgroundForFocus('sidebar', this.focused);
+    const fg = this.ctx.getForegroundForFocus('sidebar', this.focused);
     const headerBg = this.ctx.getThemeColor('sideBarSectionHeader.background', '#383838');
     const headerFg = this.ctx.getThemeColor('sideBarSectionHeader.foreground', '#cccccc');
-    const selectedBg = this.ctx.getThemeColor('list.activeSelectionBackground', '#094771');
+    const selectedBg = this.ctx.getSelectionBackground('sidebar', this.focused);
     const selectedFg = this.ctx.getThemeColor('list.activeSelectionForeground', '#ffffff');
-    const inactiveSelectionBg = lighten(baseBg, 18); // Brighter than both base and focus
 
     // Colors for git status
     const stagedColor = this.ctx.getThemeColor('gitDecoration.addedResourceForeground', '#81b88b');
@@ -457,7 +449,7 @@ export class GitPanel extends BaseElement {
           screenY,
           line,
           isSelected ? selectedFg : headerFg,
-          isSelected ? (this.focused ? selectedBg : inactiveSelectionBg) : headerBg
+          isSelected ? selectedBg : headerBg
         );
       } else if (node.change) {
         // Render file entry (1-char gutter + 2-char indent)
@@ -498,7 +490,7 @@ export class GitPanel extends BaseElement {
           screenY,
           line,
           isSelected ? selectedFg : fileColor,
-          isSelected ? (this.focused ? selectedBg : inactiveSelectionBg) : bg
+          isSelected ? selectedBg : bg
         );
       }
     }

@@ -20,6 +20,11 @@ import type { ScreenBuffer } from '../rendering/buffer.ts';
 // ============================================
 
 /**
+ * Element type for focus color lookups.
+ */
+export type FocusableElementType = 'editor' | 'sidebar' | 'panel' | 'terminal';
+
+/**
  * Context provided to elements for accessing services and capabilities.
  */
 export interface ElementContext {
@@ -33,6 +38,14 @@ export interface ElementContext {
   updateStatus: (status: string) => void;
   /** Get a color from the current theme */
   getThemeColor: (key: string, fallback?: string) => string;
+  /** Check if the containing pane is focused */
+  isPaneFocused: () => boolean;
+  /** Get background color for focus state */
+  getBackgroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get foreground color for focus state */
+  getForegroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get selection background for focus state */
+  getSelectionBackground: (elementType: FocusableElementType, isFocused: boolean) => string;
 }
 
 /**
@@ -45,6 +58,10 @@ export function createTestContext(overrides: Partial<ElementContext> = {}): Elem
     updateTitle: () => {},
     updateStatus: () => {},
     getThemeColor: (_key: string, fallback = '#ffffff') => fallback,
+    isPaneFocused: () => true,
+    getBackgroundForFocus: (_type, _focused) => '#1e1e1e',
+    getForegroundForFocus: (_type, _focused) => '#d4d4d4',
+    getSelectionBackground: (_type, _focused) => '#094771',
     ...overrides,
   };
 }

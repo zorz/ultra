@@ -22,6 +22,11 @@ import { createElement, createElementWithFallback } from '../elements/factory.ts
 // ============================================
 
 /**
+ * Element type for focus color lookups.
+ */
+export type FocusableElementType = 'editor' | 'sidebar' | 'panel' | 'terminal';
+
+/**
  * Callbacks for pane events.
  */
 export interface PaneCallbacks {
@@ -33,6 +38,14 @@ export interface PaneCallbacks {
   getThemeColor: (key: string, fallback?: string) => string;
   /** Called when an element is closed via tab X (optional) */
   onElementClose?: (elementId: string, element: BaseElement) => void;
+  /** Check if this pane is focused */
+  isPaneFocused: () => boolean;
+  /** Get background color for focus state */
+  getBackgroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get foreground color for focus state */
+  getForegroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get selection background for focus state */
+  getSelectionBackground: (elementType: FocusableElementType, isFocused: boolean) => string;
 }
 
 /**
@@ -529,31 +542,73 @@ export class Pane {
     const activeElement = this.getActiveElement();
     if (activeElement && activeElement.isVisible()) {
       activeElement.render(buffer);
+    } else if (this.elements.length === 0) {
+      // Render placeholder for empty pane
+      this.renderEmptyPane(buffer);
+    }
+  }
+
+  private renderEmptyPane(buffer: ScreenBuffer): void {
+    const isPaneFocused = this.callbacks.isPaneFocused();
+    const bg = this.callbacks.getBackgroundForFocus('editor', isPaneFocused);
+    const fg = this.callbacks.getForegroundForFocus('editor', isPaneFocused);
+
+    // Fill content area with background
+    const contentY = this.bounds.y + Pane.TAB_BAR_HEIGHT;
+    const contentHeight = this.bounds.height - Pane.TAB_BAR_HEIGHT;
+
+    for (let y = contentY; y < contentY + contentHeight; y++) {
+      for (let x = this.bounds.x; x < this.bounds.x + this.bounds.width; x++) {
+        buffer.set(x, y, { char: ' ', fg, bg });
+      }
+    }
+
+    // Show a hint in the center
+    const hint = 'Use Ctrl+O to open a file';
+    const hintY = contentY + Math.floor(contentHeight / 2);
+    const hintX = this.bounds.x + Math.floor((this.bounds.width - hint.length) / 2);
+
+    if (hintY < contentY + contentHeight && hintX >= this.bounds.x) {
+      const dimFg = this.callbacks.getThemeColor('editorWidget.foreground', '#cccccc') + '80';
+      for (let i = 0; i < hint.length && hintX + i < this.bounds.x + this.bounds.width; i++) {
+        buffer.set(hintX + i, hintY, { char: hint[i]!, fg: dimFg, bg });
+      }
     }
   }
 
   private renderTabBar(buffer: ScreenBuffer): void {
     const y = this.bounds.y;
     let x = this.bounds.x;
+    const isPaneFocused = this.callbacks.isPaneFocused();
 
     const colors = this.getThemeColors();
+
+    // Get focus-aware tab bar background
+    const tabBarBg = isPaneFocused
+      ? colors.tabBarBackground
+      : this.callbacks.getBackgroundForFocus('editor', false);
 
     for (let i = 0; i < this.elements.length; i++) {
       const element = this.elements[i]!;
       const isActive = i === this.activeElementIndex;
       const title = this.truncateTitle(element.getTitle(), 20);
 
-      const bg = isActive ? colors.tabActiveBackground : colors.tabInactiveBackground;
-      const fg = isActive ? colors.tabActiveForeground : colors.tabInactiveForeground;
+      // Active tab uses focus-aware colors
+      let bg: string;
+      let fg: string;
+      if (isActive) {
+        bg = isPaneFocused ? colors.tabActiveBackground : this.callbacks.getBackgroundForFocus('editor', false);
+        fg = isPaneFocused ? colors.tabActiveForeground : this.callbacks.getForegroundForFocus('editor', false);
+      } else {
+        bg = colors.tabInactiveBackground;
+        fg = colors.tabInactiveForeground;
+      }
 
       // Tab content: " title × "
       const tabContent = ` ${title} × `;
 
-      for (
-        let j = 0;
-        j < tabContent.length && x + j < this.bounds.x + this.bounds.width;
-        j++
-      ) {
+      // Draw tab
+      for (let j = 0; j < tabContent.length && x + j < this.bounds.x + this.bounds.width; j++) {
         buffer.set(x + j, y, { char: tabContent[j]!, fg, bg });
       }
 
@@ -561,7 +616,7 @@ export class Pane {
 
       // Separator
       if (i < this.elements.length - 1 && x < this.bounds.x + this.bounds.width) {
-        buffer.set(x, y, { char: '│', fg: colors.tabBorder, bg: colors.tabBarBackground });
+        buffer.set(x, y, { char: '│', fg: colors.tabBorder, bg: tabBarBg });
         x += 1;
       }
     }
@@ -570,8 +625,8 @@ export class Pane {
     while (x < this.bounds.x + this.bounds.width) {
       buffer.set(x, y, {
         char: ' ',
-        fg: colors.tabBarBackground,
-        bg: colors.tabBarBackground,
+        fg: tabBarBg,
+        bg: tabBarBg,
       });
       x++;
     }
@@ -809,6 +864,10 @@ export class Pane {
       updateTitle: () => this.markDirty(),
       updateStatus: () => this.markDirty(),
       getThemeColor: (key, fallback) => this.callbacks.getThemeColor(key, fallback),
+      isPaneFocused: () => this.callbacks.isPaneFocused(),
+      getBackgroundForFocus: (type, focused) => this.callbacks.getBackgroundForFocus(type, focused),
+      getForegroundForFocus: (type, focused) => this.callbacks.getForegroundForFocus(type, focused),
+      getSelectionBackground: (type, focused) => this.callbacks.getSelectionBackground(type, focused),
     };
   }
 

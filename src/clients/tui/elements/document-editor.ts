@@ -1431,12 +1431,15 @@ export class DocumentEditor extends BaseElement {
 
   render(buffer: ScreenBuffer): void {
     const { x, y, width, height } = this.bounds;
-    const bg = this.ctx.getThemeColor('editor.background', '#1e1e1e');
-    const fg = this.ctx.getThemeColor('editor.foreground', '#cccccc');
-    const gutterBg = this.ctx.getThemeColor('editorGutter.background', '#1e1e1e');
+    // Use centralized focus colors for consistent focus indication
+    const bg = this.ctx.getBackgroundForFocus('editor', this.focused);
+    const fg = this.ctx.getForegroundForFocus('editor', this.focused);
+    const gutterBg = this.focused
+      ? this.ctx.getThemeColor('editorGutter.background', '#1e1e1e')
+      : bg; // Match editor background when unfocused
     const gutterFg = this.ctx.getThemeColor('editorLineNumber.foreground', '#858585');
     const cursorBg = this.ctx.getThemeColor('editorCursor.foreground', '#aeafad');
-    const selectionBg = this.ctx.getThemeColor('editor.selectionBackground', '#264f78');
+    const selectionBg = this.ctx.getSelectionBackground('editor', this.focused);
     const lineHighlight = this.ctx.getThemeColor('editor.lineHighlightBackground', '#2a2d2e');
     const foldEllipsisFg = this.ctx.getThemeColor('editorGutter.foldingControlForeground', '#c5c5c5');
 

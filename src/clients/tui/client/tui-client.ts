@@ -485,16 +485,14 @@ export class TUIClient {
     // Check if already open
     const existing = this.openDocuments.get(uri);
     if (existing) {
-      const pane = this.getEditorPane();
-      if (pane) {
-        const editor = pane.getElement(existing.editorId) as DocumentEditor | null;
-        if (editor) {
-          // Editor still exists, just focus it
-          if (options.focus !== false) {
-            this.window.focusElement(editor);
-          }
-          return editor;
+      // Find the editor across all panes
+      const editor = this.findEditorById(existing.editorId);
+      if (editor) {
+        // Editor still exists, just focus it
+        if (options.focus !== false) {
+          this.window.focusElement(editor);
         }
+        return editor;
       }
       // Editor was removed (e.g., tab closed) - clean up stale entry
       this.openDocuments.delete(uri);
@@ -516,8 +514,11 @@ export class TUIClient {
         languageId: this.detectLanguage(uri),
       });
 
-      // Get or create editor pane
-      const pane = this.getEditorPane();
+      // Determine which pane to use:
+      // 1. Explicit pane from options
+      // 2. Focused pane if it's in 'tabs' mode
+      // 3. Fall back to default editor pane
+      const pane = this.getTargetEditorPane(options.pane);
       if (!pane) {
         this.window.showNotification('No editor pane available', 'error');
         return null;
@@ -652,7 +653,41 @@ export class TUIClient {
   }
 
   /**
-   * Get the editor pane.
+   * Find an editor by ID across all panes.
+   */
+  private findEditorById(editorId: string): DocumentEditor | null {
+    const container = this.window.getPaneContainer();
+    for (const pane of container.getPanes()) {
+      const element = pane.getElement(editorId);
+      if (element instanceof DocumentEditor) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get the target pane for opening a new editor.
+   * Priority: explicit pane > focused tabs-mode pane > default editor pane
+   */
+  private getTargetEditorPane(explicitPane?: Pane): Pane | null {
+    // 1. Use explicit pane if provided
+    if (explicitPane) {
+      return explicitPane;
+    }
+
+    // 2. Use focused pane if it's in tabs mode
+    const focusedPane = this.window.getFocusedPane();
+    if (focusedPane && focusedPane.getMode() === 'tabs') {
+      return focusedPane;
+    }
+
+    // 3. Fall back to default editor pane
+    return this.getEditorPane();
+  }
+
+  /**
+   * Get the default editor pane.
    */
   private getEditorPane(): Pane | null {
     if (this.editorPaneId) {
@@ -966,12 +1001,6 @@ export class TUIClient {
       return true;
     });
 
-    this.commandHandlers.set('workbench.splitEditor', () => {
-      this.window.splitPane('vertical');
-      this.window.showNotification('Editor split', 'info');
-      return true;
-    });
-
     this.commandHandlers.set('workbench.openSettings', () => {
       this.window.showNotification('Settings dialog not yet implemented', 'info');
       return true;
@@ -991,6 +1020,32 @@ export class TUIClient {
 
     this.commandHandlers.set('git.push', async () => {
       await this.gitPush();
+      return true;
+    });
+
+    // Ultra namespace commands for keybindings
+    this.commandHandlers.set('ultra.splitVertical', () => {
+      this.splitEditorPane('vertical');
+      return true;
+    });
+
+    this.commandHandlers.set('ultra.splitHorizontal', () => {
+      this.splitEditorPane('horizontal');
+      return true;
+    });
+
+    this.commandHandlers.set('ultra.focusNextPane', () => {
+      this.window.focusNextPane();
+      return true;
+    });
+
+    this.commandHandlers.set('ultra.focusPreviousPane', () => {
+      this.window.focusPreviousPane();
+      return true;
+    });
+
+    this.commandHandlers.set('ultra.closePane', () => {
+      this.closeCurrentPane();
       return true;
     });
 
@@ -1677,6 +1732,48 @@ export class TUIClient {
       await this.refreshGitStatus();
     } catch (error) {
       this.window.showNotification(`Push failed: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Close the currently focused pane.
+   */
+  private closeCurrentPane(): void {
+    const pane = this.window.getFocusedPane();
+    if (pane) {
+      // Don't close the last editor pane
+      const allPanes = this.window.getPaneContainer().getPanes();
+      const editorPanes = allPanes.filter((p) => p.getMode() === 'tabs');
+      if (editorPanes.length <= 1 && pane.getMode() === 'tabs') {
+        this.window.showNotification('Cannot close the last editor pane', 'warning');
+        return;
+      }
+      this.window.closePane(pane.id);
+    }
+  }
+
+  /**
+   * Split the editor pane (not the sidebar).
+   * Uses the focused pane if it's an editor pane, otherwise uses the default editor pane.
+   */
+  private splitEditorPane(direction: 'horizontal' | 'vertical'): void {
+    // Get the target pane - focused if it's a tabs pane, otherwise default editor pane
+    const focusedPane = this.window.getFocusedPane();
+    const targetPane = focusedPane?.getMode() === 'tabs' ? focusedPane : this.getEditorPane();
+
+    if (!targetPane) {
+      this.window.showNotification('No editor pane to split', 'warning');
+      return;
+    }
+
+    // Split the specific pane
+    const container = this.window.getPaneContainer();
+    const newPaneId = container.split(direction, targetPane.id);
+    const newPane = container.getPane(newPaneId);
+
+    // Focus the new pane
+    if (newPane) {
+      this.window.focusPane(newPane);
     }
   }
 

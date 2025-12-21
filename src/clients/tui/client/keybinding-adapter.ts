@@ -65,8 +65,8 @@ export const DEFAULT_KEYBINDINGS: KeyBinding[] = [
   { key: 'ctrl+shift+`', command: 'terminal.new' },
 
   // Splits
-  { key: 'ctrl+\\', command: 'editor.splitRight' },
-  { key: 'ctrl+shift+\\', command: 'editor.splitDown' },
+  { key: 'ctrl+\\', command: 'ultra.splitVertical' },
+  { key: 'ctrl+shift+\\', command: 'ultra.splitHorizontal' },
 
   // Focus navigation
   { key: 'ctrl+1', command: 'focusGroup.1' },

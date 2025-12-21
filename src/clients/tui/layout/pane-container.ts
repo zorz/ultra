@@ -41,6 +41,11 @@ interface SplitNode {
 type LayoutNode = Pane | SplitNode;
 
 /**
+ * Element type for focus color lookups.
+ */
+export type FocusableElementType = 'editor' | 'sidebar' | 'panel' | 'terminal';
+
+/**
  * Callbacks for pane container events.
  */
 export interface PaneContainerCallbacks {
@@ -50,6 +55,12 @@ export interface PaneContainerCallbacks {
   getThemeColor: (key: string, fallback?: string) => string;
   /** Called when an element is closed via tab X */
   onElementClose?: (elementId: string, element: BaseElement) => void;
+  /** Get background color for focus state */
+  getBackgroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get foreground color for focus state */
+  getForegroundForFocus: (elementType: FocusableElementType, isFocused: boolean) => string;
+  /** Get selection background for focus state */
+  getSelectionBackground: (elementType: FocusableElementType, isFocused: boolean) => string;
 }
 
 // ============================================
@@ -179,6 +190,10 @@ export class PaneContainer implements FocusResolver {
       onElementClose: (elementId, element) => {
         this.callbacks.onElementClose?.(elementId, element);
       },
+      isPaneFocused: () => this.focusManager?.isPaneFocused(paneId) ?? false,
+      getBackgroundForFocus: (type, focused) => this.callbacks.getBackgroundForFocus(type, focused),
+      getForegroundForFocus: (type, focused) => this.callbacks.getForegroundForFocus(type, focused),
+      getSelectionBackground: (type, focused) => this.callbacks.getSelectionBackground(type, focused),
     };
   }
 

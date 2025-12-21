@@ -376,7 +376,8 @@ export class TUIConfigManager {
       // View
       { key: 'ctrl+b', command: 'workbench.toggleSidebar' },
       { key: 'ctrl+`', command: 'workbench.toggleTerminal' },
-      { key: 'ctrl+\\', command: 'workbench.splitEditor' },
+      { key: 'ctrl+\\', command: 'ultra.splitVertical' },
+      { key: 'ctrl+shift+\\', command: 'ultra.splitHorizontal' },
       { key: 'ctrl+1', command: 'workbench.focusEditor1' },
       { key: 'ctrl+2', command: 'workbench.focusEditor2' },
       { key: 'ctrl+3', command: 'workbench.focusEditor3' },

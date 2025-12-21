@@ -8,12 +8,13 @@ import type { Rect, Size, InputEvent, KeyEvent, MouseEvent } from './types.ts';
 import { isKeyEvent, isMouseEvent, containsPoint } from './types.ts';
 import type { ScreenBuffer } from './rendering/buffer.ts';
 import { createScreenBuffer } from './rendering/buffer.ts';
-import { PaneContainer, createPaneContainer, type PaneContainerCallbacks } from './layout/index.ts';
+import { PaneContainer, createPaneContainer, type PaneContainerCallbacks, type FocusableElementType } from './layout/index.ts';
 import { StatusBar, createStatusBar, type StatusBarCallbacks } from './status-bar/index.ts';
 import { OverlayManager, createOverlayManager, type OverlayManagerCallbacks, type NotificationType } from './overlays/index.ts';
 import { FocusManager, createFocusManager, type FocusChangeCallback } from './input/index.ts';
 import type { BaseElement } from './elements/index.ts';
 import type { Pane } from './layout/pane.ts';
+import { hexToRgb, rgbToHex, darken, lighten } from './ansi/colors.ts';
 
 // ============================================
 // Types
@@ -116,6 +117,9 @@ export class Window {
       onDirty: () => this.markDirty(),
       getThemeColor: this.getThemeColor,
       onElementClose: config.onElementClose,
+      getBackgroundForFocus: (type, focused) => this.getBackgroundForFocus(type, focused),
+      getForegroundForFocus: (type, focused) => this.getForegroundForFocus(type, focused),
+      getSelectionBackground: (type, focused) => this.getSelectionBackground(type, focused),
     };
     this.paneContainer = createPaneContainer(paneContainerCallbacks);
     this.paneContainer.setFocusManager(this.focusManager);
@@ -275,6 +279,11 @@ export class Window {
     if (isMouseEvent(event)) {
       const paneAtPoint = this.paneContainer.findPaneAtPoint(event.x, event.y);
       if (paneAtPoint) {
+        // Focus the pane when clicking anywhere in it (even if empty)
+        if (event.type === 'press' && event.button === 'left') {
+          this.focusPane(paneAtPoint);
+        }
+
         // First let the pane handle accordion headers
         if (paneAtPoint.handleMouse(event)) {
           return true;
@@ -284,6 +293,12 @@ export class Window {
           if (element.isVisible() && element.handleMouse(event)) {
             return true;
           }
+        }
+
+        // If the pane was clicked but nothing handled it, still consider it handled
+        // (e.g., clicking on empty pane content area)
+        if (event.type === 'press' && event.button === 'left') {
+          return true;
         }
       }
     }
@@ -547,6 +562,80 @@ export class Window {
    */
   getBuffer(): ScreenBuffer {
     return this.buffer;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Focus Colors
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get base colors for an element type.
+   */
+  private getBaseColors(elementType: FocusableElementType): { background: string; foreground: string } {
+    switch (elementType) {
+      case 'editor':
+        return {
+          background: this.getThemeColor('editor.background', '#1e1e1e'),
+          foreground: this.getThemeColor('editor.foreground', '#d4d4d4'),
+        };
+      case 'sidebar':
+        return {
+          background: this.getThemeColor('sideBar.background', '#252526'),
+          foreground: this.getThemeColor('sideBar.foreground', '#cccccc'),
+        };
+      case 'panel':
+        return {
+          background: this.getThemeColor('panel.background', '#1e1e1e'),
+          foreground: this.getThemeColor('panel.foreground', '#cccccc'),
+        };
+      case 'terminal':
+        return {
+          background: this.getThemeColor('terminal.background', '#1e1e1e'),
+          foreground: this.getThemeColor('terminal.foreground', '#cccccc'),
+        };
+    }
+  }
+
+  /**
+   * Get background color for focus state.
+   * Focused elements are slightly darker to indicate focus.
+   */
+  private getBackgroundForFocus(elementType: FocusableElementType, isFocused: boolean): string {
+    const base = this.getBaseColors(elementType);
+    if (isFocused) {
+      const rgb = hexToRgb(base.background);
+      if (!rgb) return base.background;
+      return rgbToHex(darken(rgb, 0.08));
+    }
+    return base.background;
+  }
+
+  /**
+   * Get foreground color for focus state.
+   * Unfocused elements have slightly dimmed text.
+   */
+  private getForegroundForFocus(elementType: FocusableElementType, isFocused: boolean): string {
+    const base = this.getBaseColors(elementType);
+    if (!isFocused) {
+      const rgb = hexToRgb(base.foreground);
+      if (!rgb) return base.foreground;
+      return rgbToHex(darken(rgb, 0.25));
+    }
+    return base.foreground;
+  }
+
+  /**
+   * Get selection background for focus state.
+   * Focused uses theme selection, unfocused uses lightened background.
+   */
+  private getSelectionBackground(elementType: FocusableElementType, isFocused: boolean): string {
+    if (isFocused) {
+      return this.getThemeColor('list.activeSelectionBackground', '#094771');
+    }
+    const base = this.getBaseColors(elementType);
+    const rgb = hexToRgb(base.background);
+    if (!rgb) return base.background;
+    return rgbToHex(lighten(rgb, 0.15));
   }
 
   // ─────────────────────────────────────────────────────────────────────────

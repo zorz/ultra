@@ -2,10 +2,12 @@
  * Theme Adapter
  *
  * Connects the TUI client to the session service for theme management.
+ * Provides centralized focus color management for consistent UI.
  */
 
 import type { SessionService } from '../../../services/session/interface.ts';
 import type { Theme, ThemeColors, ThemeInfo, Unsubscribe } from '../../../services/session/types.ts';
+import { hexToRgb, rgbToHex, darken, lighten } from '../ansi/colors.ts';
 
 // ============================================
 // Types
@@ -15,6 +17,59 @@ import type { Theme, ThemeColors, ThemeInfo, Unsubscribe } from '../../../servic
  * Theme change callback.
  */
 export type ThemeChangeCallback = (theme: Theme) => void;
+
+/**
+ * Element type for focus color lookups.
+ */
+export type FocusableElementType = 'editor' | 'sidebar' | 'panel' | 'terminal';
+
+/**
+ * Focus colors for an element.
+ */
+export interface FocusColors {
+  /** Background color when focused */
+  focusedBackground: string;
+  /** Background color when unfocused */
+  unfocusedBackground: string;
+  /** Foreground color when focused */
+  focusedForeground: string;
+  /** Foreground color when unfocused */
+  unfocusedForeground: string;
+  /** Selection background when focused */
+  selectionBackground: string;
+  /** Selection background when unfocused (dimmed) */
+  inactiveSelectionBackground: string;
+  /** Selection foreground */
+  selectionForeground: string;
+}
+
+/**
+ * Tab colors for a pane.
+ */
+export interface TabFocusColors {
+  /** Tab bar background when pane is focused */
+  focusedTabBarBackground: string;
+  /** Tab bar background when pane is unfocused */
+  unfocusedTabBarBackground: string;
+  /** Active tab background when pane is focused */
+  focusedActiveTabBackground: string;
+  /** Active tab background when pane is unfocused */
+  unfocusedActiveTabBackground: string;
+  /** Active tab foreground when pane is focused */
+  focusedActiveTabForeground: string;
+  /** Active tab foreground when pane is unfocused */
+  unfocusedActiveTabForeground: string;
+  /** Inactive tab background */
+  inactiveTabBackground: string;
+  /** Inactive tab foreground */
+  inactiveTabForeground: string;
+  /** Tab border color */
+  tabBorder: string;
+  /** Active tab top border (accent) when focused */
+  focusedActiveBorderTop: string;
+  /** Active tab top border when unfocused */
+  unfocusedActiveBorderTop: string;
+}
 
 /**
  * Default theme colors (Dark+)
@@ -246,6 +301,164 @@ export class ThemeAdapter {
         this.changeCallbacks.splice(index, 1);
       }
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Focus Color Management
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get focus colors for an element type.
+   * Provides consistent focused/unfocused colors across all UI elements.
+   */
+  getFocusColors(elementType: FocusableElementType): FocusColors {
+    const baseColors = this.getBaseColors(elementType);
+
+    // Compute focused background: slightly darker to indicate focus
+    const focusedBg = this.computeFocusedBackground(baseColors.background);
+    // Unfocused uses base background
+    const unfocusedBg = baseColors.background;
+
+    // Compute unfocused foreground: slightly dimmed
+    const unfocusedFg = this.computeUnfocusedForeground(baseColors.foreground);
+
+    // Selection colors
+    const selectionBg = this.getColor('list.activeSelectionBackground', '#094771');
+    const selectionFg = this.getColor('list.activeSelectionForeground', '#ffffff');
+    // Inactive selection: lighter than focused bg but distinct
+    const inactiveSelectionBg = this.computeInactiveSelectionBackground(baseColors.background);
+
+    return {
+      focusedBackground: focusedBg,
+      unfocusedBackground: unfocusedBg,
+      focusedForeground: baseColors.foreground,
+      unfocusedForeground: unfocusedFg,
+      selectionBackground: selectionBg,
+      inactiveSelectionBackground: inactiveSelectionBg,
+      selectionForeground: selectionFg,
+    };
+  }
+
+  /**
+   * Get tab colors for pane focus state.
+   */
+  getTabFocusColors(): TabFocusColors {
+    const tabBarBg = this.getColor('editorGroupHeader.tabsBackground', '#252526');
+    const activeTabBg = this.getColor('tab.activeBackground', '#1e1e1e');
+    const activeTabFg = this.getColor('tab.activeForeground', '#ffffff');
+    const inactiveTabBg = this.getColor('tab.inactiveBackground', '#2d2d2d');
+    const inactiveTabFg = this.getColor('tab.inactiveForeground', '#ffffff80');
+    const tabBorder = this.getColor('tab.border', '#252526');
+    const activeBorderTop = this.getColor('tab.activeBorderTop', '#007acc');
+
+    // Unfocused: dim the tab bar and active tab
+    const unfocusedTabBarBg = this.computeUnfocusedBackground(tabBarBg);
+    const unfocusedActiveTabBg = this.computeUnfocusedBackground(activeTabBg);
+    const unfocusedActiveTabFg = this.computeUnfocusedForeground(activeTabFg);
+    // Unfocused pane has no accent border
+    const unfocusedBorderTop = tabBorder;
+
+    return {
+      focusedTabBarBackground: tabBarBg,
+      unfocusedTabBarBackground: unfocusedTabBarBg,
+      focusedActiveTabBackground: activeTabBg,
+      unfocusedActiveTabBackground: unfocusedActiveTabBg,
+      focusedActiveTabForeground: activeTabFg,
+      unfocusedActiveTabForeground: unfocusedActiveTabFg,
+      inactiveTabBackground: inactiveTabBg,
+      inactiveTabForeground: inactiveTabFg,
+      tabBorder,
+      focusedActiveBorderTop: activeBorderTop,
+      unfocusedActiveBorderTop: unfocusedBorderTop,
+    };
+  }
+
+  /**
+   * Convenience method to get the appropriate background for current focus state.
+   */
+  getBackgroundForFocus(elementType: FocusableElementType, isFocused: boolean): string {
+    const colors = this.getFocusColors(elementType);
+    return isFocused ? colors.focusedBackground : colors.unfocusedBackground;
+  }
+
+  /**
+   * Convenience method to get the appropriate foreground for current focus state.
+   */
+  getForegroundForFocus(elementType: FocusableElementType, isFocused: boolean): string {
+    const colors = this.getFocusColors(elementType);
+    return isFocused ? colors.focusedForeground : colors.unfocusedForeground;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Private Helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get base colors for an element type from theme.
+   */
+  private getBaseColors(elementType: FocusableElementType): { background: string; foreground: string } {
+    switch (elementType) {
+      case 'editor':
+        return {
+          background: this.getColor('editor.background', '#1e1e1e'),
+          foreground: this.getColor('editor.foreground', '#d4d4d4'),
+        };
+      case 'sidebar':
+        return {
+          background: this.getColor('sideBar.background', '#252526'),
+          foreground: this.getColor('sideBar.foreground', '#cccccc'),
+        };
+      case 'panel':
+        return {
+          background: this.getColor('panel.background', '#1e1e1e'),
+          foreground: this.getColor('panel.foreground', '#cccccc'),
+        };
+      case 'terminal':
+        return {
+          background: this.getColor('terminal.background', '#1e1e1e'),
+          foreground: this.getColor('terminal.foreground', '#cccccc'),
+        };
+    }
+  }
+
+  /**
+   * Compute focused background: slightly darker to show focus.
+   */
+  private computeFocusedBackground(baseColor: string): string {
+    const rgb = hexToRgb(baseColor);
+    if (!rgb) return baseColor;
+    // Darken by 8% for subtle but visible focus indication
+    return rgbToHex(darken(rgb, 0.08));
+  }
+
+  /**
+   * Compute unfocused background: slightly lighter/faded.
+   */
+  private computeUnfocusedBackground(baseColor: string): string {
+    const rgb = hexToRgb(baseColor);
+    if (!rgb) return baseColor;
+    // Lighten by 3% for subtle unfocused state
+    return rgbToHex(lighten(rgb, 0.03));
+  }
+
+  /**
+   * Compute unfocused foreground: dimmed text.
+   */
+  private computeUnfocusedForeground(baseColor: string): string {
+    const rgb = hexToRgb(baseColor);
+    if (!rgb) return baseColor;
+    // Darken foreground by 25% when unfocused
+    return rgbToHex(darken(rgb, 0.25));
+  }
+
+  /**
+   * Compute inactive selection background.
+   */
+  private computeInactiveSelectionBackground(baseBackground: string): string {
+    const rgb = hexToRgb(baseBackground);
+    if (!rgb) return baseBackground;
+    // Lighten base by 15% for inactive selection
+    return rgbToHex(lighten(rgb, 0.15));
   }
 
   /**
