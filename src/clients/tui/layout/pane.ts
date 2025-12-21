@@ -883,6 +883,7 @@ export class Pane {
       GitDiffView: 'Diff',
       AgentChat: 'Agent',
       TerminalSession: 'Terminal',
+      TerminalPanel: 'Terminal',
       SearchResults: 'Search',
       ProjectSearch: 'Find',
       DiagnosticsView: 'Problems',

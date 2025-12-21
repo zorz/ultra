@@ -33,6 +33,12 @@ Issues and improvements to address in future sessions.
   - Consider alternative default keybindings that don't conflict with Kitty
   - Detect Kitty terminal and show a warning/hint about configuring shortcuts
 
+- [ ] **Live settings and keybindings updates** - Currently, settings.json and keybindings.json are only read at startup. Changes require restarting the editor. Need:
+  - File watching for settings.json and keybindings.json to apply changes live
+  - Command palette commands to change settings directly (like the old TUI had)
+  - UI for adjusting settings like terminal height, sidebar width, theme, etc.
+  - Settings that affect session state (terminal height, sidebar width) should update both the config and the current session
+
 ## Services
 
 ## ECP

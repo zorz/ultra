@@ -154,8 +154,11 @@ export class TUIClient {
   /** Terminal panel visible */
   private terminalPanelVisible = false;
 
-  /** Terminal panel height (in rows) */
-  private terminalPanelHeight = 12;
+  /** Terminal panel height (in rows) - loaded from config in start() */
+  private terminalPanelHeight = 10;
+
+  /** Whether terminal panel has focus */
+  private terminalFocused = false;
 
   constructor(options: TUIClientOptions = {}) {
     this.workingDirectory = options.workingDirectory ?? process.cwd();
@@ -243,6 +246,10 @@ export class TUIClient {
     // Load configuration
     await this.configManager.load();
     this.log('Configuration loaded');
+
+    // Apply terminal panel height from config
+    this.terminalPanelHeight = this.configManager.getWithDefault('tui.terminal.height', 10);
+    this.log(`Terminal panel height: ${this.terminalPanelHeight}`);
 
     // Apply theme from config
     const themeName = this.configManager.get('workbench.colorTheme') ?? 'catppuccin-frappe';
@@ -913,11 +920,48 @@ export class TUIClient {
         this.window.showStatusCommand(shortcutDisplay);
       }
 
+      // Check if terminal panel should handle the input first
+      if (this.terminalPanelVisible && this.terminalPanel && this.terminalFocused) {
+        debugLog(`[TUIClient] Routing key to terminal: ${event.key}`);
+        if (this.terminalPanel.handleKey(event)) {
+          return;
+        }
+      }
+
       this.window.handleInput(event);
     });
 
     // Route mouse events to window
     this.inputHandler.onMouse((event) => {
+      // Check if mouse is in terminal panel area
+      if (this.terminalPanelVisible && this.terminalPanel) {
+        const bounds = this.terminalPanel.getBounds();
+        const inTerminal = event.y >= bounds.y && event.y < bounds.y + bounds.height;
+
+        if (event.type === 'press') {
+          if (inTerminal) {
+            // Click in terminal - focus it
+            debugLog('[TUIClient] Mouse click in terminal, focusing terminal');
+            this.setTerminalFocus(true);
+            this.terminalPanel.handleMouse(event);
+            this.scheduleRender();
+            return;
+          } else {
+            // Click outside terminal - unfocus it
+            if (this.terminalFocused) {
+              debugLog('[TUIClient] Mouse click outside terminal, unfocusing terminal');
+              this.setTerminalFocus(false);
+              this.scheduleRender();
+            }
+          }
+        } else if (inTerminal) {
+          // Other mouse events in terminal (scroll, etc.)
+          if (this.terminalPanel.handleMouse(event)) {
+            return;
+          }
+        }
+      }
+
       this.window.handleInput(event);
     });
 
@@ -1146,6 +1190,16 @@ export class TUIClient {
       return true;
     });
 
+    this.commandHandlers.set('ultra.toggleTerminal', () => {
+      this.toggleTerminalPanel();
+      return true;
+    });
+
+    this.commandHandlers.set('ultra.newTerminal', async () => {
+      await this.createNewTerminal();
+      return true;
+    });
+
     this.commandHandlers.set('git.focusPanel', () => {
       this.focusGitPanel();
       return true;
@@ -1344,6 +1398,7 @@ export class TUIClient {
    * Toggle terminal panel visibility.
    */
   private toggleTerminalPanel(): void {
+    debugLog(`[TUIClient] Toggle terminal panel, current visible: ${this.terminalPanelVisible}`);
     if (this.terminalPanelVisible) {
       this.hideTerminalPanel();
     } else {
@@ -1385,6 +1440,7 @@ export class TUIClient {
 
     this.terminalPanelVisible = true;
     this.layoutTerminalPanel();
+    this.setTerminalFocus(true);
     this.scheduleRender();
   }
 
@@ -1397,6 +1453,7 @@ export class TUIClient {
     debugLog('[TUIClient] Hiding terminal panel');
 
     this.terminalPanelVisible = false;
+    this.setTerminalFocus(false);
 
     // Re-layout without terminal panel
     this.layoutTerminalPanel();
@@ -1412,19 +1469,19 @@ export class TUIClient {
     const size = this.getTerminalSize();
     const panelHeight = this.terminalPanelVisible ? this.terminalPanelHeight : 0;
 
+    debugLog(`[TUIClient] Layout terminal panel: visible=${this.terminalPanelVisible}, size=${size.width}x${size.height}, panelHeight=${panelHeight}`);
+
     if (this.terminalPanelVisible) {
       // Position terminal panel at bottom
-      this.terminalPanel.setBounds({
+      const bounds = {
         x: 0,
-        y: size.height - panelHeight,
+        y: size.height - panelHeight - 1, // -1 for status bar
         width: size.width,
         height: panelHeight,
-      });
+      };
+      debugLog(`[TUIClient] Setting terminal panel bounds: ${JSON.stringify(bounds)}`);
+      this.terminalPanel.setBounds(bounds);
     }
-
-    // Adjust main content area height
-    // Note: This should trigger re-layout of the pane container
-    // For now, we rely on the window's layout system
   }
 
   /**
@@ -1462,11 +1519,27 @@ export class TUIClient {
    */
   private focusTerminalPanel(): void {
     if (this.terminalPanel && this.terminalPanelVisible) {
-      const session = this.terminalPanel.getActiveSession();
-      if (session) {
-        this.window.focusElement(session);
+      this.setTerminalFocus(true);
+      this.scheduleRender();
+    }
+  }
+
+  /**
+   * Set terminal focus state.
+   */
+  private setTerminalFocus(focused: boolean): void {
+    if (this.terminalFocused === focused) return;
+
+    this.terminalFocused = focused;
+    debugLog(`[TUIClient] Terminal focus: ${focused}`);
+
+    if (this.terminalPanel) {
+      if (focused) {
+        // Focus the terminal panel
+        this.terminalPanel.onFocus();
       } else {
-        this.window.focusElement(this.terminalPanel);
+        // Blur the terminal panel
+        this.terminalPanel.onBlur();
       }
     }
   }
@@ -1529,6 +1602,11 @@ export class TUIClient {
   private render(): void {
     // Render window to its buffer
     const windowBuffer = this.window.render();
+
+    // Render terminal panel on top if visible
+    if (this.terminalPanelVisible && this.terminalPanel) {
+      this.terminalPanel.render(windowBuffer);
+    }
 
     // Copy to renderer buffer
     const rendererBuffer = this.renderer.getBuffer();
@@ -2369,7 +2447,7 @@ export class TUIClient {
 
     // Restore UI state
     if (session.ui) {
-      // Restore terminal panel height
+      // Restore terminal panel height (session overrides config)
       if (session.ui.terminalHeight) {
         this.terminalPanelHeight = session.ui.terminalHeight;
       }
