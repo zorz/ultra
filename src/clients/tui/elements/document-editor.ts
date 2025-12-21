@@ -103,6 +103,24 @@ export class DocumentEditor extends BaseElement {
   /** Line number gutter width */
   private gutterWidth = 4;
 
+  /** Scrollbar width (1 character) */
+  private static readonly SCROLLBAR_WIDTH = 1;
+
+  /** Minimap width in characters */
+  private static readonly MINIMAP_WIDTH = 10;
+
+  /** Minimap scale - how many source lines per minimap row */
+  private static readonly MINIMAP_SCALE = 3;
+
+  /** Whether minimap is enabled */
+  private minimapEnabled = false;
+
+  /** Minimap scroll offset (in minimap rows) */
+  private minimapScrollTop = 0;
+
+  /** Whether scrollbar dragging is active */
+  private scrollbarDragging = false;
+
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
     this.callbacks = callbacks;
@@ -125,6 +143,36 @@ export class DocumentEditor extends BaseElement {
    */
   getCallbacks(): DocumentEditorCallbacks {
     return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Minimap Configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Enable or disable the minimap.
+   */
+  setMinimapEnabled(enabled: boolean): void {
+    this.minimapEnabled = enabled;
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Check if minimap is enabled.
+   */
+  isMinimapEnabled(): boolean {
+    return this.minimapEnabled;
+  }
+
+  /**
+   * Get the width of the right margin (scrollbar + minimap).
+   */
+  private getRightMarginWidth(): number {
+    let width = DocumentEditor.SCROLLBAR_WIDTH;
+    if (this.minimapEnabled) {
+      width += DocumentEditor.MINIMAP_WIDTH;
+    }
+    return width;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -385,7 +433,8 @@ export class DocumentEditor extends BaseElement {
    */
   private ensureCursorVisible(): void {
     const viewportHeight = this.bounds.height;
-    const viewportWidth = this.bounds.width - this.gutterWidth - 1;
+    const rightMargin = this.getRightMarginWidth();
+    const viewportWidth = this.bounds.width - this.gutterWidth - rightMargin;
 
     // Vertical scrolling
     if (this.cursor.line < this.scrollTop) {
@@ -584,6 +633,11 @@ export class DocumentEditor extends BaseElement {
     const selectionBg = this.ctx.getThemeColor('editor.selectionBackground', '#264f78');
     const lineHighlight = this.ctx.getThemeColor('editor.lineHighlightBackground', '#2a2d2e');
 
+    // Calculate layout dimensions
+    const rightMargin = this.getRightMarginWidth();
+    const contentWidth = width - this.gutterWidth - rightMargin;
+    const contentX = x + this.gutterWidth;
+
     // Render each visible line
     for (let row = 0; row < height; row++) {
       const lineNum = this.scrollTop + row;
@@ -591,7 +645,7 @@ export class DocumentEditor extends BaseElement {
 
       if (lineNum >= this.lines.length) {
         // Empty area
-        buffer.writeString(x, screenY, ' '.repeat(width), fg, bg);
+        buffer.writeString(x, screenY, ' '.repeat(width - rightMargin), fg, bg);
         continue;
       }
 
@@ -605,9 +659,7 @@ export class DocumentEditor extends BaseElement {
 
       // Render line content
       const line = this.lines[lineNum]!;
-      const contentWidth = width - this.gutterWidth;
       const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
-      const contentX = x + this.gutterWidth;
 
       // Fill background
       buffer.writeString(contentX, screenY, ' '.repeat(contentWidth), fg, lineBg);
@@ -627,12 +679,20 @@ export class DocumentEditor extends BaseElement {
       // Render cursor
       if (isCurrentLine && this.focused && this.cursor.column >= this.scrollLeft) {
         const cursorX = contentX + this.cursor.column - this.scrollLeft;
-        if (cursorX < x + width) {
+        if (cursorX < x + width - rightMargin) {
           const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
           buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
         }
       }
     }
+
+    // Render minimap if enabled
+    if (this.minimapEnabled) {
+      this.renderMinimap(buffer);
+    }
+
+    // Render scrollbar
+    this.renderScrollbar(buffer);
   }
 
   /**
@@ -753,6 +813,147 @@ export class DocumentEditor extends BaseElement {
     this.gutterWidth = Math.max(4, digits + 2);
   }
 
+  /**
+   * Render the vertical scrollbar.
+   */
+  private renderScrollbar(buffer: ScreenBuffer): void {
+    const { x, y, width, height } = this.bounds;
+    const scrollbarX = x + width - DocumentEditor.SCROLLBAR_WIDTH;
+
+    const trackBg = this.ctx.getThemeColor('scrollbarSlider.background', '#4a4a4a');
+    const thumbBg = this.ctx.getThemeColor('scrollbarSlider.activeBackground', '#6a6a6a');
+
+    // Calculate thumb size and position
+    const totalLines = this.lines.length;
+    const visibleLines = height;
+
+    // Minimum thumb height of 1
+    const thumbHeight = Math.max(1, Math.round((visibleLines / Math.max(totalLines, 1)) * height));
+
+    // Calculate thumb position
+    const maxScroll = Math.max(0, totalLines - visibleLines);
+    const scrollRatio = maxScroll > 0 ? this.scrollTop / maxScroll : 0;
+    const thumbTop = Math.round(scrollRatio * (height - thumbHeight));
+
+    // Render scrollbar track and thumb
+    for (let row = 0; row < height; row++) {
+      const screenY = y + row;
+      const isThumb = row >= thumbTop && row < thumbTop + thumbHeight;
+      const bg = isThumb ? thumbBg : trackBg;
+      const char = isThumb ? '█' : '░';
+
+      buffer.set(scrollbarX, screenY, { char, fg: bg, bg: trackBg });
+    }
+  }
+
+  /**
+   * Render the minimap.
+   * The minimap scrolls with the editor and uses a scale factor
+   * (multiple source lines per minimap row).
+   */
+  private renderMinimap(buffer: ScreenBuffer): void {
+    const { x, y, width, height } = this.bounds;
+    const minimapWidth = DocumentEditor.MINIMAP_WIDTH;
+    const minimapX = x + width - DocumentEditor.SCROLLBAR_WIDTH - minimapWidth;
+    const scale = DocumentEditor.MINIMAP_SCALE;
+
+    const bg = this.ctx.getThemeColor('minimap.background', '#1e1e1e');
+    const fg = this.ctx.getThemeColor('minimap.foreground', '#6a6a6a');
+    const viewportBg = this.ctx.getThemeColor('minimapSlider.background', '#ffffff20');
+
+    // Calculate minimap metrics
+    const totalLines = this.lines.length;
+    const totalMinimapRows = Math.ceil(totalLines / scale);
+
+    // Update minimap scroll to follow editor scroll
+    this.updateMinimapScroll(height);
+
+    // Calculate viewport indicator position (in minimap rows)
+    const viewportStartRow = Math.floor(this.scrollTop / scale);
+    const viewportEndRow = Math.ceil((this.scrollTop + height) / scale);
+
+    // Render each minimap row
+    for (let row = 0; row < height; row++) {
+      const screenY = y + row;
+      const minimapRow = row + this.minimapScrollTop;
+
+      // Calculate source lines for this minimap row
+      const startLine = minimapRow * scale;
+      const endLine = Math.min(startLine + scale, totalLines);
+
+      // Check if this row is in the visible viewport
+      const isInViewport = minimapRow >= viewportStartRow && minimapRow < viewportEndRow;
+      const rowBg = isInViewport ? viewportBg : bg;
+
+      // Fill background first
+      for (let col = 0; col < minimapWidth; col++) {
+        buffer.set(minimapX + col, screenY, { char: ' ', fg, bg: rowBg });
+      }
+
+      // Skip if no content for this row
+      if (startLine >= totalLines) continue;
+
+      // How many source columns per minimap column
+      const maxColumn = 120; // Max columns to consider
+      const colsPerChar = Math.ceil(maxColumn / minimapWidth);
+
+      // Render content for this minimap row
+      for (let col = 0; col < minimapWidth; col++) {
+        const colStart = col * colsPerChar;
+        const colEnd = colStart + colsPerChar;
+
+        // Aggregate density across all lines in this row
+        let totalDensity = 0;
+
+        for (let lineNum = startLine; lineNum < endLine && lineNum < totalLines; lineNum++) {
+          const line = this.lines[lineNum]!;
+          const text = line.text;
+
+          for (let c = colStart; c < colEnd && c < text.length; c++) {
+            const char = text[c];
+            if (char && char !== ' ' && char !== '\t') {
+              totalDensity++;
+            }
+          }
+        }
+
+        // Convert density to block character
+        if (totalDensity > 0) {
+          const numLines = endLine - startLine;
+          const normalizedDensity = totalDensity / numLines;
+          let char = ' ';
+          if (normalizedDensity > colsPerChar * 0.75) char = '█';
+          else if (normalizedDensity > colsPerChar * 0.5) char = '▓';
+          else if (normalizedDensity > colsPerChar * 0.25) char = '▒';
+          else if (normalizedDensity > 0) char = '░';
+
+          buffer.set(minimapX + col, screenY, { char, fg, bg: rowBg });
+        }
+      }
+    }
+  }
+
+  /**
+   * Update minimap scroll position to follow editor scroll.
+   */
+  private updateMinimapScroll(viewportHeight: number): void {
+    const scale = DocumentEditor.MINIMAP_SCALE;
+    const totalLines = this.lines.length;
+    const totalMinimapRows = Math.ceil(totalLines / scale);
+
+    // If whole file fits in minimap, no scrolling needed
+    if (totalMinimapRows <= viewportHeight) {
+      this.minimapScrollTop = 0;
+      return;
+    }
+
+    // Scroll proportionally with the editor
+    const editorMaxScroll = Math.max(1, totalLines - viewportHeight);
+    const minimapMaxScroll = totalMinimapRows - viewportHeight;
+    const scrollRatio = this.scrollTop / editorMaxScroll;
+    this.minimapScrollTop = Math.floor(scrollRatio * minimapMaxScroll);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Input Handling
   // ─────────────────────────────────────────────────────────────────────────
@@ -854,12 +1055,57 @@ export class DocumentEditor extends BaseElement {
   }
 
   override handleMouse(event: MouseEvent): boolean {
+    const { x, y, width, height } = this.bounds;
+    const rightMargin = this.getRightMarginWidth();
+    const scrollbarX = x + width - DocumentEditor.SCROLLBAR_WIDTH;
+    const minimapX = this.minimapEnabled
+      ? x + width - DocumentEditor.SCROLLBAR_WIDTH - DocumentEditor.MINIMAP_WIDTH
+      : scrollbarX;
+
+    // Check if click is on scrollbar
+    if (event.x >= scrollbarX && event.x < x + width) {
+      if (event.type === 'press' && event.button === 'left') {
+        this.scrollbarDragging = true;
+        this.handleScrollbarClick(event.y);
+        return true;
+      }
+      if (event.type === 'drag') {
+        this.handleScrollbarClick(event.y);
+        return true;
+      }
+      if (event.type === 'release') {
+        this.scrollbarDragging = false;
+        return true;
+      }
+    }
+
+    // Check if click is on minimap
+    if (this.minimapEnabled && event.x >= minimapX && event.x < scrollbarX) {
+      if (event.type === 'press' && event.button === 'left') {
+        this.handleMinimapClick(event.y);
+        return true;
+      }
+    }
+
+    // Handle scrollbar drag release anywhere
+    if (event.type === 'release' && this.scrollbarDragging) {
+      this.scrollbarDragging = false;
+      return true;
+    }
+
+    // Continue scrollbar drag even if mouse moves off scrollbar
+    if (event.type === 'drag' && this.scrollbarDragging) {
+      this.handleScrollbarClick(event.y);
+      return true;
+    }
+
     if (event.type === 'press' && event.button === 'left') {
-      // Calculate clicked position
+      // Calculate clicked position in content area
       const relX = event.x - this.bounds.x - this.gutterWidth;
       const relY = event.y - this.bounds.y;
+      const contentWidth = width - this.gutterWidth - rightMargin;
 
-      if (relX >= 0 && this.lines.length > 0) {
+      if (relX >= 0 && relX < contentWidth && this.lines.length > 0) {
         const line = Math.max(0, Math.min(this.scrollTop + relY, this.lines.length - 1));
         const lineText = this.lines[line];
         if (lineText) {
@@ -880,6 +1126,52 @@ export class DocumentEditor extends BaseElement {
     }
 
     return false;
+  }
+
+  /**
+   * Handle click/drag on the scrollbar.
+   */
+  private handleScrollbarClick(mouseY: number): void {
+    const { y, height } = this.bounds;
+    const relY = mouseY - y;
+
+    // Calculate scroll position from click position
+    const totalLines = this.lines.length;
+    const visibleLines = height;
+    const maxScroll = Math.max(0, totalLines - visibleLines);
+
+    // Map click position to scroll position
+    const scrollRatio = Math.max(0, Math.min(1, relY / height));
+    const newScrollTop = Math.round(scrollRatio * maxScroll);
+
+    if (newScrollTop !== this.scrollTop) {
+      this.scrollTop = newScrollTop;
+      this.ctx.markDirty();
+    }
+  }
+
+  /**
+   * Handle click on the minimap.
+   */
+  private handleMinimapClick(mouseY: number): void {
+    const { y, height } = this.bounds;
+    const relY = mouseY - y;
+    const scale = DocumentEditor.MINIMAP_SCALE;
+
+    // Calculate which minimap row was clicked
+    const clickedMinimapRow = relY + this.minimapScrollTop;
+
+    // Convert to source line
+    const clickedLine = clickedMinimapRow * scale;
+
+    // Center the viewport on the clicked line
+    const totalLines = this.lines.length;
+    const visibleLines = height;
+    const targetScrollTop = Math.max(0, clickedLine - Math.floor(visibleLines / 2));
+    const maxScroll = Math.max(0, totalLines - visibleLines);
+
+    this.scrollTop = Math.min(targetScrollTop, maxScroll);
+    this.ctx.markDirty();
   }
 
   // ─────────────────────────────────────────────────────────────────────────

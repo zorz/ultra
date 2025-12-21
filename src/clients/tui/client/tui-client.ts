@@ -421,6 +421,10 @@ export class TUIClient {
     };
     editor.setCallbacks(callbacks);
     editor.setUri(uri);
+
+    // Apply minimap setting
+    const minimapEnabled = this.configManager.getWithDefault('editor.minimap.enabled', false);
+    editor.setMinimapEnabled(minimapEnabled);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
