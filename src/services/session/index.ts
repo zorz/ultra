@@ -8,6 +8,7 @@
 export type {
   EditorSettings,
   SessionDocumentState,
+  SessionTerminalState,
   SessionUIState,
   SessionLayoutNode,
   SessionState,

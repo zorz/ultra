@@ -10,6 +10,24 @@
 export type { EditorSettings } from '../../config/settings.ts';
 
 /**
+ * Session state for a terminal in a pane.
+ */
+export interface SessionTerminalState {
+  /** Element ID */
+  elementId: string;
+  /** Pane ID where terminal is open */
+  paneId: string;
+  /** Tab order within pane (0-indexed) */
+  tabOrder: number;
+  /** Whether this tab is active in its pane */
+  isActiveInPane: boolean;
+  /** Working directory for the terminal */
+  cwd: string;
+  /** Terminal title */
+  title: string;
+}
+
+/**
  * Session state for a single document.
  */
 export interface SessionDocumentState {
@@ -94,6 +112,8 @@ export interface SessionState {
   sessionName?: string;
   /** All open documents */
   documents: SessionDocumentState[];
+  /** All open terminals in panes */
+  terminals?: SessionTerminalState[];
   /** Active document path */
   activeDocumentPath: string | null;
   /** Active pane ID */

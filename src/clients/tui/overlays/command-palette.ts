@@ -75,15 +75,9 @@ export class CommandPaletteDialog extends SearchableDialog<Command> {
    * Get display for a command.
    */
   protected override getItemDisplay(command: Command, _isSelected: boolean): ItemDisplay {
-    let text = command.label;
-
-    // Add category prefix
-    if (command.category) {
-      text = `${command.category}: ${command.label}`;
-    }
-
+    // Label is the main text, keybinding field contains "^S  File" style suffix
     return {
-      text,
+      text: command.label,
       secondary: command.keybinding,
     };
   }

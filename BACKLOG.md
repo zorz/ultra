@@ -44,6 +44,11 @@ Issues and improvements to address in future sessions.
   - If the active terminal's cursor is being rendered correctly
   - Whether inactive terminals are incorrectly showing or affecting cursor state
 
+- [ ] **Save terminal buffer to session** - Currently, terminal sessions in panes are restored but start fresh (empty buffer). Consider saving and restoring the terminal scrollback buffer so users can see previous output after restarting. This would require:
+  - Serializing the terminal buffer (scrollback + visible) to session state
+  - Handling potentially large buffer sizes (compression or truncation)
+  - Restoring buffer content when recreating the terminal session
+
 ## Services
 
 ## ECP

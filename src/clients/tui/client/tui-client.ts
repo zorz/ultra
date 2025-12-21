@@ -52,9 +52,14 @@ import {
   localSessionService,
   type SessionState,
   type SessionDocumentState,
+  type SessionTerminalState,
   type SessionLayoutNode,
   type SessionUIState,
 } from '../../../services/session/index.ts';
+
+// Terminal
+import { createPtyBackend } from '../../../terminal/pty-factory.ts';
+import type { PTYBackend } from '../../../terminal/pty-backend.ts';
 
 // ============================================
 // Types
@@ -111,6 +116,9 @@ export class TUIClient {
 
   /** Open documents by URI -> editor mapping */
   private openDocuments = new Map<string, { documentId: string; editorId: string; syntaxSessionId?: string }>();
+
+  /** Open terminals in panes by element ID -> PTY mapping */
+  private paneTerminals = new Map<string, PTYBackend>();
 
   /** Whether client is running */
   private running = false;
@@ -692,7 +700,7 @@ export class TUIClient {
    * Handle element close from tab X click.
    * Called before the element is removed from the pane.
    */
-  private handleElementClose(_elementId: string, element: BaseElement): void {
+  private handleElementClose(elementId: string, element: BaseElement): void {
     if (element instanceof DocumentEditor) {
       const uri = element.getUri();
       if (uri) {
@@ -713,6 +721,14 @@ export class TUIClient {
           // Mark session dirty
           this.markSessionDirty();
         }
+      }
+    } else if (element instanceof TerminalSession) {
+      // Clean up PTY for terminals in panes
+      const pty = this.paneTerminals.get(elementId);
+      if (pty) {
+        debugLog(`[TUIClient] Killing PTY for terminal: ${elementId}`);
+        pty.kill();
+        this.paneTerminals.delete(elementId);
       }
     }
   }
@@ -1153,6 +1169,11 @@ export class TUIClient {
       return true;
     });
 
+    this.commandHandlers.set('terminal.newInPane', async () => {
+      await this.createTerminalInPane();
+      return true;
+    });
+
     // Git commands
     this.commandHandlers.set('git.commit', async () => {
       await this.showCommitDialog();
@@ -1165,38 +1186,23 @@ export class TUIClient {
     });
 
     // Ultra namespace commands for keybindings
-    this.commandHandlers.set('ultra.splitVertical', () => {
+    this.commandHandlers.set('view.splitVertical', () => {
       this.splitEditorPane('vertical');
       return true;
     });
 
-    this.commandHandlers.set('ultra.splitHorizontal', () => {
+    this.commandHandlers.set('view.splitHorizontal', () => {
       this.splitEditorPane('horizontal');
       return true;
     });
 
-    this.commandHandlers.set('ultra.focusNextPane', () => {
-      this.window.focusNextPane();
-      return true;
-    });
+    // Note: ultra.focusNextPane, ultra.focusPreviousPane are aliases for workbench.focusNextPane, workbench.focusPreviousPane
+    // Note: ultra.toggleTerminal is an alias for workbench.toggleTerminal
+    // Note: ultra.newTerminal is an alias for terminal.new
+    // These are kept as aliases for backward compatibility with keybindings
 
-    this.commandHandlers.set('ultra.focusPreviousPane', () => {
-      this.window.focusPreviousPane();
-      return true;
-    });
-
-    this.commandHandlers.set('ultra.closePane', () => {
+    this.commandHandlers.set('view.closePane', () => {
       this.closeCurrentPane();
-      return true;
-    });
-
-    this.commandHandlers.set('ultra.toggleTerminal', () => {
-      this.toggleTerminalPanel();
-      return true;
-    });
-
-    this.commandHandlers.set('ultra.newTerminal', async () => {
-      await this.createNewTerminal();
       return true;
     });
 
@@ -1519,6 +1525,78 @@ export class TUIClient {
       if (!this.terminalPanel.hasTerminals()) {
         this.hideTerminalPanel();
       }
+    }
+  }
+
+  /**
+   * Create a terminal in the specified pane (or focused pane).
+   * Unlike the terminal panel, this creates a terminal as a tab in an editor pane.
+   */
+  private async createTerminalInPane(pane?: Pane): Promise<void> {
+    const targetPane = pane ?? this.window.getFocusedPane();
+    if (!targetPane) {
+      this.window.showNotification('No pane available for terminal', 'warning');
+      return;
+    }
+
+    // Only allow terminals in tab-mode panes (editor panes)
+    if (targetPane.getMode() !== 'tabs') {
+      this.window.showNotification('Cannot add terminal to sidebar pane', 'warning');
+      return;
+    }
+
+    debugLog(`[TUIClient] Creating terminal in pane: ${targetPane.id}`);
+
+    // Create terminal element via pane factory
+    const terminalId = targetPane.addElement('TerminalSession', 'Terminal');
+    const terminal = targetPane.getElement(terminalId) as TerminalSession | null;
+
+    if (!terminal) {
+      this.window.showNotification('Failed to create terminal', 'error');
+      return;
+    }
+
+    // Get pane bounds for PTY size
+    const bounds = targetPane.getContentBounds();
+
+    // Create and attach PTY backend
+    try {
+      const pty = await createPtyBackend({
+        cwd: this.workingDirectory,
+        cols: Math.max(1, bounds.width - 1), // -1 for scrollbar
+        rows: Math.max(1, bounds.height),
+      });
+
+      // Set up callbacks
+      terminal.setCallbacks({
+        onTitleChange: (title) => {
+          terminal.setTitle(title);
+          this.scheduleRender();
+        },
+        onExit: (code) => {
+          debugLog(`[TUIClient] Terminal ${terminalId} exited with code ${code}`);
+        },
+      });
+
+      // Attach PTY to session
+      terminal.attachPty(pty);
+
+      // Start the PTY
+      await pty.start();
+
+      // Track the PTY for cleanup
+      this.paneTerminals.set(terminalId, pty);
+
+      debugLog(`[TUIClient] Terminal created in pane: ${terminalId}`);
+
+      // Focus the terminal
+      targetPane.setActiveElement(terminalId);
+      this.scheduleRender();
+    } catch (error) {
+      debugLog(`[TUIClient] Failed to create PTY: ${error}`);
+      this.window.showNotification('Failed to start terminal', 'error');
+      // Remove the terminal element since PTY failed
+      targetPane.removeElement(terminalId);
     }
   }
 
@@ -1878,6 +1956,81 @@ export class TUIClient {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
+   * Command labels and categories for the command palette.
+   * Maps command IDs to { label, category } for clean display.
+   */
+  private static readonly COMMAND_INFO: Record<string, { label: string; category: string }> = {
+    // File
+    'file.save': { label: 'Save File', category: 'File' },
+    'file.saveAs': { label: 'Save File As...', category: 'File' },
+    'file.close': { label: 'Close File', category: 'File' },
+    'file.open': { label: 'Open File...', category: 'File' },
+    'file.new': { label: 'New File', category: 'File' },
+    // Edit
+    'edit.undo': { label: 'Undo', category: 'Edit' },
+    'edit.redo': { label: 'Redo', category: 'Edit' },
+    'edit.selectAll': { label: 'Select All', category: 'Edit' },
+    'edit.selectNextMatch': { label: 'Select Next Match', category: 'Edit' },
+    'edit.selectAllOccurrences': { label: 'Select All Occurrences', category: 'Edit' },
+    // Search
+    'search.find': { label: 'Find', category: 'Search' },
+    'search.replace': { label: 'Find and Replace', category: 'Search' },
+    'search.findInFiles': { label: 'Find in Files', category: 'Search' },
+    // Editor
+    'editor.gotoLine': { label: 'Go to Line...', category: 'Editor' },
+    'editor.gotoSymbol': { label: 'Go to Symbol...', category: 'Editor' },
+    'editor.fold': { label: 'Fold Region', category: 'Editor' },
+    'editor.unfold': { label: 'Unfold Region', category: 'Editor' },
+    'editor.foldAll': { label: 'Fold All Regions', category: 'Editor' },
+    'editor.unfoldAll': { label: 'Unfold All Regions', category: 'Editor' },
+    'editor.addCursorAbove': { label: 'Add Cursor Above', category: 'Editor' },
+    'editor.addCursorBelow': { label: 'Add Cursor Below', category: 'Editor' },
+    'editor.clearCursors': { label: 'Clear Secondary Cursors', category: 'Editor' },
+    // View
+    'view.splitVertical': { label: 'Split Editor Right', category: 'View' },
+    'view.splitHorizontal': { label: 'Split Editor Down', category: 'View' },
+    'view.closePane': { label: 'Close Pane', category: 'View' },
+    'workbench.toggleSidebar': { label: 'Toggle Sidebar', category: 'View' },
+    'workbench.toggleTerminal': { label: 'Toggle Terminal Panel', category: 'Term' },
+    'workbench.focusNextPane': { label: 'Focus Next Pane', category: 'View' },
+    'workbench.focusPreviousPane': { label: 'Focus Previous Pane', category: 'View' },
+    'workbench.quickOpen': { label: 'Quick Open File...', category: 'File' },
+    'workbench.commandPalette': { label: 'Command Palette', category: 'View' },
+    'workbench.openSettings': { label: 'Open Settings', category: 'Prefs' },
+    'workbench.openKeybindings': { label: 'Open Keyboard Shortcuts', category: 'Prefs' },
+    'workbench.quit': { label: 'Quit', category: 'App' },
+    // Terminal
+    'terminal.new': { label: 'New Terminal in Panel', category: 'Term' },
+    'terminal.newInPane': { label: 'New Terminal in Pane', category: 'Term' },
+    'terminal.close': { label: 'Close Terminal', category: 'Term' },
+    'terminal.focus': { label: 'Focus Terminal', category: 'Term' },
+    'terminal.nextTab': { label: 'Next Terminal Tab', category: 'Term' },
+    'terminal.previousTab': { label: 'Previous Terminal Tab', category: 'Term' },
+    // Git
+    'git.commit': { label: 'Commit...', category: 'Git' },
+    'git.push': { label: 'Push', category: 'Git' },
+    'git.focusPanel': { label: 'Focus Git Panel', category: 'Git' },
+    // Session
+    'session.save': { label: 'Save Session', category: 'Session' },
+    'session.saveAs': { label: 'Save Session As...', category: 'Session' },
+    'session.open': { label: 'Open Session...', category: 'Session' },
+  };
+
+  /**
+   * Format a keybinding for display.
+   * Converts "ctrl+shift+p" to "^⇧P"
+   */
+  private formatKeybinding(key: string): string {
+    return key
+      .replace(/ctrl\+/gi, '^')
+      .replace(/shift\+/gi, '⇧')
+      .replace(/alt\+/gi, '⌥')
+      .replace(/meta\+/gi, '⌘')
+      .replace(/\+/g, '')
+      .toUpperCase();
+  }
+
+  /**
    * Show the command palette.
    */
   private async showCommandPalette(): Promise<void> {
@@ -1892,18 +2045,40 @@ export class TUIClient {
 
     for (const [commandId, _handler] of this.commandHandlers) {
       const keybinding = keybindings.find((kb) => kb.command === commandId);
-      const parts = commandId.split('.');
-      const category = parts[0] ?? '';
-      const nameParts = parts.slice(1);
-      const label = nameParts.join('.').replace(/([A-Z])/g, ' $1').trim();
+
+      // Get clean label and category from map, or generate from command ID
+      const info = TUIClient.COMMAND_INFO[commandId];
+      let label: string;
+      let category: string;
+
+      if (info) {
+        label = info.label;
+        category = info.category;
+      } else {
+        // Fallback: convert command ID to readable label
+        const parts = commandId.split('.');
+        category = parts[0]?.charAt(0).toUpperCase() + (parts[0]?.slice(1) ?? '');
+        const nameParts = parts.slice(1);
+        label = nameParts
+          .join(' ')
+          .replace(/([A-Z])/g, ' $1')
+          .trim();
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+      }
+
+      // Format keybinding for display, combine with category
+      const formattedKey = keybinding ? this.formatKeybinding(keybinding.key) : '';
+      const secondary = formattedKey ? `${formattedKey}  ${category}` : category;
 
       commands.push({
         id: commandId,
-        label: label.charAt(0).toUpperCase() + label.slice(1),
-        category: category.charAt(0).toUpperCase() + category.slice(1),
-        keybinding: keybinding?.key,
+        label,
+        keybinding: secondary,
       });
     }
+
+    // Sort commands alphabetically by label
+    commands.sort((a, b) => a.label.localeCompare(b.label));
 
     const result = await this.dialogManager.showCommandPalette({
       commands,
@@ -2274,6 +2449,25 @@ export class TUIClient {
 
     debugLog(`[TUIClient] Serialized ${documents.length} documents`);
 
+    // Serialize terminals in panes
+    const terminals: SessionTerminalState[] = [];
+    for (const [elementId, pty] of this.paneTerminals) {
+      const pane = this.findPaneForElement(elementId);
+      const element = pane?.getElement(elementId);
+      if (element instanceof TerminalSession && pane) {
+        terminals.push({
+          elementId,
+          paneId: pane.id,
+          tabOrder: tabOrder++,
+          isActiveInPane: pane.getActiveElement() === element,
+          cwd: pty.getCwd() || this.workingDirectory,
+          title: element.getTitle(),
+        });
+        debugLog(`[TUIClient] Serialized terminal: ${elementId} in pane ${pane.id}`);
+      }
+    }
+    debugLog(`[TUIClient] Serialized ${terminals.length} terminals in panes`);
+
     // Determine active document
     const focusedElement = this.window.getFocusedElement();
     let activeDocumentPath: string | null = null;
@@ -2306,6 +2500,7 @@ export class TUIClient {
       instanceId: `${Date.now()}-${process.pid}`,
       workspaceRoot: this.workingDirectory,
       documents,
+      terminals: terminals.length > 0 ? terminals : undefined,
       activeDocumentPath,
       activePaneId,
       layout,
@@ -2344,10 +2539,15 @@ export class TUIClient {
 
     const container = this.window.getPaneContainer();
 
-    // Collect all pane IDs needed from documents
+    // Collect all pane IDs needed from documents and terminals
     const neededPaneIds = new Set<string>();
     for (const doc of session.documents) {
       neededPaneIds.add(doc.paneId);
+    }
+    if (session.terminals) {
+      for (const term of session.terminals) {
+        neededPaneIds.add(term.paneId);
+      }
     }
 
     // Check which panes already exist
@@ -2438,6 +2638,25 @@ export class TUIClient {
         }
       } catch (error) {
         this.log(`Failed to restore document ${doc.filePath}: ${error}`);
+      }
+    }
+
+    // Restore terminals in panes
+    if (session.terminals && session.terminals.length > 0) {
+      this.log(`Restoring ${session.terminals.length} terminals in panes`);
+      for (const termState of session.terminals) {
+        try {
+          const targetPane = existingPanes.get(termState.paneId);
+          if (targetPane) {
+            // Create terminal in the target pane
+            await this.createTerminalInPane(targetPane);
+            debugLog(`[TUIClient] Restored terminal in pane ${termState.paneId}`);
+          } else {
+            debugLog(`[TUIClient] Pane ${termState.paneId} not found for terminal`);
+          }
+        } catch (error) {
+          this.log(`Failed to restore terminal: ${error}`);
+        }
       }
     }
 
