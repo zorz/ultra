@@ -49,6 +49,10 @@ async function main(): Promise<void> {
   client = createTUIClient({
     workingDirectory: folderPath ?? process.cwd(),
     debug: debugMode,
+    onExit: () => {
+      debugLog('[TUI Main] Client exited, terminating process');
+      process.exit(0);
+    },
   });
 
   await client.start();

@@ -120,7 +120,7 @@ export class OverlayManager {
     const idx = this.overlays.findIndex((o) => o.id === id);
     if (idx === -1) return false;
 
-    const overlay = this.overlays[idx];
+    const overlay = this.overlays[idx]!;
     this.overlays.splice(idx, 1);
     overlay.onDismiss?.();
     this.callbacks.onDirty();
@@ -153,8 +153,8 @@ export class OverlayManager {
    */
   getTopOverlay(): Overlay | null {
     for (let i = this.overlays.length - 1; i >= 0; i--) {
-      if (this.overlays[i].isVisible()) {
-        return this.overlays[i];
+      if (this.overlays[i]!.isVisible()) {
+        return this.overlays[i]!;
       }
     }
     return null;
@@ -261,7 +261,7 @@ export class OverlayManager {
   handleInput(event: InputEvent): boolean {
     // Check overlays from top to bottom
     for (let i = this.overlays.length - 1; i >= 0; i--) {
-      const overlay = this.overlays[i];
+      const overlay = this.overlays[i]!;
       if (overlay.isVisible() && overlay.handleInput(event)) {
         return true;
       }
@@ -304,7 +304,7 @@ export class OverlayManager {
     const maxWidth = Math.min(60, Math.floor(size.width * 0.6));
 
     for (let i = 0; i < this.notifications.length; i++) {
-      const notification = this.notifications[i];
+      const notification = this.notifications[i]!;
       const y = startY + i;
 
       if (y >= size.height - 1) break;
@@ -337,7 +337,7 @@ export class OverlayManager {
     // Render
     for (let i = 0; i < content.length; i++) {
       buffer.set(x + i, y, {
-        char: content[i],
+        char: content[i]!,
         fg: colors.fg,
         bg: colors.bg,
       });

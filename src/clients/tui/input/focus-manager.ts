@@ -305,10 +305,10 @@ export class FocusManager {
       case 'h':
         // Focus previous pane
         if (currentIndex > 0) {
-          this.focusPane(paneIds[currentIndex - 1]);
+          this.focusPane(paneIds[currentIndex - 1]!);
         } else if (paneIds.length > 0) {
           // Wrap to last
-          this.focusPane(paneIds[paneIds.length - 1]);
+          this.focusPane(paneIds[paneIds.length - 1]!);
         }
         return true;
 
@@ -316,10 +316,10 @@ export class FocusManager {
       case 'l':
         // Focus next pane
         if (currentIndex < paneIds.length - 1) {
-          this.focusPane(paneIds[currentIndex + 1]);
+          this.focusPane(paneIds[currentIndex + 1]!);
         } else if (paneIds.length > 0) {
           // Wrap to first
-          this.focusPane(paneIds[0]);
+          this.focusPane(paneIds[0]!);
         }
         return true;
 
@@ -327,9 +327,9 @@ export class FocusManager {
       case 'k':
         // Focus previous pane (same as left for now)
         if (currentIndex > 0) {
-          this.focusPane(paneIds[currentIndex - 1]);
+          this.focusPane(paneIds[currentIndex - 1]!);
         } else if (paneIds.length > 0) {
-          this.focusPane(paneIds[paneIds.length - 1]);
+          this.focusPane(paneIds[paneIds.length - 1]!);
         }
         return true;
 
@@ -337,9 +337,9 @@ export class FocusManager {
       case 'j':
         // Focus next pane (same as right for now)
         if (currentIndex < paneIds.length - 1) {
-          this.focusPane(paneIds[currentIndex + 1]);
+          this.focusPane(paneIds[currentIndex + 1]!);
         } else if (paneIds.length > 0) {
-          this.focusPane(paneIds[0]);
+          this.focusPane(paneIds[0]!);
         }
         return true;
 
@@ -348,7 +348,7 @@ export class FocusManager {
         if (/^[1-9]$/.test(event.key)) {
           const index = parseInt(event.key, 10) - 1;
           if (index < paneIds.length) {
-            this.focusPane(paneIds[index]);
+            this.focusPane(paneIds[index]!);
             this.exitNavigationMode();
           }
           return true;
@@ -373,7 +373,7 @@ export class FocusManager {
     const currentIndex = elements.findIndex((e) => e.id === this.focusedElementId);
     const nextIndex = (currentIndex + 1) % elements.length;
 
-    return this.focusElement(elements[nextIndex].id);
+    return this.focusElement(elements[nextIndex]!.id);
   }
 
   /**
@@ -388,7 +388,7 @@ export class FocusManager {
     const currentIndex = elements.findIndex((e) => e.id === this.focusedElementId);
     const prevIndex = currentIndex <= 0 ? elements.length - 1 : currentIndex - 1;
 
-    return this.focusElement(elements[prevIndex].id);
+    return this.focusElement(elements[prevIndex]!.id);
   }
 
   /**
@@ -403,7 +403,7 @@ export class FocusManager {
     const currentIndex = paneIds.indexOf(this.focusedPaneId);
     const nextIndex = (currentIndex + 1) % paneIds.length;
 
-    return this.focusPane(paneIds[nextIndex]);
+    return this.focusPane(paneIds[nextIndex]!);
   }
 
   /**
@@ -418,7 +418,7 @@ export class FocusManager {
     const currentIndex = paneIds.indexOf(this.focusedPaneId);
     const prevIndex = currentIndex <= 0 ? paneIds.length - 1 : currentIndex - 1;
 
-    return this.focusPane(paneIds[prevIndex]);
+    return this.focusPane(paneIds[prevIndex]!);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

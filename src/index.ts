@@ -21,6 +21,7 @@ Options:
   -h, --help              Show this help message
   -v, --version           Show version number
   --debug                 Enable debug logging to debug.log
+  --new-tui               Use the new TUI (experimental)
   --session <name>        Open a named session
   --save-session <name>   Save current session with a name on startup
   --no-session            Don't restore previous session
@@ -29,6 +30,7 @@ Examples:
   ultra                       Open Ultra with previous session (or empty)
   ultra file.ts               Open file.ts
   ultra src/                  Open folder
+  ultra --new-tui             Use the new TUI
   ultra --session work        Open the "work" session
   ultra --no-session          Start fresh without restoring session
   ultra --debug file.ts       Open with debug logging
@@ -45,7 +47,18 @@ if (args.includes('--version') || args.includes('-v')) {
 
 // Parse options
 const debugMode = args.includes('--debug');
+const newTui = args.includes('--new-tui');
 const noSession = args.includes('--no-session');
+
+// Handle --new-tui flag: launch new TUI instead
+if (newTui) {
+  // Import and run the new TUI
+  import('./clients/tui/main.ts').catch((error) => {
+    console.error('Failed to load new TUI:', error);
+    process.exit(1);
+  });
+  // Don't continue with old TUI setup
+} else {
 
 // Parse --session option
 let sessionName: string | undefined;
@@ -105,3 +118,5 @@ app.start(filePath, {
   console.error('Fatal error:', error);
   process.exit(1);
 });
+
+} // End of else block for old TUI

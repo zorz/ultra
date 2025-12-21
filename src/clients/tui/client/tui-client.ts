@@ -23,6 +23,13 @@ import {
 } from '../elements/index.ts';
 import type { Pane } from '../layout/pane.ts';
 
+// Debug utilities
+import { debugLog, isDebugEnabled } from '../../../debug.ts';
+
+// Config
+import { TUIConfigManager, createTUIConfigManager } from '../config/index.ts';
+import { defaultThemes } from '../../../config/defaults.ts';
+
 // Services
 import { localDocumentService, type DocumentService } from '../../../services/document/index.ts';
 import { fileService, type FileService } from '../../../services/file/index.ts';
@@ -41,6 +48,8 @@ export interface TUIClientOptions {
   theme?: Record<string, string>;
   /** Enable debug mode */
   debug?: boolean;
+  /** Called when the client exits */
+  onExit?: () => void;
 }
 
 export interface OpenFileOptions {
@@ -88,6 +97,15 @@ export class TUIClient {
   /** Debug mode */
   private debug: boolean;
 
+  /** Exit callback */
+  private onExitCallback?: () => void;
+
+  /** Config manager */
+  private configManager: TUIConfigManager;
+
+  /** Command handlers */
+  private commandHandlers: Map<string, () => boolean | Promise<boolean>> = new Map();
+
   /** Editor pane ID */
   private editorPaneId: string | null = null;
 
@@ -98,9 +116,16 @@ export class TUIClient {
     this.workingDirectory = options.workingDirectory ?? process.cwd();
     this.debug = options.debug ?? false;
     this.theme = options.theme ?? this.getDefaultTheme();
+    this.onExitCallback = options.onExit;
+
+    // Create config manager
+    this.configManager = createTUIConfigManager(this.workingDirectory);
 
     // Register element types with factory
     registerBuiltinElements();
+
+    // Register command handlers
+    this.registerCommands();
 
     // Initialize services
     this.documentService = localDocumentService;
@@ -130,11 +155,10 @@ export class TUIClient {
     // Setup input routing
     this.setupInputHandling();
 
-    // Setup default keybindings
-    this.setupKeybindings();
-
     // Handle terminal resize
     this.setupResizeHandler();
+
+    // Note: keybindings are set up in start() after config is loaded
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -149,6 +173,15 @@ export class TUIClient {
 
     this.running = true;
 
+    // Load configuration
+    await this.configManager.load();
+    this.log('Configuration loaded');
+
+    // Apply theme from config
+    const themeName = this.configManager.get('workbench.colorTheme') ?? 'catppuccin-frappe';
+    this.theme = this.loadThemeColors(themeName);
+    this.log(`Theme: ${themeName}`);
+
     // Initialize renderer
     this.renderer.initialize();
 
@@ -157,6 +190,9 @@ export class TUIClient {
 
     // Start input handler
     this.inputHandler.start();
+
+    // Setup keybindings from config
+    this.setupKeybindings();
 
     // Setup initial layout
     await this.setupInitialLayout();
@@ -191,6 +227,9 @@ export class TUIClient {
     this.openDocuments.clear();
 
     this.log('TUI Client stopped');
+
+    // Call exit callback
+    this.onExitCallback?.();
   }
 
   /**
@@ -579,89 +618,228 @@ export class TUIClient {
   }
 
   /**
-   * Setup default keybindings.
+   * Register command handlers.
+   */
+  private registerCommands(): void {
+    // File commands
+    this.commandHandlers.set('file.save', () => {
+      this.saveCurrentDocument();
+      return true;
+    });
+
+    this.commandHandlers.set('file.close', () => {
+      this.closeCurrentDocument();
+      return true;
+    });
+
+    this.commandHandlers.set('file.open', () => {
+      this.window.showNotification('File open dialog not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('file.new', () => {
+      this.window.showNotification('New file not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('file.saveAs', () => {
+      this.window.showNotification('Save as not yet implemented', 'info');
+      return true;
+    });
+
+    // Edit commands
+    this.commandHandlers.set('edit.undo', () => {
+      this.window.showNotification('Undo not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('edit.redo', () => {
+      this.window.showNotification('Redo not yet implemented', 'info');
+      return true;
+    });
+
+    // Search commands
+    this.commandHandlers.set('search.find', () => {
+      this.window.showNotification('Find not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('search.replace', () => {
+      this.window.showNotification('Replace not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('search.findInFiles', () => {
+      this.window.showNotification('Find in files not yet implemented', 'info');
+      return true;
+    });
+
+    // Navigation commands
+    this.commandHandlers.set('workbench.quickOpen', () => {
+      this.window.showNotification('Quick open not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.commandPalette', () => {
+      this.window.showNotification('Command palette not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('editor.gotoLine', () => {
+      this.window.showNotification('Go to line not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('editor.gotoSymbol', () => {
+      this.window.showNotification('Go to symbol not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.focusNextPane', () => {
+      this.window.focusNextPane();
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.focusPreviousPane', () => {
+      this.window.focusPreviousPane();
+      return true;
+    });
+
+    // View commands
+    this.commandHandlers.set('workbench.toggleSidebar', () => {
+      this.toggleSidebar();
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.toggleTerminal', () => {
+      this.window.showNotification('Terminal toggle not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.splitEditor', () => {
+      this.window.splitPane('vertical');
+      this.window.showNotification('Editor split', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.openSettings', () => {
+      this.window.showNotification('Settings dialog not yet implemented', 'info');
+      return true;
+    });
+
+    // Terminal commands
+    this.commandHandlers.set('terminal.new', () => {
+      this.window.showNotification('New terminal not yet implemented', 'info');
+      return true;
+    });
+
+    // Git commands
+    this.commandHandlers.set('git.focusPanel', () => {
+      this.focusGitPanel();
+      return true;
+    });
+
+    // App commands
+    this.commandHandlers.set('workbench.quit', () => {
+      this.stop();
+      return true;
+    });
+
+    // Folding commands
+    this.commandHandlers.set('editor.fold', () => {
+      this.window.showNotification('Fold not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('editor.unfold', () => {
+      this.window.showNotification('Unfold not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('editor.foldAll', () => {
+      this.window.showNotification('Fold all not yet implemented', 'info');
+      return true;
+    });
+
+    this.commandHandlers.set('editor.unfoldAll', () => {
+      this.window.showNotification('Unfold all not yet implemented', 'info');
+      return true;
+    });
+  }
+
+  /**
+   * Setup keybindings from config.
    */
   private setupKeybindings(): void {
-    // Quit
-    this.window.addKeybinding({
-      key: 'ctrl+q',
-      handler: () => {
-        this.stop();
-        return true;
-      },
-    });
+    const keybindings = this.configManager.getKeybindings();
 
-    // Save
-    this.window.addKeybinding({
-      key: 'ctrl+s',
-      handler: () => {
-        this.saveCurrentDocument();
-        return true;
-      },
-    });
+    for (const binding of keybindings) {
+      this.window.addKeybinding({
+        key: binding.key,
+        handler: () => {
+          const command = this.commandHandlers.get(binding.command);
+          if (command) {
+            const result = command();
+            // Handle async commands
+            if (result instanceof Promise) {
+              result.catch((error) => {
+                this.log(`Command ${binding.command} failed: ${error}`);
+              });
+              return true;
+            }
+            return result;
+          }
+          this.log(`Unknown command: ${binding.command}`);
+          return false;
+        },
+        when: binding.when ? () => this.evaluateWhenClause(binding.when!) : undefined,
+      });
+    }
 
-    // Close document
-    this.window.addKeybinding({
-      key: 'ctrl+w',
-      handler: () => {
-        this.closeCurrentDocument();
-        return true;
-      },
-    });
+    this.log(`Loaded ${keybindings.length} keybindings`);
+  }
 
-    // Focus next pane
-    this.window.addKeybinding({
-      key: 'ctrl+tab',
-      handler: () => {
-        this.window.focusNextPane();
-        return true;
-      },
-    });
+  /**
+   * Evaluate a when clause for conditional keybindings.
+   */
+  private evaluateWhenClause(when: string): boolean {
+    // TODO: Implement proper when clause evaluation
+    // For now, always return true
+    return true;
+  }
 
-    // Focus previous pane
-    this.window.addKeybinding({
-      key: 'ctrl+shift+tab',
-      handler: () => {
-        this.window.focusPreviousPane();
-        return true;
-      },
-    });
+  /**
+   * Toggle sidebar visibility.
+   */
+  private toggleSidebar(): void {
+    if (!this.sidebarPaneId) return;
 
-    // Toggle sidebar
-    this.window.addKeybinding({
-      key: 'ctrl+b',
-      handler: () => {
-        // TODO: Toggle sidebar visibility
-        return true;
-      },
-    });
+    const container = this.window.getPaneContainer();
+    const pane = container.getPane(this.sidebarPaneId);
+    if (pane) {
+      // Toggle visibility via pane API if available
+      // For now, just show a notification
+      this.window.showNotification('Sidebar toggle not yet implemented', 'info');
+    }
+  }
 
-    // Command palette
-    this.window.addKeybinding({
-      key: 'ctrl+shift+p',
-      handler: () => {
-        this.window.showNotification('Command palette not yet implemented', 'info');
-        return true;
-      },
-    });
+  /**
+   * Focus the git panel.
+   */
+  private focusGitPanel(): void {
+    if (!this.sidebarPaneId) return;
 
-    // Quick open
-    this.window.addKeybinding({
-      key: 'ctrl+p',
-      handler: () => {
-        this.window.showNotification('Quick open not yet implemented', 'info');
-        return true;
-      },
-    });
-
-    // New terminal
-    this.window.addKeybinding({
-      key: 'ctrl+`',
-      handler: () => {
-        this.window.showNotification('Terminal not yet implemented', 'info');
-        return true;
-      },
-    });
+    const container = this.window.getPaneContainer();
+    const pane = container.getPane(this.sidebarPaneId);
+    if (pane) {
+      for (const element of pane.getElements()) {
+        if (element instanceof GitPanel) {
+          this.window.focusElement(element);
+          return;
+        }
+      }
+    }
+    this.window.showNotification('Git panel not found', 'warning');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -752,70 +930,37 @@ export class TUIClient {
   }
 
   /**
-   * Get default dark theme.
+   * Get theme colors from the theme definitions.
    */
   private getDefaultTheme(): Record<string, string> {
+    return this.loadThemeColors('catppuccin-frappe');
+  }
+
+  /**
+   * Load theme colors by name from defaults.
+   */
+  private loadThemeColors(themeName: string): Record<string, string> {
+    const theme = defaultThemes[themeName];
+    if (!theme) {
+      this.log(`Theme '${themeName}' not found, using fallback`);
+      return this.getFallbackTheme();
+    }
+
+    // Return the theme colors directly
+    return { ...theme.colors };
+  }
+
+  /**
+   * Minimal fallback theme if the requested theme isn't found.
+   */
+  private getFallbackTheme(): Record<string, string> {
     return {
-      // Editor
       'editor.background': '#1e1e1e',
       'editor.foreground': '#d4d4d4',
-      'editor.lineHighlightBackground': '#2a2d2e',
-      'editor.selectionBackground': '#264f78',
-      'editorCursor.foreground': '#aeafad',
-      'editorLineNumber.foreground': '#858585',
-      'editorGutter.background': '#1e1e1e',
-
-      // Sidebar
-      'sideBar.background': '#252526',
-      'sideBar.foreground': '#cccccc',
-      'sideBarSectionHeader.background': '#383838',
-      'sideBarSectionHeader.foreground': '#cccccc',
-
-      // List
-      'list.activeSelectionBackground': '#094771',
-      'list.activeSelectionForeground': '#ffffff',
-      'list.hoverBackground': '#2a2d2e',
-
-      // Panel
       'panel.background': '#1e1e1e',
       'panel.foreground': '#cccccc',
-      'panel.border': '#404040',
-
-      // Status bar
       'statusBar.background': '#007acc',
       'statusBar.foreground': '#ffffff',
-
-      // Terminal
-      'terminal.background': '#1e1e1e',
-      'terminal.foreground': '#cccccc',
-      'terminalCursor.foreground': '#ffffff',
-
-      // Notifications
-      'notification.background': '#2196f3',
-      'notification.foreground': '#ffffff',
-      'notificationError.background': '#f44336',
-      'notificationError.foreground': '#ffffff',
-      'notificationWarning.background': '#ff9800',
-      'notificationWarning.foreground': '#000000',
-      'notificationSuccess.background': '#4caf50',
-      'notificationSuccess.foreground': '#ffffff',
-
-      // Git decorations
-      'gitDecoration.addedResourceForeground': '#81b88b',
-      'gitDecoration.modifiedResourceForeground': '#e2c08d',
-      'gitDecoration.deletedResourceForeground': '#c74e39',
-      'gitDecoration.untrackedResourceForeground': '#73c991',
-
-      // Tabs
-      'tab.activeBackground': '#1e1e1e',
-      'tab.activeForeground': '#ffffff',
-      'tab.inactiveBackground': '#2d2d2d',
-      'tab.inactiveForeground': '#888888',
-      'tab.border': '#252526',
-
-      // Scrollbar
-      'scrollbarSlider.background': '#4e4e4e80',
-      'scrollbarSlider.hoverBackground': '#5a5a5a80',
     };
   }
 
@@ -853,9 +998,8 @@ export class TUIClient {
    * Log debug message.
    */
   private log(message: string): void {
-    if (this.debug) {
-      // Would use debugLog in production
-      console.error(`[TUIClient] ${message}`);
+    if (this.debug && isDebugEnabled()) {
+      debugLog(`[TUIClient] ${message}`);
     }
   }
 

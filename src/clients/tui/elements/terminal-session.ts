@@ -93,6 +93,25 @@ export class TerminalSession extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Callback Configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set callbacks after construction.
+   * Useful when element is created via factory.
+   */
+  setCallbacks(callbacks: TerminalSessionCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * Get current callbacks.
+   */
+  getCallbacks(): TerminalSessionCallbacks {
+    return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Initialization
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -150,7 +169,7 @@ export class TerminalSession extends BaseElement {
         // Tab to next 8-column boundary
         const nextTab = (Math.floor(this.cursorX / 8) + 1) * 8;
         this.cursorX = Math.min(nextTab, this.visibleCols - 1);
-      } else if (char >= ' ') {
+      } else if (char && char >= ' ') {
         // Printable character
         this.writeChar(char);
       }
@@ -170,7 +189,7 @@ export class TerminalSession extends BaseElement {
       this.lines.push(this.createEmptyLine());
     }
 
-    const line = this.lines[lineIdx];
+    const line = this.lines[lineIdx]!;
     if (this.cursorX >= this.visibleCols) {
       // Wrap to next line
       this.newLine();
@@ -181,7 +200,7 @@ export class TerminalSession extends BaseElement {
       line.cells.push({ char: ' ', fg: this.currentFg, bg: this.currentBg });
     }
 
-    line.cells[this.cursorX] = {
+    line.cells[this.cursorX]! = {
       char,
       fg: this.currentFg,
       bg: this.currentBg,
@@ -262,14 +281,14 @@ export class TerminalSession extends BaseElement {
     let params = '';
 
     // Collect parameters
-    while (i < data.length && (data[i] >= '0' && data[i] <= '9' || data[i] === ';' || data[i] === '?')) {
-      params += data[i];
+    while (i < data.length && (data[i]! >= '0' && data[i]! <= '9' || data[i] === ';' || data[i] === '?')) {
+      params += data[i]!;
       i++;
     }
 
     if (i >= data.length) return null;
 
-    const command = data[i];
+    const command = data[i]!;
     const args = params.split(';').map((p) => parseInt(p, 10) || 0);
 
     this.executeCSI(command, args, params.startsWith('?'));
@@ -331,7 +350,7 @@ export class TerminalSession extends BaseElement {
 
     let i = 0;
     while (i < args.length) {
-      const code = args[i];
+      const code = args[i]!;
 
       if (code === 0) {
         // Reset
@@ -411,7 +430,7 @@ export class TerminalSession extends BaseElement {
         '#7f7f7f', '#ff0000', '#00ff00', '#ffff00',
         '#5c5cff', '#ff00ff', '#00ffff', '#ffffff',
       ];
-      return colors[index];
+      return colors[index]!;
     }
 
     if (index < 232) {
@@ -500,17 +519,17 @@ export class TerminalSession extends BaseElement {
     const lineIdx = this.getBufferLineIndex();
     if (lineIdx >= this.lines.length) return;
 
-    const line = this.lines[lineIdx];
+    const line = this.lines[lineIdx]!;
 
     if (mode === 0) {
       // Erase from cursor to end of line
       for (let i = this.cursorX; i < line.cells.length; i++) {
-        line.cells[i] = { char: ' ', fg: this.currentFg, bg: this.currentBg };
+        line.cells[i]! = { char: ' ', fg: this.currentFg, bg: this.currentBg };
       }
     } else if (mode === 1) {
       // Erase from start of line to cursor
       for (let i = 0; i <= this.cursorX && i < line.cells.length; i++) {
-        line.cells[i] = { char: ' ', fg: this.currentFg, bg: this.currentBg };
+        line.cells[i]! = { char: ' ', fg: this.currentFg, bg: this.currentBg };
       }
     } else if (mode === 2) {
       // Erase entire line
@@ -597,7 +616,7 @@ export class TerminalSession extends BaseElement {
   // Lifecycle
   // ─────────────────────────────────────────────────────────────────────────
 
-  onResize(size: { width: number; height: number }): void {
+  override onResize(size: { width: number; height: number }): void {
     super.onResize(size);
 
     const newCols = Math.max(1, size.width);
@@ -646,7 +665,7 @@ export class TerminalSession extends BaseElement {
         continue;
       }
 
-      const line = this.lines[lineIdx];
+      const line = this.lines[lineIdx]!;
 
       for (let col = 0; col < width; col++) {
         const cell = line.cells[col];
@@ -689,7 +708,7 @@ export class TerminalSession extends BaseElement {
   // Input Handling
   // ─────────────────────────────────────────────────────────────────────────
 
-  handleKey(event: KeyEvent): boolean {
+  override handleKey(event: KeyEvent): boolean {
     if (this.exited) return false;
 
     // Convert key event to terminal input
@@ -760,7 +779,7 @@ export class TerminalSession extends BaseElement {
     return false;
   }
 
-  handleMouse(event: MouseEvent): boolean {
+  override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'scroll') {
       // Scrollback
       const delta = event.y > 0 ? 3 : -3;
@@ -782,14 +801,14 @@ export class TerminalSession extends BaseElement {
   // State Serialization
   // ─────────────────────────────────────────────────────────────────────────
 
-  getState(): TerminalSessionState {
+  override getState(): TerminalSessionState {
     return {
       cwd: this.cwd || undefined,
       scrollTop: this.scrollTop,
     };
   }
 
-  setState(state: unknown): void {
+  override setState(state: unknown): void {
     const s = state as TerminalSessionState;
     if (s.cwd) {
       this.cwd = s.cwd;

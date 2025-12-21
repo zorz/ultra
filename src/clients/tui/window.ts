@@ -112,7 +112,6 @@ export class Window {
     // Create pane container
     const paneContainerCallbacks: PaneContainerCallbacks = {
       onDirty: () => this.markDirty(),
-      onFocusRequest: (pane) => this.focusManager.focusPane(pane.id),
       getThemeColor: this.getThemeColor,
     };
     this.paneContainer = createPaneContainer(paneContainerCallbacks);
@@ -263,15 +262,20 @@ export class Window {
     // 4. Focused element gets keyboard input
     if (isKeyEvent(event)) {
       const focused = this.focusManager.getFocusedElement();
-      if (focused?.handleInput(event)) {
+      if (focused?.handleKey(event)) {
         return true;
       }
     }
 
-    // 5. Pane container for mouse input
+    // 5. Pane container for mouse input - route to focused pane's elements
     if (isMouseEvent(event)) {
-      if (this.paneContainer.handleInput(event)) {
-        return true;
+      const focusedPane = this.getFocusedPane();
+      if (focusedPane) {
+        for (const element of focusedPane.getElements()) {
+          if (element.handleMouse(event)) {
+            return true;
+          }
+        }
       }
     }
 
@@ -413,9 +417,11 @@ export class Window {
     if (!focused) {
       // If no pane, create root
       const root = this.ensureRootPane();
-      return this.paneContainer.split(root.id, direction);
+      const newId = this.paneContainer.split(direction, root.id);
+      return this.paneContainer.getPane(newId);
     }
-    return this.paneContainer.split(focused.id, direction);
+    const newId = this.paneContainer.split(direction, focused.id);
+    return this.paneContainer.getPane(newId);
   }
 
   /**

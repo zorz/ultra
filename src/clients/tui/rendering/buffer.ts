@@ -79,7 +79,7 @@ export class ScreenBuffer {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       return null;
     }
-    return this.cells[y][x];
+    return this.cells[y]![x]!;
   }
 
   /**
@@ -91,10 +91,10 @@ export class ScreenBuffer {
       return;
     }
 
-    const existing = this.cells[y][x];
+    const existing = this.cells[y]![x]!;
     if (!cellsEqual(existing, cell)) {
-      this.cells[y][x] = cloneCell(cell);
-      this.dirty[y][x] = true;
+      this.cells[y]![x] = cloneCell(cell);
+      this.dirty[y]![x] = true;
     }
   }
 
@@ -106,10 +106,10 @@ export class ScreenBuffer {
       return;
     }
 
-    const existing = this.cells[y][x];
+    const existing = this.cells[y]![x]!;
     if (existing.char !== char) {
-      this.cells[y][x] = { ...existing, char };
-      this.dirty[y][x] = true;
+      this.cells[y]![x] = { ...existing, char };
+      this.dirty[y]![x] = true;
     }
   }
 
@@ -124,9 +124,9 @@ export class ScreenBuffer {
     const emptyCell = createEmptyCell(bg, fg);
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (!cellsEqual(this.cells[y][x], emptyCell)) {
-          this.cells[y][x] = cloneCell(emptyCell);
-          this.dirty[y][x] = true;
+        if (!cellsEqual(this.cells[y]![x]!, emptyCell)) {
+          this.cells[y]![x] = cloneCell(emptyCell);
+          this.dirty[y]![x] = true;
         }
       }
     }
@@ -157,7 +157,7 @@ export class ScreenBuffer {
       if (y < 0 || y >= this.height) continue;
 
       this.set(px, y, {
-        char: text[i],
+        char: text[i]!,
         fg,
         bg,
         bold: options.bold,
@@ -251,7 +251,7 @@ export class ScreenBuffer {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       return false;
     }
-    return this.dirty[y][x];
+    return this.dirty[y]![x]!;
   }
 
   /**
@@ -261,7 +261,7 @@ export class ScreenBuffer {
     for (let y = rect.y; y < rect.y + rect.height && y < this.height; y++) {
       for (let x = rect.x; x < rect.x + rect.width && x < this.width; x++) {
         if (y >= 0 && x >= 0) {
-          this.dirty[y][x] = true;
+          this.dirty[y]![x] = true;
         }
       }
     }
@@ -273,7 +273,7 @@ export class ScreenBuffer {
   markAllDirty(): void {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        this.dirty[y][x] = true;
+        this.dirty[y]![x] = true;
       }
     }
   }
@@ -284,7 +284,7 @@ export class ScreenBuffer {
   clearDirty(): void {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        this.dirty[y][x] = false;
+        this.dirty[y]![x] = false;
       }
     }
   }
@@ -297,8 +297,8 @@ export class ScreenBuffer {
 
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (this.dirty[y][x]) {
-          result.push({ x, y, cell: this.cells[y][x] });
+        if (this.dirty[y]![x]) {
+          result.push({ x, y, cell: this.cells[y]![x]! });
         }
       }
     }
@@ -313,7 +313,7 @@ export class ScreenBuffer {
     let count = 0;
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (this.dirty[y][x]) {
+        if (this.dirty[y]![x]) {
           count++;
         }
       }
@@ -327,7 +327,7 @@ export class ScreenBuffer {
   hasDirty(): boolean {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        if (this.dirty[y][x]) {
+        if (this.dirty[y]![x]) {
           return true;
         }
       }
@@ -348,7 +348,7 @@ export class ScreenBuffer {
     for (let y = rect.y; y < rect.y + rect.height && y < this.height; y++) {
       for (let x = rect.x; x < rect.x + rect.width && x < this.width; x++) {
         if (y >= 0 && x >= 0) {
-          yield { x, y, cell: this.cells[y][x] };
+          yield { x, y, cell: this.cells[y]![x]! };
         }
       }
     }
@@ -360,7 +360,7 @@ export class ScreenBuffer {
   *iterateAll(): Generator<{ x: number; y: number; cell: Cell }, void, unknown> {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        yield { x, y, cell: this.cells[y][x] };
+        yield { x, y, cell: this.cells[y]![x]! };
       }
     }
   }

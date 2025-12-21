@@ -102,6 +102,25 @@ export class FileTree extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Callback Configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set callbacks after construction.
+   * Useful when element is created via factory.
+   */
+  setCallbacks(callbacks: FileTreeCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * Get current callbacks.
+   */
+  getCallbacks(): FileTreeCallbacks {
+    return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Data Management
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -296,7 +315,7 @@ export class FileTree extends BaseElement {
     if (viewNode.depth > 0) {
       // Find parent (look backwards for lower depth)
       for (let i = this.selectedIndex - 1; i >= 0; i--) {
-        if (this.viewNodes[i].depth < viewNode.depth) {
+        if (this.viewNodes[i]!.depth < viewNode.depth) {
           this.selectedIndex = i;
           this.ensureVisible();
           const path = this.getSelectedPath();
@@ -362,7 +381,7 @@ export class FileTree extends BaseElement {
       const viewIdx = this.scrollTop + row;
       if (viewIdx >= this.viewNodes.length) break;
 
-      const viewNode = this.viewNodes[viewIdx];
+      const viewNode = this.viewNodes[viewIdx]!;
       const node = viewNode.node;
       const isSelected = viewIdx === this.selectedIndex;
 
@@ -470,7 +489,7 @@ export class FileTree extends BaseElement {
   // Input Handling
   // ─────────────────────────────────────────────────────────────────────────
 
-  handleKey(event: KeyEvent): boolean {
+  override handleKey(event: KeyEvent): boolean {
     if (event.key === 'ArrowUp' || event.key === 'k') {
       this.moveUp();
       return true;
@@ -529,7 +548,7 @@ export class FileTree extends BaseElement {
     return false;
   }
 
-  handleMouse(event: MouseEvent): boolean {
+  override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'press' && event.button === 'left') {
       const relY = event.y - this.bounds.y;
       const viewIdx = this.scrollTop + relY;
@@ -541,7 +560,7 @@ export class FileTree extends BaseElement {
         this.ctx.markDirty();
 
         // Double-click behavior (open on single click for now)
-        const node = this.viewNodes[viewIdx].node;
+        const node = this.viewNodes[viewIdx]!.node;
         if (!node.isDirectory) {
           this.callbacks.onFileOpen?.(node.path);
         }
@@ -563,7 +582,7 @@ export class FileTree extends BaseElement {
   // State Serialization
   // ─────────────────────────────────────────────────────────────────────────
 
-  getState(): FileTreeState {
+  override getState(): FileTreeState {
     const expandedPaths: string[] = [];
     const collectExpanded = (nodes: FileNode[]): void => {
       for (const node of nodes) {
@@ -584,7 +603,7 @@ export class FileTree extends BaseElement {
     };
   }
 
-  setState(state: unknown): void {
+  override setState(state: unknown): void {
     const s = state as FileTreeState;
 
     // Restore expanded paths

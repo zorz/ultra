@@ -129,6 +129,25 @@ export class GitPanel extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Callback Configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set callbacks after construction.
+   * Useful when element is created via factory.
+   */
+  setCallbacks(callbacks: GitPanelCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * Get current callbacks.
+   */
+  getCallbacks(): GitPanelCallbacks {
+    return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Data Management
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -394,7 +413,7 @@ export class GitPanel extends BaseElement {
       const viewIdx = this.scrollTop + row;
       if (viewIdx >= this.viewNodes.length) break;
 
-      const node = this.viewNodes[viewIdx];
+      const node = this.viewNodes[viewIdx]!;
       const screenY = contentStart + row;
       const isSelected = viewIdx === this.selectedIndex;
 
@@ -522,7 +541,7 @@ export class GitPanel extends BaseElement {
   // Input Handling
   // ─────────────────────────────────────────────────────────────────────────
 
-  handleKey(event: KeyEvent): boolean {
+  override handleKey(event: KeyEvent): boolean {
     if (event.key === 'ArrowUp' || event.key === 'k') {
       this.moveUp();
       return true;
@@ -580,7 +599,7 @@ export class GitPanel extends BaseElement {
     return false;
   }
 
-  handleMouse(event: MouseEvent): boolean {
+  override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'press' && event.button === 'left') {
       const relY = event.y - this.bounds.y - 1; // Subtract header
       if (relY >= 0) {
@@ -608,14 +627,14 @@ export class GitPanel extends BaseElement {
   // State Serialization
   // ─────────────────────────────────────────────────────────────────────────
 
-  getState(): unknown {
+  override getState(): unknown {
     return {
       scrollTop: this.scrollTop,
       collapsedSections: Array.from(this.collapsedSections),
     };
   }
 
-  setState(state: unknown): void {
+  override setState(state: unknown): void {
     const s = state as { scrollTop?: number; collapsedSections?: string[] };
     if (s.scrollTop !== undefined) {
       this.scrollTop = s.scrollTop;

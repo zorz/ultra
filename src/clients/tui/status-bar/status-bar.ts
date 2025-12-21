@@ -349,7 +349,7 @@ export class StatusBar {
 
       const text = ` ${item.content} `;
       for (let i = 0; i < text.length && leftX + i < this.bounds.x + width; i++) {
-        buffer.set(leftX + i, y, { char: text[i], fg, bg });
+        buffer.set(leftX + i, y, { char: text[i]!, fg, bg });
       }
       leftX += text.length;
     }
@@ -364,7 +364,7 @@ export class StatusBar {
       if (rightX < leftX + 3) break;
 
       for (let i = 0; i < text.length; i++) {
-        buffer.set(rightX + i, y, { char: text[i], fg, bg });
+        buffer.set(rightX + i, y, { char: text[i]!, fg, bg });
       }
     }
   }
@@ -398,7 +398,7 @@ export class StatusBar {
       }
 
       if (entryIdx < this.history.length) {
-        const entry = this.history[entryIdx];
+        const entry = this.history[entryIdx]!;
         const time = this.formatTime(entry.timestamp);
         const prefix = `[${time}] `;
 
@@ -419,14 +419,14 @@ export class StatusBar {
         // Render timestamp
         let x = this.bounds.x + 1;
         for (let i = 0; i < prefix.length && x < this.bounds.x + this.bounds.width; i++) {
-          buffer.set(x, y, { char: prefix[i], fg: historyFg, bg: historyBg, dim: true });
+          buffer.set(x, y, { char: prefix[i]!, fg: historyFg, bg: historyBg, dim: true });
           x++;
         }
 
         // Render message
         const message = entry.message.slice(0, this.bounds.width - prefix.length - 2);
         for (let i = 0; i < message.length && x < this.bounds.x + this.bounds.width; i++) {
-          buffer.set(x, y, { char: message[i], fg: entryFg, bg: historyBg });
+          buffer.set(x, y, { char: message[i]!, fg: entryFg, bg: historyBg });
           x++;
         }
       }

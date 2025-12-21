@@ -213,7 +213,7 @@ export class PaneContainer implements FocusResolver {
     let offset = isHorizontal ? bounds.y : bounds.x;
 
     children.forEach((child, i) => {
-      const size = Math.floor(availableSize * ratios[i]);
+      const size = Math.floor(availableSize * ratios[i]!);
 
       const childBounds: Rect = isHorizontal
         ? { x: bounds.x, y: offset, width: bounds.width, height: size }
@@ -304,14 +304,14 @@ export class PaneContainer implements FocusResolver {
 
       // If only one child left, collapse the split
       if (parent.children.length === 1) {
-        const child = parent.children[0];
+        const child = parent.children[0]!;
         const grandparent = this.findParent(this.root!, parent);
 
         if (!grandparent) {
           this.root = child;
         } else if ('children' in grandparent) {
           const idx = grandparent.children.indexOf(parent);
-          grandparent.children[idx] = child;
+          grandparent.children[idx]! = child;
         }
       }
     }
@@ -440,7 +440,7 @@ export class PaneContainer implements FocusResolver {
     let offset = isHorizontal ? bounds.y : bounds.x;
 
     for (let i = 0; i < children.length - 1; i++) {
-      const size = Math.floor(availableSize * ratios[i]);
+      const size = Math.floor(availableSize * ratios[i]!);
       offset += size;
 
       if (isHorizontal) {
@@ -575,7 +575,7 @@ export class PaneContainer implements FocusResolver {
     if (node instanceof Pane) {
       return node;
     }
-    return this.findFirstPane(node.children[0]);
+    return this.findFirstPane(node.children[0]!);
   }
 
   private findSplit(node: LayoutNode | null, splitId: string): SplitNode | null {

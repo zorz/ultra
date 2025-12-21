@@ -311,7 +311,7 @@ export class TUIConfigManager {
       },
 
       // Theme
-      'workbench.colorTheme': 'Dark+',
+      'workbench.colorTheme': 'catppuccin-frappe',
 
       // Sidebar
       'workbench.sideBar.visible': true,

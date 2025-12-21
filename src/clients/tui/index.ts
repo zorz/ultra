@@ -48,18 +48,14 @@ export {
 export {
   ScreenBuffer,
   createScreenBuffer,
-  type BoxStyle,
 } from './rendering/buffer.ts';
 
 export {
-  TUIRenderer,
+  Renderer,
   createRenderer,
-  type TUIRendererCallbacks,
+  createTestRenderer,
+  type RendererOptions,
 } from './rendering/renderer.ts';
-
-export {
-  ansi,
-} from './rendering/ansi.ts';
 
 // ============================================
 // Elements

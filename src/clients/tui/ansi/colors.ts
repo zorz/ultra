@@ -70,9 +70,12 @@ export function hexToRgb(hex: string): RGB | null {
 
   if (cleaned.length === 3) {
     // Short form: #RGB -> #RRGGBB
-    const r = parseInt(cleaned[0] + cleaned[0], 16);
-    const g = parseInt(cleaned[1] + cleaned[1], 16);
-    const b = parseInt(cleaned[2] + cleaned[2], 16);
+    const c0 = cleaned[0]!;
+    const c1 = cleaned[1]!;
+    const c2 = cleaned[2]!;
+    const r = parseInt(c0 + c0, 16);
+    const g = parseInt(c1 + c1, 16);
+    const b = parseInt(c2 + c2, 16);
 
     if (isNaN(r) || isNaN(g) || isNaN(b)) {
       return null;

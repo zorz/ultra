@@ -170,7 +170,7 @@ export class Pane {
     const idx = this.elements.findIndex((e) => e.id === elementId);
     if (idx === -1) return false;
 
-    const element = this.elements[idx];
+    const element = this.elements[idx]!;
     element.onVisibilityChange(false);
     element.onUnmount();
     this.elements.splice(idx, 1);
@@ -203,7 +203,7 @@ export class Pane {
     const idx = this.elements.findIndex((e) => e.id === elementId);
     if (idx === -1) return null;
 
-    const element = this.elements[idx];
+    const element = this.elements[idx]!;
     element.onVisibilityChange(false);
     this.elements.splice(idx, 1);
     this.expandedElementIds.delete(elementId);
@@ -212,7 +212,7 @@ export class Pane {
     if (this.mode === 'tabs' && idx <= this.activeElementIndex) {
       this.activeElementIndex = Math.max(0, this.activeElementIndex - 1);
       if (this.elements[this.activeElementIndex]) {
-        this.elements[this.activeElementIndex].onVisibilityChange(true);
+        this.elements[this.activeElementIndex]!.onVisibilityChange(true);
       }
     }
 
@@ -323,7 +323,7 @@ export class Pane {
     this.activeElementIndex = idx;
 
     // Show new
-    this.elements[idx].onVisibilityChange(true);
+    this.elements[idx]!.onVisibilityChange(true);
     this.layoutElements();
     this.markDirty();
     return true;
@@ -340,7 +340,7 @@ export class Pane {
 
     this.activeElementIndex = (this.activeElementIndex + 1) % this.elements.length;
 
-    const next = this.elements[this.activeElementIndex];
+    const next = this.elements[this.activeElementIndex]!;
     next.onVisibilityChange(true);
     this.layoutElements();
     this.markDirty();
@@ -358,7 +358,7 @@ export class Pane {
     this.activeElementIndex =
       (this.activeElementIndex - 1 + this.elements.length) % this.elements.length;
 
-    const next = this.elements[this.activeElementIndex];
+    const next = this.elements[this.activeElementIndex]!;
     next.onVisibilityChange(true);
     this.layoutElements();
     this.markDirty();
@@ -537,7 +537,7 @@ export class Pane {
     const colors = this.getThemeColors();
 
     for (let i = 0; i < this.elements.length; i++) {
-      const element = this.elements[i];
+      const element = this.elements[i]!;
       const isActive = i === this.activeElementIndex;
       const title = this.truncateTitle(element.getTitle(), 20);
 
@@ -552,7 +552,7 @@ export class Pane {
         j < tabContent.length && x + j < this.bounds.x + this.bounds.width;
         j++
       ) {
-        buffer.set(x + j, y, { char: tabContent[j], fg, bg });
+        buffer.set(x + j, y, { char: tabContent[j]!, fg, bg });
       }
 
       x += tabContent.length;
@@ -619,7 +619,7 @@ export class Pane {
     let x = this.bounds.x;
     for (let i = 0; i < content.length && x < this.bounds.x + this.bounds.width; i++) {
       buffer.set(x, y, {
-        char: content[i],
+        char: content[i]!,
         fg: colors.accordionHeaderForeground,
         bg: colors.accordionHeaderBackground,
       });

@@ -109,6 +109,25 @@ export class DocumentEditor extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Callback Configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set callbacks after construction.
+   * Useful when element is created via factory.
+   */
+  setCallbacks(callbacks: DocumentEditorCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * Get current callbacks.
+   */
+  getCallbacks(): DocumentEditorCallbacks {
+    return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Content Management
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -162,7 +181,7 @@ export class DocumentEditor extends BaseElement {
    */
   setLineTokens(lineNum: number, tokens: SyntaxToken[]): void {
     if (lineNum >= 0 && lineNum < this.lines.length) {
-      this.lines[lineNum].tokens = tokens;
+      this.lines[lineNum]!.tokens = tokens;
       this.ctx.markDirty();
     }
   }
@@ -236,11 +255,11 @@ export class DocumentEditor extends BaseElement {
           this.cursor.column--;
         } else if (this.cursor.line > 0) {
           this.cursor.line--;
-          this.cursor.column = this.lines[this.cursor.line].text.length;
+          this.cursor.column = this.lines[this.cursor.line]!.text.length;
         }
         break;
       case 'right':
-        if (this.cursor.column < this.lines[this.cursor.line].text.length) {
+        if (this.cursor.column < this.lines[this.cursor.line]!.text.length) {
           this.cursor.column++;
         } else if (this.cursor.line < this.lines.length - 1) {
           this.cursor.line++;
@@ -283,7 +302,7 @@ export class DocumentEditor extends BaseElement {
    */
   moveCursorToLineEnd(extend = false): void {
     const oldCursor = { ...this.cursor };
-    this.cursor.column = this.lines[this.cursor.line].text.length;
+    this.cursor.column = this.lines[this.cursor.line]!.text.length;
 
     if (extend) {
       this.extendSelection(oldCursor, this.cursor);
@@ -320,7 +339,7 @@ export class DocumentEditor extends BaseElement {
   moveCursorToDocEnd(extend = false): void {
     const oldCursor = { ...this.cursor };
     this.cursor.line = this.lines.length - 1;
-    this.cursor.column = this.lines[this.cursor.line].text.length;
+    this.cursor.column = this.lines[this.cursor.line]!.text.length;
 
     if (extend) {
       this.extendSelection(oldCursor, this.cursor);
@@ -357,7 +376,7 @@ export class DocumentEditor extends BaseElement {
    * Ensure column is within current line bounds.
    */
   private ensureColumnInBounds(): void {
-    const lineLen = this.lines[this.cursor.line].text.length;
+    const lineLen = this.lines[this.cursor.line]!.text.length;
     this.cursor.column = Math.max(0, Math.min(this.cursor.column, lineLen));
   }
 
@@ -396,7 +415,7 @@ export class DocumentEditor extends BaseElement {
       this.deleteSelection();
     }
 
-    const line = this.lines[this.cursor.line];
+    const line = this.lines[this.cursor.line]!;
     const before = line.text.slice(0, this.cursor.column);
     const after = line.text.slice(this.cursor.column);
 
@@ -407,15 +426,15 @@ export class DocumentEditor extends BaseElement {
       this.cursor.column += text.length;
     } else {
       // Multi-line insert
-      line.text = before + insertLines[0];
+      line.text = before + insertLines[0]!;
       const newLines: DocumentLine[] = [];
       for (let i = 1; i < insertLines.length - 1; i++) {
-        newLines.push({ text: insertLines[i] });
+        newLines.push({ text: insertLines[i]! });
       }
-      newLines.push({ text: insertLines[insertLines.length - 1] + after });
+      newLines.push({ text: insertLines[insertLines.length - 1]! + after });
       this.lines.splice(this.cursor.line + 1, 0, ...newLines);
       this.cursor.line += insertLines.length - 1;
-      this.cursor.column = insertLines[insertLines.length - 1].length;
+      this.cursor.column = insertLines[insertLines.length - 1]!.length;
     }
 
     this.modified = true;
@@ -435,13 +454,13 @@ export class DocumentEditor extends BaseElement {
     }
 
     if (this.cursor.column > 0) {
-      const line = this.lines[this.cursor.line];
+      const line = this.lines[this.cursor.line]!;
       line.text = line.text.slice(0, this.cursor.column - 1) + line.text.slice(this.cursor.column);
       this.cursor.column--;
     } else if (this.cursor.line > 0) {
       // Join with previous line
-      const prevLine = this.lines[this.cursor.line - 1];
-      const currLine = this.lines[this.cursor.line];
+      const prevLine = this.lines[this.cursor.line - 1]!;
+      const currLine = this.lines[this.cursor.line]!;
       const newColumn = prevLine.text.length;
       prevLine.text += currLine.text;
       this.lines.splice(this.cursor.line, 1);
@@ -465,12 +484,12 @@ export class DocumentEditor extends BaseElement {
       return;
     }
 
-    const line = this.lines[this.cursor.line];
+    const line = this.lines[this.cursor.line]!;
     if (this.cursor.column < line.text.length) {
       line.text = line.text.slice(0, this.cursor.column) + line.text.slice(this.cursor.column + 1);
     } else if (this.cursor.line < this.lines.length - 1) {
       // Join with next line
-      const nextLine = this.lines[this.cursor.line + 1];
+      const nextLine = this.lines[this.cursor.line + 1]!;
       line.text += nextLine.text;
       this.lines.splice(this.cursor.line + 1, 1);
       this.updateGutterWidth();
@@ -492,12 +511,12 @@ export class DocumentEditor extends BaseElement {
 
     if (start.line === end.line) {
       // Single line
-      const line = this.lines[start.line];
+      const line = this.lines[start.line]!;
       line.text = line.text.slice(0, start.column) + line.text.slice(end.column);
     } else {
       // Multi-line
-      const startLine = this.lines[start.line];
-      const endLine = this.lines[end.line];
+      const startLine = this.lines[start.line]!;
+      const endLine = this.lines[end.line]!;
       startLine.text = startLine.text.slice(0, start.column) + endLine.text.slice(end.column);
       this.lines.splice(start.line + 1, end.line - start.line);
       this.updateGutterWidth();
@@ -585,7 +604,7 @@ export class DocumentEditor extends BaseElement {
       const lineBg = isCurrentLine && this.focused ? lineHighlight : bg;
 
       // Render line content
-      const line = this.lines[lineNum];
+      const line = this.lines[lineNum]!;
       const contentWidth = width - this.gutterWidth;
       const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
       const contentX = x + this.gutterWidth;
@@ -641,19 +660,19 @@ export class DocumentEditor extends BaseElement {
       const charIdx = this.scrollLeft + col;
 
       // Find applicable token
-      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx].end <= charIdx) {
+      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= charIdx) {
         tokenIdx++;
       }
 
       let color = fg;
       if (tokenIdx < sortedTokens.length) {
-        const token = sortedTokens[tokenIdx];
+        const token = sortedTokens[tokenIdx]!;
         if (charIdx >= token.start && charIdx < token.end) {
           color = token.color ?? this.getTokenColor(token.type);
         }
       }
 
-      buffer.set(x + col, y, { char: text[charIdx], fg: color, bg });
+      buffer.set(x + col, y, { char: text[charIdx]!, fg: color, bg });
       col++;
     }
   }
@@ -698,7 +717,7 @@ export class DocumentEditor extends BaseElement {
     if (!this.selection) return;
 
     const sel = this.normalizeSelection(this.selection);
-    const line = this.lines[lineNum];
+    const line = this.lines[lineNum]!;
 
     // Check if line is in selection
     if (lineNum < sel.start.line || lineNum > sel.end.line) return;
@@ -738,7 +757,7 @@ export class DocumentEditor extends BaseElement {
   // Input Handling
   // ─────────────────────────────────────────────────────────────────────────
 
-  handleKey(event: KeyEvent): boolean {
+  override handleKey(event: KeyEvent): boolean {
     // Navigation
     if (event.key === 'ArrowUp') {
       this.moveCursor('up', event.shift);
@@ -817,7 +836,7 @@ export class DocumentEditor extends BaseElement {
         start: { line: 0, column: 0 },
         end: {
           line: this.lines.length - 1,
-          column: this.lines[this.lines.length - 1].text.length,
+          column: this.lines[this.lines.length - 1]!.text.length,
         },
       };
       this.callbacks.onSelectionChange?.(this.selection);
@@ -834,7 +853,7 @@ export class DocumentEditor extends BaseElement {
     return false;
   }
 
-  handleMouse(event: MouseEvent): boolean {
+  override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'press' && event.button === 'left') {
       // Calculate clicked position
       const relX = event.x - this.bounds.x - this.gutterWidth;
@@ -842,7 +861,7 @@ export class DocumentEditor extends BaseElement {
 
       if (relX >= 0) {
         const line = Math.min(this.scrollTop + relY, this.lines.length - 1);
-        const column = Math.min(this.scrollLeft + relX, this.lines[line].text.length);
+        const column = Math.min(this.scrollLeft + relX, this.lines[line]!.text.length);
         this.setCursor({ line, column });
         this.clearSelection();
         this.ctx.requestFocus();
@@ -864,7 +883,7 @@ export class DocumentEditor extends BaseElement {
   // State Serialization
   // ─────────────────────────────────────────────────────────────────────────
 
-  getState(): DocumentEditorState {
+  override getState(): DocumentEditorState {
     return {
       uri: this.uri ?? undefined,
       scrollTop: this.scrollTop,
@@ -873,7 +892,7 @@ export class DocumentEditor extends BaseElement {
     };
   }
 
-  setState(state: unknown): void {
+  override setState(state: unknown): void {
     const s = state as DocumentEditorState;
     if (s.scrollTop !== undefined) {
       this.scrollTop = s.scrollTop;
@@ -903,7 +922,7 @@ export class DocumentEditor extends BaseElement {
    */
   getLine(index: number): string | null {
     if (index >= 0 && index < this.lines.length) {
-      return this.lines[index].text;
+      return this.lines[index]!.text;
     }
     return null;
   }
