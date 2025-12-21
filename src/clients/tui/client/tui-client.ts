@@ -294,6 +294,11 @@ export class TUIClient {
     if (gitPanel) {
       await this.loadGitStatus(gitPanel);
     }
+
+    // Set initial focus to the file tree in sidebar
+    if (fileTree) {
+      this.window.focusElement(fileTree);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────

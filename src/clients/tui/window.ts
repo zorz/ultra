@@ -267,12 +267,17 @@ export class Window {
       }
     }
 
-    // 5. Pane container for mouse input - route to focused pane's elements
+    // 5. Pane container for mouse input - route to pane at click position
     if (isMouseEvent(event)) {
-      const focusedPane = this.getFocusedPane();
-      if (focusedPane) {
-        for (const element of focusedPane.getElements()) {
-          if (element.handleMouse(event)) {
+      const paneAtPoint = this.paneContainer.findPaneAtPoint(event.x, event.y);
+      if (paneAtPoint) {
+        // First let the pane handle accordion headers
+        if (paneAtPoint.handleMouse(event)) {
+          return true;
+        }
+        // Then check elements in the pane (visible ones)
+        for (const element of paneAtPoint.getElements()) {
+          if (element.isVisible() && element.handleMouse(event)) {
             return true;
           }
         }

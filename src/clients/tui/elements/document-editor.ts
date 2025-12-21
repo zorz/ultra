@@ -870,8 +870,8 @@ export class DocumentEditor extends BaseElement {
     }
 
     if (event.type === 'scroll') {
-      // Scroll wheel
-      const direction = event.y > 0 ? 3 : -3;
+      // Scroll wheel - use scrollDirection (1=down, -1=up), multiply by 3 for faster scroll
+      const direction = (event.scrollDirection ?? 1) * 3;
       this.scroll(direction);
       return true;
     }

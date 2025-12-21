@@ -638,6 +638,42 @@ export class Pane {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Input Handling
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Handle mouse input for accordion headers.
+   * @returns true if handled
+   */
+  handleMouse(event: { type: string; x: number; y: number; button?: string }): boolean {
+    if (this.mode !== 'accordion') return false;
+    if (event.type !== 'press' || event.button !== 'left') return false;
+
+    // Check if click is on an accordion header
+    let y = this.bounds.y;
+    const expandedCount = this.expandedElementIds.size;
+    const totalHeaderHeight = this.elements.length * Pane.HEADER_HEIGHT;
+    const availableContentHeight = Math.max(0, this.bounds.height - totalHeaderHeight);
+    const heightPerExpanded =
+      expandedCount > 0 ? Math.floor(availableContentHeight / expandedCount) : 0;
+
+    for (const element of this.elements) {
+      const isExpanded = this.expandedElementIds.has(element.id);
+
+      // Check if click is on this header
+      if (event.y >= y && event.y < y + Pane.HEADER_HEIGHT &&
+          event.x >= this.bounds.x && event.x < this.bounds.x + this.bounds.width) {
+        this.toggleAccordionSection(element.id);
+        return true;
+      }
+
+      y += Pane.HEADER_HEIGHT + (isExpanded ? heightPerExpanded : 0);
+    }
+
+    return false;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Serialization
   // ─────────────────────────────────────────────────────────────────────────
 

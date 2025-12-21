@@ -551,6 +551,33 @@ export class PaneContainer implements FocusResolver {
     return this.panes.size === 0;
   }
 
+  /**
+   * Find the pane at a specific position (for mouse clicks).
+   */
+  findPaneAtPoint(x: number, y: number): Pane | null {
+    if (!this.root) return null;
+    return this.findPaneAtPointInNode(this.root, x, y);
+  }
+
+  private findPaneAtPointInNode(node: LayoutNode, x: number, y: number): Pane | null {
+    if (node instanceof Pane) {
+      const bounds = node.getBounds();
+      if (x >= bounds.x && x < bounds.x + bounds.width &&
+          y >= bounds.y && y < bounds.y + bounds.height) {
+        return node;
+      }
+      return null;
+    }
+
+    // Split node - check children
+    for (const child of node.children) {
+      const found = this.findPaneAtPointInNode(child, x, y);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────────────────

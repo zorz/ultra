@@ -407,7 +407,11 @@ export class TUIInputHandler {
 
     if (wheel) {
       type = 'scroll';
-      button = buttonNum === 0 ? 'none' : 'none';
+      button = 'none';
+      // buttonNum 0 = scroll up, buttonNum 1 = scroll down
+      const scrollDirection = buttonNum === 0 ? -1 : 1;
+      this.emitMouse({ type, button, x: cx - 1, y: cy - 1, ctrl, alt, shift, scrollDirection });
+      return;
     } else if (motion) {
       type = isRelease ? 'move' : 'drag';
       button = buttonNum === 0 ? 'left' : buttonNum === 1 ? 'middle' : buttonNum === 2 ? 'right' : 'none';
@@ -441,6 +445,10 @@ export class TUIInputHandler {
     if (wheel) {
       type = 'scroll';
       button = 'none';
+      // buttonNum 0 = scroll up, buttonNum 1 = scroll down
+      const scrollDirection = buttonNum === 0 ? -1 : 1;
+      this.emitMouse({ type, button, x: cx - 1, y: cy - 1, ctrl, alt, shift, scrollDirection });
+      return;
     } else if (buttonNum === 3) {
       type = 'release';
       button = 'none';

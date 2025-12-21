@@ -116,6 +116,8 @@ export interface MouseEvent {
   ctrl: boolean;
   alt: boolean;
   shift: boolean;
+  /** Scroll direction: 1 for down, -1 for up (only set for scroll events) */
+  scrollDirection?: 1 | -1;
 }
 
 export type InputEvent = KeyEvent | MouseEvent;
