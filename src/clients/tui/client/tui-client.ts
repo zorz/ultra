@@ -467,6 +467,10 @@ export class TUIClient {
     // Apply minimap setting
     const minimapEnabled = this.configManager.getWithDefault('editor.minimap.enabled', false);
     editor.setMinimapEnabled(minimapEnabled);
+
+    // Apply word wrap setting (default to 'on' for better terminal experience)
+    const wordWrap = this.configManager.getWithDefault('editor.wordWrap', 'on');
+    editor.setWordWrapEnabled(wordWrap === 'on');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1522,16 +1526,22 @@ export class TUIClient {
 
     // Build file list from file service using glob
     try {
-      const filePaths = await this.fileService.glob('**/*', {
-        baseUri: `file://${this.workingDirectory}`,
+      const baseUri = `file://${this.workingDirectory}`;
+      const fileUris = await this.fileService.glob('**/*', {
+        baseUri,
         excludePatterns: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
       });
 
-      const fileEntries: FileEntry[] = filePaths.map((filePath) => {
-        const name = filePath.split('/').pop() ?? filePath;
-        const directory = filePath.replace('/' + name, '').replace(name, '');
+      // glob returns full URIs, convert to relative paths for display
+      const fileEntries: FileEntry[] = fileUris.map((fileUri) => {
+        // Strip the base URI to get relative path
+        const relativePath = fileUri.replace(baseUri + '/', '');
+        const name = relativePath.split('/').pop() ?? relativePath;
+        const directory = relativePath.includes('/')
+          ? relativePath.slice(0, relativePath.lastIndexOf('/'))
+          : '';
         return {
-          path: filePath,
+          path: relativePath,
           name,
           directory,
           extension: name.includes('.') ? name.slice(name.lastIndexOf('.')) : undefined,
@@ -1555,8 +1565,8 @@ export class TUIClient {
       });
 
       if (result.confirmed && result.value) {
-        const fullPath = `${this.workingDirectory}/${result.value.path}`;
-        await this.openFile(fullPath);
+        const fileUri = `file://${this.workingDirectory}/${result.value.path}`;
+        await this.openFile(fileUri);
       }
     } catch (error) {
       this.log(`Failed to list files: ${error}`);

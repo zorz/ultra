@@ -458,9 +458,11 @@ export abstract class BaseDialog implements Overlay {
     title?: string
   ): void {
     const { x, y, width, height } = this.bounds;
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
-    const fg = this.callbacks.getThemeColor('panel.foreground', '#cccccc');
-    const border = this.callbacks.getThemeColor('panel.border', '#404040');
+
+    // Use editorWidget colors for better contrast
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
+    const fg = this.callbacks.getThemeColor('editorWidget.foreground', '#cccccc');
+    const border = this.callbacks.getThemeColor('editorWidget.border', '#454545');
 
     // Fill background
     for (let row = y; row < y + height; row++) {

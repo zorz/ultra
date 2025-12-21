@@ -225,8 +225,8 @@ export class InputDialog extends PromiseDialog<string> {
 
   protected override renderContent(buffer: ScreenBuffer): void {
     const content = this.getContentBounds();
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
-    const fg = this.callbacks.getThemeColor('panel.foreground', '#cccccc');
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
+    const fg = this.callbacks.getThemeColor('editorWidget.foreground', '#cccccc');
     const dimFg = this.callbacks.getThemeColor('descriptionForeground', '#888888');
     const inputBg = this.callbacks.getThemeColor('input.background', '#3c3c3c');
     const focusBorder = this.callbacks.getThemeColor('focusBorder', '#007acc');

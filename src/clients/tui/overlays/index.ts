@@ -64,6 +64,19 @@ export {
   type FileEntry,
 } from './file-picker.ts';
 
+export {
+  CommitDialog,
+  type CommitDialogOptions,
+  type CommitResult,
+  type StagedFile,
+} from './commit-dialog.ts';
+
+export {
+  SettingsDialog,
+  type SettingsDialogOptions,
+  type SettingItem,
+} from './settings-dialog.ts';
+
 // Other overlays
 export {
   SearchReplaceDialog,

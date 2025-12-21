@@ -424,7 +424,7 @@ export abstract class SearchableDialog<T> extends PromiseDialog<T> {
     }
 
     // Prompt
-    buffer.writeString(x, y, '> ', dimFg, inputBg);
+    buffer.writeString(x, y, '> ', focusBorder, inputBg);
 
     // Query or placeholder
     const displayText = this.query || this.placeholder;
@@ -444,8 +444,8 @@ export abstract class SearchableDialog<T> extends PromiseDialog<T> {
 
     // Separator line
     const sepY = y + 1;
-    const border = this.callbacks.getThemeColor('panel.border', '#404040');
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
+    const border = this.callbacks.getThemeColor('editorWidget.border', '#454545');
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
     for (let col = 0; col < width; col++) {
       buffer.set(x + col, sepY, { char: '─', fg: border, bg });
     }
@@ -458,8 +458,8 @@ export abstract class SearchableDialog<T> extends PromiseDialog<T> {
     width: number,
     height: number
   ): void {
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
-    const fg = this.callbacks.getThemeColor('panel.foreground', '#cccccc');
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
+    const fg = this.callbacks.getThemeColor('editorWidget.foreground', '#cccccc');
     const selectedBg = this.callbacks.getThemeColor(
       'list.activeSelectionBackground',
       '#094771'
@@ -531,7 +531,7 @@ export abstract class SearchableDialog<T> extends PromiseDialog<T> {
 
   protected renderFooter(buffer: ScreenBuffer, x: number, y: number, width: number): void {
     const dimFg = this.callbacks.getThemeColor('descriptionForeground', '#888888');
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
 
     // Item count
     const total = this.items.length;

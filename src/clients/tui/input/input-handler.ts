@@ -264,6 +264,28 @@ export class TUIInputHandler {
       return 6;
     }
 
+    // Terminal query responses: ESC [ ? ... (consume and ignore)
+    // These are sent by the terminal in response to capability queries like Kitty protocol
+    if (this.buffer.startsWith(`${ESC}[?`)) {
+      // Match patterns like \x1b[?1u, \x1b[?62;4c, etc.
+      const queryMatch = this.buffer.match(/^\x1b\[\?[\d;]*[a-zA-Z]/);
+      if (queryMatch) {
+        return queryMatch[0].length;
+      }
+      // Wait for more data if incomplete
+      if (this.buffer.length < 20) return 0;
+    }
+
+    // Terminal capability response: ESC [ > ... (consume and ignore)
+    // Response to modifyOtherKeys and similar queries
+    if (this.buffer.startsWith(`${ESC}[>`)) {
+      const capMatch = this.buffer.match(/^\x1b\[>[\d;]*[a-zA-Z]/);
+      if (capMatch) {
+        return capMatch[0].length;
+      }
+      if (this.buffer.length < 20) return 0;
+    }
+
     // CSI u format: ESC [ keycode ; modifiers u
     if (this.buffer.startsWith(`${ESC}[`)) {
       const csiUMatch = this.buffer.match(/^\x1b\[(\d+)(?:;(\d+))?(?::(\d+))?u/);

@@ -163,6 +163,15 @@ export class DocumentEditor extends BaseElement {
   /** Current content version (increments on change) */
   private contentVersion = 0;
 
+  /** Whether word wrap is enabled */
+  private wordWrapEnabled = true;
+
+  /** Cached wrapped line mappings: visual row -> { bufferLine, wrapOffset } */
+  private wrappedLineMap: Array<{ bufferLine: number; wrapOffset: number }> = [];
+
+  /** Last width used for wrapping calculation */
+  private lastWrapWidth = 0;
+
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
     this.callbacks = callbacks;
@@ -197,6 +206,22 @@ export class DocumentEditor extends BaseElement {
   setMinimapEnabled(enabled: boolean): void {
     this.minimapEnabled = enabled;
     this.ctx.markDirty();
+  }
+
+  /**
+   * Enable or disable word wrap.
+   */
+  setWordWrapEnabled(enabled: boolean): void {
+    this.wordWrapEnabled = enabled;
+    this.lastWrapWidth = 0; // Force recalculation
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Check if word wrap is enabled.
+   */
+  isWordWrapEnabled(): boolean {
+    return this.wordWrapEnabled;
   }
 
   /**
@@ -1245,6 +1270,162 @@ export class DocumentEditor extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Word Wrap Support
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Calculate wrap break positions for a line (word-aware wrapping).
+   * Returns an array of character positions where each wrapped row starts.
+   * E.g., [0, 45, 92] means row 0 starts at char 0, row 1 at char 45, row 2 at char 92.
+   */
+  private getLineWrapBreaks(lineText: string, wrapWidth: number): number[] {
+    if (!this.wordWrapEnabled || wrapWidth <= 0 || lineText.length === 0) {
+      return [0];
+    }
+
+    const breaks: number[] = [0];
+    let pos = 0;
+
+    while (pos < lineText.length) {
+      const remaining = lineText.length - pos;
+      if (remaining <= wrapWidth) {
+        // Rest fits on this row
+        break;
+      }
+
+      // Find the last space/break point within wrapWidth
+      let breakPos = pos + wrapWidth;
+      let foundBreak = false;
+
+      // Look backwards for a word boundary
+      for (let i = breakPos; i > pos; i--) {
+        const char = lineText[i];
+        // Break after spaces, tabs, or before certain punctuation
+        if (char === ' ' || char === '\t') {
+          breakPos = i + 1; // Break after the space
+          foundBreak = true;
+          break;
+        }
+        // Also allow breaking before certain punctuation if we're close to the edge
+        if (i > pos + wrapWidth * 0.5 && (char === '-' || char === '/' || char === '\\' || char === '.' || char === ',')) {
+          breakPos = i;
+          foundBreak = true;
+          break;
+        }
+      }
+
+      // If no word boundary found, hard break at wrapWidth
+      if (!foundBreak) {
+        breakPos = pos + wrapWidth;
+      }
+
+      // Skip leading spaces on the new line (optional, for cleaner look)
+      while (breakPos < lineText.length && lineText[breakPos] === ' ') {
+        breakPos++;
+      }
+
+      if (breakPos >= lineText.length) {
+        break;
+      }
+
+      breaks.push(breakPos);
+      pos = breakPos;
+    }
+
+    return breaks;
+  }
+
+  /**
+   * Calculate the number of visual rows a line takes when wrapped.
+   */
+  private getWrappedRowCount(lineText: string, wrapWidth: number): number {
+    if (!this.wordWrapEnabled || wrapWidth <= 0 || lineText.length === 0) {
+      return 1;
+    }
+    return this.getLineWrapBreaks(lineText, wrapWidth).length;
+  }
+
+  /**
+   * Get the text for a specific wrapped row of a line.
+   */
+  private getWrappedRowText(lineText: string, wrapOffset: number, wrapWidth: number): string {
+    const breaks = this.getLineWrapBreaks(lineText, wrapWidth);
+    if (wrapOffset >= breaks.length) {
+      return '';
+    }
+    const start = breaks[wrapOffset]!;
+    const end = wrapOffset + 1 < breaks.length ? breaks[wrapOffset + 1]! : lineText.length;
+    return lineText.slice(start, end);
+  }
+
+  /**
+   * Get the starting character position for a wrapped row.
+   */
+  private getWrapRowStart(lineText: string, wrapOffset: number, wrapWidth: number): number {
+    const breaks = this.getLineWrapBreaks(lineText, wrapWidth);
+    if (wrapOffset >= breaks.length) {
+      return lineText.length;
+    }
+    return breaks[wrapOffset]!;
+  }
+
+  /**
+   * Find which wrapped row a column falls into.
+   */
+  private getWrapRowForColumn(lineText: string, column: number, wrapWidth: number): number {
+    const breaks = this.getLineWrapBreaks(lineText, wrapWidth);
+    for (let i = breaks.length - 1; i >= 0; i--) {
+      if (column >= breaks[i]!) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Convert a buffer position to visual row (accounting for word wrap).
+   */
+  private bufferPosToVisualRow(bufferLine: number, column: number, wrapWidth: number): number {
+    if (!this.wordWrapEnabled || wrapWidth <= 0) {
+      return bufferLine;
+    }
+
+    let visualRow = 0;
+    for (let i = 0; i < bufferLine && i < this.lines.length; i++) {
+      if (!this.foldManager.isHidden(i)) {
+        visualRow += this.getWrappedRowCount(this.lines[i]!.text, wrapWidth);
+      }
+    }
+    // Add offset within the current line based on word wrap
+    if (bufferLine < this.lines.length) {
+      visualRow += this.getWrapRowForColumn(this.lines[bufferLine]!.text, column, wrapWidth);
+    }
+    return visualRow;
+  }
+
+  /**
+   * Convert visual row to buffer line and wrap offset.
+   */
+  private visualRowToBufferPos(visualRow: number, wrapWidth: number): { bufferLine: number; wrapOffset: number } {
+    if (!this.wordWrapEnabled || wrapWidth <= 0) {
+      return { bufferLine: visualRow, wrapOffset: 0 };
+    }
+
+    let currentVisualRow = 0;
+    for (let bufferLine = 0; bufferLine < this.lines.length; bufferLine++) {
+      if (this.foldManager.isHidden(bufferLine)) {
+        continue;
+      }
+      const rowCount = this.getWrappedRowCount(this.lines[bufferLine]!.text, wrapWidth);
+      if (currentVisualRow + rowCount > visualRow) {
+        return { bufferLine, wrapOffset: visualRow - currentVisualRow };
+      }
+      currentVisualRow += rowCount;
+    }
+    return { bufferLine: this.lines.length - 1, wrapOffset: 0 };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Rendering
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1269,8 +1450,10 @@ export class DocumentEditor extends BaseElement {
     const lineNumWidth = Math.max(3, digits);
     const foldIndicatorWidth = this.foldingEnabled ? 1 : 0;
 
-    // Get visible lines starting from scrollTop, skipping hidden lines
+    // Determine starting position based on scroll
+    // For word wrap, scrollTop is still a buffer line number
     let bufferLine = this.scrollTop;
+    let wrapOffset = 0; // Which wrapped row of the current buffer line we're on
     let row = 0;
 
     while (row < height && bufferLine < this.lines.length) {
@@ -1279,8 +1462,14 @@ export class DocumentEditor extends BaseElement {
       // Skip hidden lines (inside folded regions)
       if (this.foldManager.isHidden(bufferLine)) {
         bufferLine++;
+        wrapOffset = 0;
         continue;
       }
+
+      const line = this.lines[bufferLine]!;
+      const wrappedRowCount = this.wordWrapEnabled
+        ? this.getWrappedRowCount(line.text, contentWidth)
+        : 1;
 
       // Determine line background - highlight if any cursor is on this line
       const isCurrentLine = this.cursors.some((c) => c.position.line === bufferLine);
@@ -1288,30 +1477,47 @@ export class DocumentEditor extends BaseElement {
       const currentGutterBg = isCurrentLine && this.focused ? lineHighlight : gutterBg;
 
       // Render gutter: [line number][fold indicator][space]
-      const lineNumStr = String(bufferLine + 1).padStart(lineNumWidth, ' ');
-      const foldIndicator = this.foldingEnabled ? this.getFoldIndicator(bufferLine) : '';
-      const gutterStr = lineNumStr + foldIndicator + ' ';
-      buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
-
-      // Render line content
-      const line = this.lines[bufferLine]!;
-      const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
+      // Only show line number on first wrapped row
+      if (wrapOffset === 0) {
+        const lineNumStr = String(bufferLine + 1).padStart(lineNumWidth, ' ');
+        const foldIndicator = this.foldingEnabled ? this.getFoldIndicator(bufferLine) : '';
+        const gutterStr = lineNumStr + foldIndicator + ' ';
+        buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
+      } else {
+        // Wrapped continuation - show continuation marker or empty gutter
+        const gutterStr = ' '.repeat(lineNumWidth) + (this.foldingEnabled ? ' ' : '') + ' ';
+        buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
+      }
 
       // Fill background
       buffer.writeString(contentX, screenY, ' '.repeat(contentWidth), fg, lineBg);
 
-      // Render text with tokens
-      if (line.tokens && line.tokens.length > 0) {
-        this.renderLineWithTokens(buffer, contentX, screenY, line, contentWidth, lineBg);
+      // Render line content (with wrapping)
+      if (this.wordWrapEnabled) {
+        const wrappedText = this.getWrappedRowText(line.text, wrapOffset, contentWidth);
+        const textOffset = this.getWrapRowStart(line.text, wrapOffset, contentWidth);
+
+        if (line.tokens && line.tokens.length > 0) {
+          // Render with tokens, adjusting for wrap offset
+          this.renderLineWithTokensWrapped(buffer, contentX, screenY, line, contentWidth, lineBg, textOffset, wrappedText.length);
+        } else {
+          buffer.writeString(contentX, screenY, wrappedText, fg, lineBg);
+        }
       } else {
-        buffer.writeString(contentX, screenY, visibleText, fg, lineBg);
+        // No wrapping - use horizontal scroll
+        const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
+        if (line.tokens && line.tokens.length > 0) {
+          this.renderLineWithTokens(buffer, contentX, screenY, line, contentWidth, lineBg);
+        } else {
+          buffer.writeString(contentX, screenY, visibleText, fg, lineBg);
+        }
       }
 
-      // If this line is folded, show ellipsis indicator after content
-      if (this.foldManager.isFolded(bufferLine)) {
+      // If this line is folded (only on first wrapped row), show ellipsis
+      if (wrapOffset === 0 && this.foldManager.isFolded(bufferLine)) {
         const foldedCount = this.foldManager.getFoldedLineCount(bufferLine);
         const ellipsis = ` ... ${foldedCount} lines`;
-        const textLen = line.text.length - this.scrollLeft;
+        const textLen = Math.min(line.text.length, contentWidth) - this.scrollLeft;
         const ellipsisX = contentX + Math.max(0, textLen);
         if (ellipsisX < x + width - rightMargin - ellipsis.length) {
           buffer.writeString(ellipsisX, screenY, ellipsis, foldEllipsisFg, lineBg);
@@ -1321,24 +1527,41 @@ export class DocumentEditor extends BaseElement {
       // Render selection highlights for all cursors
       for (const cursor of this.cursors) {
         if (cursor.selection && this.hasSelectionContent(cursor.selection)) {
-          this.renderCursorSelectionOnLine(buffer, contentX, screenY, bufferLine, contentWidth, selectionBg, cursor);
+          this.renderCursorSelectionOnLineWrapped(buffer, contentX, screenY, bufferLine, wrapOffset, contentWidth, selectionBg, cursor);
         }
       }
 
       // Render all cursors on this line
       if (this.focused) {
         for (const cursor of this.cursors) {
-          if (cursor.position.line === bufferLine && cursor.position.column >= this.scrollLeft) {
-            const cursorX = contentX + cursor.position.column - this.scrollLeft;
-            if (cursorX < x + width - rightMargin) {
-              const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
-              buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
+          if (cursor.position.line === bufferLine) {
+            // Calculate which wrapped row the cursor is on
+            const cursorWrapRow = this.wordWrapEnabled
+              ? this.getWrapRowForColumn(line.text, cursor.position.column, contentWidth)
+              : 0;
+            if (cursorWrapRow === wrapOffset) {
+              const wrapStart = this.wordWrapEnabled
+                ? this.getWrapRowStart(line.text, wrapOffset, contentWidth)
+                : 0;
+              const cursorCol = this.wordWrapEnabled
+                ? cursor.position.column - wrapStart
+                : cursor.position.column - this.scrollLeft;
+              if (cursorCol >= 0 && cursorCol < contentWidth) {
+                const cursorX = contentX + cursorCol;
+                const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
+                buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
+              }
             }
           }
         }
       }
 
-      bufferLine++;
+      // Move to next wrapped row or next buffer line
+      wrapOffset++;
+      if (wrapOffset >= wrappedRowCount) {
+        bufferLine++;
+        wrapOffset = 0;
+      }
       row++;
     }
 
@@ -1462,6 +1685,106 @@ export class DocumentEditor extends BaseElement {
 
     // Highlight selection
     for (let col = startCol; col < endCol; col++) {
+      const cell = buffer.get(x + col, y);
+      if (cell) {
+        buffer.set(x + col, y, { ...cell, bg: selectionBg });
+      }
+    }
+  }
+
+  /**
+   * Render a line with syntax tokens, adjusted for word wrap offset.
+   */
+  private renderLineWithTokensWrapped(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    line: DocumentLine,
+    width: number,
+    bg: string,
+    textOffset: number,
+    rowLength: number
+  ): void {
+    const fg = this.ctx.getThemeColor('editor.foreground', '#cccccc');
+    const text = line.text;
+    const tokens = line.tokens ?? [];
+
+    // Sort tokens by start position
+    const sortedTokens = [...tokens].sort((a, b) => a.start - b.start);
+
+    let col = 0;
+    let tokenIdx = 0;
+
+    // Use rowLength to limit how many characters we render (word-wrapped row length)
+    const maxCol = Math.min(width, rowLength);
+
+    while (col < maxCol && textOffset + col < text.length) {
+      const charIdx = textOffset + col;
+
+      // Find applicable token
+      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= charIdx) {
+        tokenIdx++;
+      }
+
+      let color = fg;
+      if (tokenIdx < sortedTokens.length) {
+        const token = sortedTokens[tokenIdx]!;
+        if (charIdx >= token.start && charIdx < token.end) {
+          color = token.color ?? this.getTokenColor(token.type);
+        }
+      }
+
+      buffer.set(x + col, y, { char: text[charIdx]!, fg: color, bg });
+      col++;
+    }
+  }
+
+  /**
+   * Render selection highlight on a wrapped line row for a specific cursor.
+   */
+  private renderCursorSelectionOnLineWrapped(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    lineNum: number,
+    wrapOffset: number,
+    width: number,
+    selectionBg: string,
+    cursor: Cursor
+  ): void {
+    if (!cursor.selection) return;
+
+    const { start, end } = this.getSelectionRange(cursor.selection);
+    const line = this.lines[lineNum]!;
+
+    // Check if line is in selection
+    if (lineNum < start.line || lineNum > end.line) return;
+
+    let startCol = 0;
+    let endCol = line.text.length;
+
+    if (lineNum === start.line) {
+      startCol = start.column;
+    }
+    if (lineNum === end.line) {
+      endCol = end.column;
+    }
+
+    // Get word-boundary wrap positions
+    const wrapStart = this.getWrapRowStart(line.text, wrapOffset, width);
+    const wrapEnd = wrapOffset + 1 < this.getLineWrapBreaks(line.text, width).length
+      ? this.getWrapRowStart(line.text, wrapOffset + 1, width)
+      : line.text.length;
+    const rowLength = wrapEnd - wrapStart;
+
+    // Clamp selection to this wrapped row
+    const selStartInRow = Math.max(startCol - wrapStart, 0);
+    const selEndInRow = Math.min(endCol - wrapStart, rowLength);
+
+    if (selStartInRow >= selEndInRow) return;
+
+    // Highlight selection
+    for (let col = selStartInRow; col < selEndInRow; col++) {
       const cell = buffer.get(x + col, y);
       if (cell) {
         buffer.set(x + col, y, { ...cell, bg: selectionBg });
@@ -1779,10 +2102,16 @@ export class DocumentEditor extends BaseElement {
     if (event.type === 'drag' && this.selectionDragging) {
       const relX = event.x - this.bounds.x - this.gutterWidth;
       const relY = event.y - this.bounds.y;
-      const bufferLine = this.screenRowToBufferLine(relY);
+      const result = this.screenRowToBufferLine(relY);
 
-      if (bufferLine !== null) {
-        const column = Math.max(0, Math.min(this.scrollLeft + relX, this.lines[bufferLine]!.text.length));
+      if (result !== null) {
+        const { bufferLine, wrapOffset } = result;
+        const lineText = this.lines[bufferLine]!.text;
+        const wrapColumnOffset = this.wordWrapEnabled
+          ? this.getWrapRowStart(lineText, wrapOffset, contentWidth)
+          : 0;
+        const baseColumn = this.wordWrapEnabled ? relX : this.scrollLeft + relX;
+        const column = Math.max(0, Math.min(wrapColumnOffset + baseColumn, lineText.length));
         this.setCursorPosition({ line: bufferLine, column }, true);
       }
       return true;
@@ -1793,11 +2122,12 @@ export class DocumentEditor extends BaseElement {
       const relX = event.x - this.bounds.x;
       const relY = event.y - this.bounds.y;
 
-      // Convert screen row to buffer line (accounting for hidden lines)
-      const bufferLine = this.screenRowToBufferLine(relY);
+      // Convert screen row to buffer line (accounting for hidden lines and word wrap)
+      const result = this.screenRowToBufferLine(relY);
 
       // Check if click is in gutter area
-      if (relX >= 0 && relX < this.gutterWidth && bufferLine !== null) {
+      if (relX >= 0 && relX < this.gutterWidth && result !== null) {
+        const { bufferLine } = result;
         // Calculate fold indicator column position
         const digits = String(this.lines.length).length;
         const lineNumWidth = Math.max(3, digits);
@@ -1819,10 +2149,15 @@ export class DocumentEditor extends BaseElement {
 
       // Click in content area
       const contentRelX = relX - this.gutterWidth;
-      if (contentRelX >= 0 && contentRelX < contentWidth && bufferLine !== null) {
+      if (contentRelX >= 0 && contentRelX < contentWidth && result !== null) {
+        const { bufferLine, wrapOffset } = result;
         const lineText = this.lines[bufferLine];
         if (lineText) {
-          const column = Math.min(this.scrollLeft + contentRelX, lineText.text.length);
+          const wrapColumnOffset = this.wordWrapEnabled
+            ? this.getWrapRowStart(lineText.text, wrapOffset, contentWidth)
+            : 0;
+          const baseColumn = this.wordWrapEnabled ? contentRelX : this.scrollLeft + contentRelX;
+          const column = Math.min(wrapColumnOffset + baseColumn, lineText.text.length);
           const clickPos = { line: bufferLine, column };
 
           // Update click count for double/triple click detection
@@ -2200,10 +2535,14 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
-   * Convert a screen row to a buffer line number.
-   * Accounts for hidden (folded) lines.
+   * Convert a screen row to a buffer line number and wrap offset.
+   * Accounts for hidden (folded) lines and word wrapping.
    */
-  private screenRowToBufferLine(screenRow: number): number | null {
+  private screenRowToBufferLine(screenRow: number): { bufferLine: number; wrapOffset: number } | null {
+    const { width } = this.bounds;
+    const rightMargin = this.getRightMarginWidth();
+    const contentWidth = width - this.gutterWidth - rightMargin;
+
     let bufferLine = this.scrollTop;
     let row = 0;
 
@@ -2214,12 +2553,19 @@ export class DocumentEditor extends BaseElement {
         continue;
       }
 
-      if (row === screenRow) {
-        return bufferLine;
+      const line = this.lines[bufferLine]!;
+      const wrappedRowCount = this.wordWrapEnabled
+        ? this.getWrappedRowCount(line.text, contentWidth)
+        : 1;
+
+      // Check if target row is within this buffer line's wrapped rows
+      if (screenRow >= row && screenRow < row + wrappedRowCount) {
+        const wrapOffset = screenRow - row;
+        return { bufferLine, wrapOffset };
       }
 
+      row += wrappedRowCount;
       bufferLine++;
-      row++;
     }
 
     return null;

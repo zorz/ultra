@@ -118,8 +118,8 @@ export class ConfirmDialog extends PromiseDialog<boolean> {
 
   protected override renderContent(buffer: ScreenBuffer): void {
     const content = this.getContentBounds();
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
-    const fg = this.callbacks.getThemeColor('panel.foreground', '#cccccc');
+    const bg = this.callbacks.getThemeColor('editorWidget.background', '#252526');
+    const fg = this.callbacks.getThemeColor('editorWidget.foreground', '#cccccc');
 
     // Message
     const lines = this.message.split('\n');
@@ -136,7 +136,6 @@ export class ConfirmDialog extends PromiseDialog<boolean> {
   }
 
   private renderButtons(buffer: ScreenBuffer, x: number, y: number, width: number): void {
-    const bg = this.callbacks.getThemeColor('panel.background', '#252526');
     const buttonBg = this.callbacks.getThemeColor('button.background', '#3c3c3c');
     const buttonFg = this.callbacks.getThemeColor('button.foreground', '#cccccc');
     const focusBg = this.callbacks.getThemeColor('focusBorder', '#007acc');

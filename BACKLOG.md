@@ -28,6 +28,11 @@ Issues and improvements to address in future sessions.
   - Whether the mouse event is being intercepted before reaching the editor
   - The `setCursorPosition(clickPos, true)` call with extend=true
 
+- [ ] **Kitty terminal ctrl+shift+key conflicts** - Kitty terminal has default shortcuts that intercept ctrl+shift+p, ctrl+shift+k, etc. before they reach the application. The first keypress is consumed by Kitty, and only subsequent presses get through. Solutions:
+  - Document that users need to unbind these in Kitty config (`map ctrl+shift+p no_op`)
+  - Consider alternative default keybindings that don't conflict with Kitty
+  - Detect Kitty terminal and show a warning/hint about configuring shortcuts
+
 ## Services
 
 ## ECP

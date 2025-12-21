@@ -12,6 +12,8 @@ import { ConfirmDialog, type ConfirmDialogOptions } from './confirm-dialog.ts';
 import { CommandPaletteDialog, type Command } from './command-palette.ts';
 import { FilePickerDialog, type FileEntry } from './file-picker.ts';
 import { GotoLineDialog, type GotoLineResult } from './goto-line-dialog.ts';
+import { CommitDialog, type CommitDialogOptions, type CommitResult, type StagedFile } from './commit-dialog.ts';
+import { SettingsDialog, type SettingsDialogOptions, type SettingItem } from './settings-dialog.ts';
 
 // ============================================
 // Types
@@ -31,6 +33,16 @@ export type { FileEntry };
  * Goto line result.
  */
 export type { GotoLineResult };
+
+/**
+ * Commit result.
+ */
+export type { CommitResult, StagedFile };
+
+/**
+ * Setting item.
+ */
+export type { SettingItem };
 
 /**
  * Options for command palette.
@@ -79,6 +91,8 @@ export class DialogManager {
   private commandPaletteDialog: CommandPaletteDialog | null = null;
   private filePickerDialog: FilePickerDialog | null = null;
   private gotoLineDialog: GotoLineDialog | null = null;
+  private commitDialog: CommitDialog | null = null;
+  private settingsDialog: SettingsDialog | null = null;
 
   /** Currently active dialog ID */
   private activeDialogId: string | null = null;
@@ -253,6 +267,50 @@ export class DialogManager {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Commit Dialog
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the git commit dialog.
+   */
+  async showCommit(options: Omit<CommitDialogOptions, keyof import('./promise-dialog.ts').DialogConfig> & Partial<import('./promise-dialog.ts').DialogConfig>): Promise<DialogResult<CommitResult>> {
+    if (!this.commitDialog) {
+      this.commitDialog = new CommitDialog('dialog-commit', this.callbacks);
+      this.overlayManager.addOverlay(this.commitDialog);
+    }
+
+    this.activeDialogId = 'dialog-commit';
+
+    try {
+      return await this.commitDialog.showWithOptions(options);
+    } finally {
+      this.activeDialogId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Settings Dialog
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the settings dialog.
+   */
+  async showSettings(options: Omit<SettingsDialogOptions, keyof import('./promise-dialog.ts').DialogConfig> & Partial<import('./promise-dialog.ts').DialogConfig>): Promise<DialogResult<SettingItem>> {
+    if (!this.settingsDialog) {
+      this.settingsDialog = new SettingsDialog('dialog-settings', this.callbacks);
+      this.overlayManager.addOverlay(this.settingsDialog);
+    }
+
+    this.activeDialogId = 'dialog-settings';
+
+    try {
+      return await this.settingsDialog.showWithSettings(options);
+    } finally {
+      this.activeDialogId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Cleanup
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -279,6 +337,14 @@ export class DialogManager {
     if (this.gotoLineDialog) {
       this.overlayManager.removeOverlay('dialog-goto-line');
       this.gotoLineDialog = null;
+    }
+    if (this.commitDialog) {
+      this.overlayManager.removeOverlay('dialog-commit');
+      this.commitDialog = null;
+    }
+    if (this.settingsDialog) {
+      this.overlayManager.removeOverlay('dialog-settings');
+      this.settingsDialog = null;
     }
     this.activeDialogId = null;
   }

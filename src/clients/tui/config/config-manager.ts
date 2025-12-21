@@ -297,7 +297,7 @@ export class TUIConfigManager {
       'editor.fontSize': 14,
       'editor.tabSize': 2,
       'editor.insertSpaces': true,
-      'editor.wordWrap': 'off',
+      'editor.wordWrap': 'on', // Enabled by default for better terminal experience
       'editor.lineNumbers': 'on',
       'editor.minimap.enabled': false, // Disabled by default in TUI
       'editor.renderWhitespace': 'selection',
