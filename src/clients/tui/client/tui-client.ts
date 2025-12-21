@@ -957,6 +957,56 @@ export class TUIClient {
       }
       return true;
     });
+
+    // Selection commands
+    this.commandHandlers.set('edit.selectAll', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.selectAll();
+      }
+      return true;
+    });
+
+    // Multi-cursor commands
+    this.commandHandlers.set('edit.selectNextMatch', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.selectNextOccurrence();
+      }
+      return true;
+    });
+
+    this.commandHandlers.set('edit.selectAllOccurrences', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.selectAllOccurrences();
+      }
+      return true;
+    });
+
+    this.commandHandlers.set('editor.addCursorAbove', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.addCursorAbove();
+      }
+      return true;
+    });
+
+    this.commandHandlers.set('editor.addCursorBelow', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.addCursorBelow();
+      }
+      return true;
+    });
+
+    this.commandHandlers.set('editor.clearCursors', () => {
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.clearSecondaryCursors();
+      }
+      return true;
+    });
   }
 
   /**

@@ -42,11 +42,22 @@ export interface CursorPosition {
 }
 
 /**
- * Text selection.
+ * Text selection using anchor/head model.
+ * Anchor is where selection started, head is where cursor currently is.
  */
 export interface Selection {
-  start: CursorPosition;
-  end: CursorPosition;
+  anchor: CursorPosition;
+  head: CursorPosition;
+}
+
+/**
+ * A cursor with optional selection.
+ */
+export interface Cursor {
+  position: CursorPosition;
+  selection: Selection | null;
+  /** Desired column for vertical movement */
+  desiredColumn: number;
 }
 
 /**
@@ -55,8 +66,7 @@ export interface Selection {
 export interface DocumentEditorState {
   uri?: string;
   scrollTop: number;
-  cursor: CursorPosition;
-  selection?: Selection;
+  cursors: Cursor[];
   foldedRegions?: number[];
 }
 
@@ -67,9 +77,7 @@ export interface DocumentEditorCallbacks {
   /** Called when content changes */
   onContentChange?: (content: string) => void;
   /** Called when cursor moves */
-  onCursorChange?: (cursor: CursorPosition) => void;
-  /** Called when selection changes */
-  onSelectionChange?: (selection: Selection | null) => void;
+  onCursorChange?: (cursors: readonly Cursor[]) => void;
   /** Called when document is saved */
   onSave?: () => void;
   /** Called when fold state changes */
@@ -84,11 +92,11 @@ export class DocumentEditor extends BaseElement {
   /** Document lines */
   private lines: DocumentLine[] = [{ text: '' }];
 
-  /** Cursor position */
-  private cursor: CursorPosition = { line: 0, column: 0 };
+  /** All cursors (multi-cursor support) */
+  private cursors: Cursor[] = [{ position: { line: 0, column: 0 }, selection: null, desiredColumn: 0 }];
 
-  /** Current selection */
-  private selection: Selection | null = null;
+  /** Primary cursor index */
+  private primaryCursorIndex = 0;
 
   /** Scroll offset (lines from top) */
   private scrollTop = 0;
@@ -125,6 +133,23 @@ export class DocumentEditor extends BaseElement {
 
   /** Whether scrollbar dragging is active */
   private scrollbarDragging = false;
+
+  /** Whether text selection dragging is active */
+  private selectionDragging = false;
+
+  /** Click state for double/triple click detection */
+  private clickState = {
+    lastClickTime: 0,
+    lastClickX: 0,
+    lastClickY: 0,
+    clickCount: 0,
+  };
+
+  /** Double/triple click timeout (ms) */
+  private static readonly CLICK_TIMEOUT = 300;
+
+  /** Click distance threshold (characters) */
+  private static readonly CLICK_DISTANCE = 2;
 
   /** Fold manager for code folding */
   private foldManager: FoldManager = new FoldManager();
@@ -225,9 +250,11 @@ export class DocumentEditor extends BaseElement {
   toggleFoldAtCursor(): boolean {
     if (!this.foldingEnabled) return false;
 
+    const cursor = this.getPrimaryCursor();
+
     // First check if cursor line starts a fold
-    if (this.foldManager.canFold(this.cursor.line) || this.foldManager.isFolded(this.cursor.line)) {
-      const result = this.foldManager.toggleFold(this.cursor.line);
+    if (this.foldManager.canFold(cursor.position.line) || this.foldManager.isFolded(cursor.position.line)) {
+      const result = this.foldManager.toggleFold(cursor.position.line);
       if (result) {
         this.callbacks.onFoldChange?.();
         this.ctx.markDirty();
@@ -236,14 +263,14 @@ export class DocumentEditor extends BaseElement {
     }
 
     // Otherwise, try to fold the containing region
-    const region = this.foldManager.findRegionContaining(this.cursor.line);
+    const region = this.foldManager.findRegionContaining(cursor.position.line);
     if (region) {
       const result = this.foldManager.toggleFold(region.startLine);
       if (result) {
         // Move cursor to fold start line if it would be hidden
-        if (this.foldManager.isHidden(this.cursor.line)) {
-          this.cursor.line = region.startLine;
-          this.ensureColumnInBounds();
+        if (this.foldManager.isHidden(cursor.position.line)) {
+          cursor.position.line = region.startLine;
+          this.ensureCursorColumnInBounds(cursor);
         }
         this.callbacks.onFoldChange?.();
         this.ctx.markDirty();
@@ -263,9 +290,10 @@ export class DocumentEditor extends BaseElement {
     const result = this.foldManager.toggleFold(line);
     if (result) {
       // Move cursor if it would be hidden
-      if (this.foldManager.isHidden(this.cursor.line)) {
-        this.cursor.line = line;
-        this.ensureColumnInBounds();
+      const cursor = this.getPrimaryCursor();
+      if (this.foldManager.isHidden(cursor.position.line)) {
+        cursor.position.line = line;
+        this.ensureCursorColumnInBounds(cursor);
       }
       this.callbacks.onFoldChange?.();
       this.ctx.markDirty();
@@ -279,9 +307,11 @@ export class DocumentEditor extends BaseElement {
   foldAtCursor(): boolean {
     if (!this.foldingEnabled) return false;
 
+    const cursor = this.getPrimaryCursor();
+
     // First check if cursor line starts a fold
-    if (this.foldManager.canFold(this.cursor.line)) {
-      const result = this.foldManager.fold(this.cursor.line);
+    if (this.foldManager.canFold(cursor.position.line)) {
+      const result = this.foldManager.fold(cursor.position.line);
       if (result) {
         this.callbacks.onFoldChange?.();
         this.ctx.markDirty();
@@ -290,7 +320,7 @@ export class DocumentEditor extends BaseElement {
     }
 
     // Otherwise, fold the containing region
-    const result = this.foldManager.foldContaining(this.cursor.line);
+    const result = this.foldManager.foldContaining(cursor.position.line);
     if (result) {
       this.callbacks.onFoldChange?.();
       this.ctx.markDirty();
@@ -304,9 +334,11 @@ export class DocumentEditor extends BaseElement {
   unfoldAtCursor(): boolean {
     if (!this.foldingEnabled) return false;
 
+    const cursor = this.getPrimaryCursor();
+
     // First check if cursor line starts a fold
-    if (this.foldManager.isFolded(this.cursor.line)) {
-      const result = this.foldManager.unfold(this.cursor.line);
+    if (this.foldManager.isFolded(cursor.position.line)) {
+      const result = this.foldManager.unfold(cursor.position.line);
       if (result) {
         this.callbacks.onFoldChange?.();
         this.ctx.markDirty();
@@ -315,7 +347,7 @@ export class DocumentEditor extends BaseElement {
     }
 
     // Find containing folded region
-    const region = this.foldManager.findRegionContaining(this.cursor.line);
+    const region = this.foldManager.findRegionContaining(cursor.position.line);
     if (region && region.isFolded) {
       const result = this.foldManager.unfold(region.startLine);
       if (result) {
@@ -337,19 +369,29 @@ export class DocumentEditor extends BaseElement {
     this.foldManager.foldAll();
 
     // Move cursor if it would be hidden
-    if (this.foldManager.isHidden(this.cursor.line)) {
+    const cursor = this.getPrimaryCursor();
+    if (this.foldManager.isHidden(cursor.position.line)) {
       // Find nearest visible line before cursor
-      for (let i = this.cursor.line; i >= 0; i--) {
+      for (let i = cursor.position.line; i >= 0; i--) {
         if (!this.foldManager.isHidden(i)) {
-          this.cursor.line = i;
+          cursor.position.line = i;
           break;
         }
       }
-      this.ensureColumnInBounds();
+      this.ensureCursorColumnInBounds(cursor);
     }
 
     this.callbacks.onFoldChange?.();
     this.ctx.markDirty();
+  }
+
+  /**
+   * Ensure a cursor's column is within the line bounds.
+   */
+  private ensureCursorColumnInBounds(cursor: Cursor): void {
+    const lineLen = this.lines[cursor.position.line]!.text.length;
+    cursor.position.column = Math.max(0, Math.min(cursor.position.column, lineLen));
+    cursor.desiredColumn = cursor.position.column;
   }
 
   /**
@@ -403,7 +445,7 @@ export class DocumentEditor extends BaseElement {
     }
     this.modified = false;
     this.contentVersion++;
-    this.ensureCursorInBounds();
+    this.ensureCursorsInBounds();
     this.updateGutterWidth();
     this.updateFoldRegions();
     this.ctx.markDirty();
@@ -451,219 +493,498 @@ export class DocumentEditor extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Position Utilities
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Compare two positions. Returns -1 if a < b, 0 if equal, 1 if a > b.
+   */
+  private comparePositions(a: CursorPosition, b: CursorPosition): number {
+    if (a.line !== b.line) return a.line < b.line ? -1 : 1;
+    if (a.column !== b.column) return a.column < b.column ? -1 : 1;
+    return 0;
+  }
+
+  /**
+   * Check if two positions are equal.
+   */
+  private positionsEqual(a: CursorPosition, b: CursorPosition): boolean {
+    return a.line === b.line && a.column === b.column;
+  }
+
+  /**
+   * Get the minimum of two positions.
+   */
+  private minPosition(a: CursorPosition, b: CursorPosition): CursorPosition {
+    return this.comparePositions(a, b) <= 0 ? a : b;
+  }
+
+  /**
+   * Get the maximum of two positions.
+   */
+  private maxPosition(a: CursorPosition, b: CursorPosition): CursorPosition {
+    return this.comparePositions(a, b) >= 0 ? a : b;
+  }
+
+  /**
+   * Clone a position.
+   */
+  private clonePosition(pos: CursorPosition): CursorPosition {
+    return { line: pos.line, column: pos.column };
+  }
+
+  /**
+   * Clone a cursor.
+   */
+  private cloneCursor(cursor: Cursor): Cursor {
+    return {
+      position: this.clonePosition(cursor.position),
+      selection: cursor.selection
+        ? { anchor: this.clonePosition(cursor.selection.anchor), head: this.clonePosition(cursor.selection.head) }
+        : null,
+      desiredColumn: cursor.desiredColumn,
+    };
+  }
+
+  /**
+   * Check if a selection has content (anchor != head).
+   */
+  private hasSelectionContent(selection: Selection | null): boolean {
+    if (!selection) return false;
+    return !this.positionsEqual(selection.anchor, selection.head);
+  }
+
+  /**
+   * Get ordered range from selection (start <= end).
+   */
+  private getSelectionRange(selection: Selection): { start: CursorPosition; end: CursorPosition } {
+    const start = this.minPosition(selection.anchor, selection.head);
+    const end = this.maxPosition(selection.anchor, selection.head);
+    return { start, end };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Cursor & Selection
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Get cursor position.
+   * Get primary cursor.
+   */
+  getPrimaryCursor(): Cursor {
+    return this.cursors[this.primaryCursorIndex]!;
+  }
+
+  /**
+   * Get all cursors.
+   */
+  getCursors(): readonly Cursor[] {
+    return this.cursors;
+  }
+
+  /**
+   * Get primary cursor position (for backward compatibility).
    */
   getCursor(): CursorPosition {
-    return { ...this.cursor };
+    return this.clonePosition(this.getPrimaryCursor().position);
   }
 
   /**
-   * Set cursor position.
-   */
-  setCursor(pos: CursorPosition): void {
-    this.cursor = { ...pos };
-    this.ensureCursorInBounds();
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
-    this.ctx.markDirty();
-  }
-
-  /**
-   * Get current selection.
+   * Get primary selection (for backward compatibility).
    */
   getSelection(): Selection | null {
-    return this.selection ? { ...this.selection } : null;
+    const cursor = this.getPrimaryCursor();
+    return cursor.selection ? { ...cursor.selection } : null;
   }
 
   /**
-   * Set selection.
+   * Set single cursor at position, clearing all others.
    */
-  setSelection(selection: Selection | null): void {
-    this.selection = selection ? { ...selection } : null;
-    this.callbacks.onSelectionChange?.(this.selection);
+  setCursor(pos: CursorPosition): void {
+    this.cursors = [{
+      position: this.clonePosition(pos),
+      selection: null,
+      desiredColumn: pos.column,
+    }];
+    this.primaryCursorIndex = 0;
+    this.ensureCursorsInBounds();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Clear selection.
+   * Set cursor position with optional selection extension.
    */
-  clearSelection(): void {
-    this.setSelection(null);
+  setCursorPosition(pos: CursorPosition, extending: boolean = false): void {
+    const cursor = this.getPrimaryCursor();
+
+    if (extending) {
+      if (!cursor.selection) {
+        cursor.selection = {
+          anchor: this.clonePosition(cursor.position),
+          head: this.clonePosition(pos),
+        };
+      } else {
+        cursor.selection.head = this.clonePosition(pos);
+      }
+    } else {
+      cursor.selection = null;
+    }
+
+    cursor.position = this.clonePosition(pos);
+    cursor.desiredColumn = pos.column;
+
+    this.ensureCursorsInBounds();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
+    this.ctx.markDirty();
   }
 
   /**
-   * Move cursor.
+   * Add a new cursor at position.
+   */
+  addCursor(pos: CursorPosition): void {
+    // Check if cursor already exists at this position
+    const exists = this.cursors.some((c) => this.positionsEqual(c.position, pos));
+    if (exists) return;
+
+    this.cursors.push({
+      position: this.clonePosition(pos),
+      selection: null,
+      desiredColumn: pos.column,
+    });
+
+    this.sortCursors();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Add a cursor with selection.
+   */
+  addCursorWithSelection(anchor: CursorPosition, head: CursorPosition): void {
+    this.cursors.push({
+      position: this.clonePosition(head),
+      selection: {
+        anchor: this.clonePosition(anchor),
+        head: this.clonePosition(head),
+      },
+      desiredColumn: head.column,
+    });
+
+    this.sortCursors();
+    this.mergeOverlappingCursors();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Clear all secondary cursors, keeping only primary.
+   */
+  clearSecondaryCursors(): void {
+    const primary = this.cloneCursor(this.getPrimaryCursor());
+    this.cursors = [primary];
+    this.primaryCursorIndex = 0;
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Clear all selections on all cursors.
+   */
+  clearSelections(): void {
+    for (const cursor of this.cursors) {
+      cursor.selection = null;
+    }
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Sort cursors by position (top to bottom, left to right).
+   */
+  private sortCursors(): void {
+    this.cursors.sort((a, b) => this.comparePositions(a.position, b.position));
+    this.primaryCursorIndex = 0;
+  }
+
+  /**
+   * Merge cursors that have overlapping selections or same position.
+   */
+  private mergeOverlappingCursors(): void {
+    if (this.cursors.length <= 1) return;
+
+    this.sortCursors();
+    const merged: Cursor[] = [];
+
+    for (const cursor of this.cursors) {
+      const last = merged[merged.length - 1];
+
+      if (!last) {
+        merged.push(cursor);
+        continue;
+      }
+
+      // Check if positions are the same
+      if (this.positionsEqual(last.position, cursor.position)) {
+        // Merge selections if both have them
+        if (last.selection && cursor.selection) {
+          const lastRange = this.getSelectionRange(last.selection);
+          const curRange = this.getSelectionRange(cursor.selection);
+          last.selection = {
+            anchor: this.minPosition(lastRange.start, curRange.start),
+            head: this.maxPosition(lastRange.end, curRange.end),
+          };
+          last.position = this.clonePosition(last.selection.head);
+        }
+        continue;
+      }
+
+      // Check for overlapping selections
+      if (last.selection && cursor.selection) {
+        const lastRange = this.getSelectionRange(last.selection);
+        const curRange = this.getSelectionRange(cursor.selection);
+
+        // Check if ranges overlap
+        if (
+          this.comparePositions(lastRange.start, curRange.end) < 0 &&
+          this.comparePositions(curRange.start, lastRange.end) < 0
+        ) {
+          // Merge the selections
+          last.selection = {
+            anchor: this.minPosition(lastRange.start, curRange.start),
+            head: this.maxPosition(lastRange.end, curRange.end),
+          };
+          last.position = this.clonePosition(last.selection.head);
+          continue;
+        }
+      }
+
+      merged.push(cursor);
+    }
+
+    this.cursors = merged;
+    this.primaryCursorIndex = Math.min(this.primaryCursorIndex, this.cursors.length - 1);
+  }
+
+  /**
+   * Move all cursors in a direction.
    */
   moveCursor(direction: 'up' | 'down' | 'left' | 'right', extend = false): void {
-    const oldCursor = { ...this.cursor };
+    for (const cursor of this.cursors) {
+      const oldPos = this.clonePosition(cursor.position);
 
-    switch (direction) {
-      case 'up':
-        if (this.cursor.line > 0) {
-          this.cursor.line--;
-          this.ensureColumnInBounds();
+      switch (direction) {
+        case 'up':
+          if (cursor.position.line > 0) {
+            cursor.position.line--;
+            cursor.position.column = Math.min(cursor.desiredColumn, this.lines[cursor.position.line]!.text.length);
+          }
+          break;
+        case 'down':
+          if (cursor.position.line < this.lines.length - 1) {
+            cursor.position.line++;
+            cursor.position.column = Math.min(cursor.desiredColumn, this.lines[cursor.position.line]!.text.length);
+          }
+          break;
+        case 'left':
+          if (cursor.position.column > 0) {
+            cursor.position.column--;
+            cursor.desiredColumn = cursor.position.column;
+          } else if (cursor.position.line > 0) {
+            cursor.position.line--;
+            cursor.position.column = this.lines[cursor.position.line]!.text.length;
+            cursor.desiredColumn = cursor.position.column;
+          }
+          break;
+        case 'right':
+          if (cursor.position.column < this.lines[cursor.position.line]!.text.length) {
+            cursor.position.column++;
+            cursor.desiredColumn = cursor.position.column;
+          } else if (cursor.position.line < this.lines.length - 1) {
+            cursor.position.line++;
+            cursor.position.column = 0;
+            cursor.desiredColumn = 0;
+          }
+          break;
+      }
+
+      if (extend) {
+        if (!cursor.selection) {
+          cursor.selection = { anchor: oldPos, head: this.clonePosition(cursor.position) };
+        } else {
+          cursor.selection.head = this.clonePosition(cursor.position);
         }
-        break;
-      case 'down':
-        if (this.cursor.line < this.lines.length - 1) {
-          this.cursor.line++;
-          this.ensureColumnInBounds();
-        }
-        break;
-      case 'left':
-        if (this.cursor.column > 0) {
-          this.cursor.column--;
-        } else if (this.cursor.line > 0) {
-          this.cursor.line--;
-          this.cursor.column = this.lines[this.cursor.line]!.text.length;
-        }
-        break;
-      case 'right':
-        if (this.cursor.column < this.lines[this.cursor.line]!.text.length) {
-          this.cursor.column++;
-        } else if (this.cursor.line < this.lines.length - 1) {
-          this.cursor.line++;
-          this.cursor.column = 0;
-        }
-        break;
+      } else {
+        cursor.selection = null;
+      }
     }
 
-    if (extend) {
-      this.extendSelection(oldCursor, this.cursor);
-    } else {
-      this.clearSelection();
-    }
-
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
+    this.mergeOverlappingCursors();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Move cursor to start of line.
+   * Move all cursors to start of line.
    */
   moveCursorToLineStart(extend = false): void {
-    const oldCursor = { ...this.cursor };
-    this.cursor.column = 0;
+    for (const cursor of this.cursors) {
+      const oldPos = this.clonePosition(cursor.position);
+      cursor.position.column = 0;
+      cursor.desiredColumn = 0;
 
-    if (extend) {
-      this.extendSelection(oldCursor, this.cursor);
-    } else {
-      this.clearSelection();
+      if (extend) {
+        if (!cursor.selection) {
+          cursor.selection = { anchor: oldPos, head: this.clonePosition(cursor.position) };
+        } else {
+          cursor.selection.head = this.clonePosition(cursor.position);
+        }
+      } else {
+        cursor.selection = null;
+      }
     }
 
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
+    this.mergeOverlappingCursors();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Move cursor to end of line.
+   * Move all cursors to end of line.
    */
   moveCursorToLineEnd(extend = false): void {
-    const oldCursor = { ...this.cursor };
-    this.cursor.column = this.lines[this.cursor.line]!.text.length;
+    for (const cursor of this.cursors) {
+      const oldPos = this.clonePosition(cursor.position);
+      cursor.position.column = this.lines[cursor.position.line]!.text.length;
+      cursor.desiredColumn = cursor.position.column;
 
-    if (extend) {
-      this.extendSelection(oldCursor, this.cursor);
-    } else {
-      this.clearSelection();
+      if (extend) {
+        if (!cursor.selection) {
+          cursor.selection = { anchor: oldPos, head: this.clonePosition(cursor.position) };
+        } else {
+          cursor.selection.head = this.clonePosition(cursor.position);
+        }
+      } else {
+        cursor.selection = null;
+      }
     }
 
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
+    this.mergeOverlappingCursors();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Move cursor to document start.
+   * Move cursor to document start (clears secondary cursors).
    */
   moveCursorToDocStart(extend = false): void {
-    const oldCursor = { ...this.cursor };
-    this.cursor = { line: 0, column: 0 };
+    const cursor = this.getPrimaryCursor();
+    const oldPos = this.clonePosition(cursor.position);
+
+    // Clear secondary cursors for document navigation
+    this.clearSecondaryCursors();
+
+    this.cursors[0]!.position = { line: 0, column: 0 };
+    this.cursors[0]!.desiredColumn = 0;
 
     if (extend) {
-      this.extendSelection(oldCursor, this.cursor);
+      if (!this.cursors[0]!.selection) {
+        this.cursors[0]!.selection = { anchor: oldPos, head: { line: 0, column: 0 } };
+      } else {
+        this.cursors[0]!.selection.head = { line: 0, column: 0 };
+      }
     } else {
-      this.clearSelection();
+      this.cursors[0]!.selection = null;
     }
 
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Move cursor to document end.
+   * Move cursor to document end (clears secondary cursors).
    */
   moveCursorToDocEnd(extend = false): void {
-    const oldCursor = { ...this.cursor };
-    this.cursor.line = this.lines.length - 1;
-    this.cursor.column = this.lines[this.cursor.line]!.text.length;
+    const cursor = this.getPrimaryCursor();
+    const oldPos = this.clonePosition(cursor.position);
+
+    // Clear secondary cursors for document navigation
+    this.clearSecondaryCursors();
+
+    const lastLine = this.lines.length - 1;
+    const lastCol = this.lines[lastLine]!.text.length;
+    this.cursors[0]!.position = { line: lastLine, column: lastCol };
+    this.cursors[0]!.desiredColumn = lastCol;
 
     if (extend) {
-      this.extendSelection(oldCursor, this.cursor);
+      if (!this.cursors[0]!.selection) {
+        this.cursors[0]!.selection = { anchor: oldPos, head: { line: lastLine, column: lastCol } };
+      } else {
+        this.cursors[0]!.selection.head = { line: lastLine, column: lastCol };
+      }
     } else {
-      this.clearSelection();
+      this.cursors[0]!.selection = null;
     }
 
-    this.ensureCursorVisible();
-    this.callbacks.onCursorChange?.(this.cursor);
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onCursorChange?.(this.cursors);
     this.ctx.markDirty();
   }
 
   /**
-   * Extend selection from old cursor to new cursor.
+   * Select all text in document.
    */
-  private extendSelection(from: CursorPosition, to: CursorPosition): void {
-    if (!this.selection) {
-      this.selection = { start: { ...from }, end: { ...to } };
-    } else {
-      this.selection.end = { ...to };
+  selectAll(): void {
+    const lastLine = this.lines.length - 1;
+    const lastCol = this.lines[lastLine]!.text.length;
+
+    this.cursors = [{
+      position: { line: lastLine, column: lastCol },
+      selection: {
+        anchor: { line: 0, column: 0 },
+        head: { line: lastLine, column: lastCol },
+      },
+      desiredColumn: lastCol,
+    }];
+    this.primaryCursorIndex = 0;
+
+    this.callbacks.onCursorChange?.(this.cursors);
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Ensure all cursors are within document bounds.
+   */
+  private ensureCursorsInBounds(): void {
+    for (const cursor of this.cursors) {
+      cursor.position.line = Math.max(0, Math.min(cursor.position.line, this.lines.length - 1));
+      const lineLen = this.lines[cursor.position.line]!.text.length;
+      cursor.position.column = Math.max(0, Math.min(cursor.position.column, lineLen));
     }
-    this.callbacks.onSelectionChange?.(this.selection);
   }
 
   /**
-   * Ensure cursor is within document bounds.
+   * Ensure primary cursor is visible in viewport.
    */
-  private ensureCursorInBounds(): void {
-    this.cursor.line = Math.max(0, Math.min(this.cursor.line, this.lines.length - 1));
-    this.ensureColumnInBounds();
-  }
-
-  /**
-   * Ensure column is within current line bounds.
-   */
-  private ensureColumnInBounds(): void {
-    const lineLen = this.lines[this.cursor.line]!.text.length;
-    this.cursor.column = Math.max(0, Math.min(this.cursor.column, lineLen));
-  }
-
-  /**
-   * Ensure cursor is visible in viewport.
-   */
-  private ensureCursorVisible(): void {
+  private ensurePrimaryCursorVisible(): void {
+    const cursor = this.getPrimaryCursor();
     const viewportHeight = this.bounds.height;
     const rightMargin = this.getRightMarginWidth();
     const viewportWidth = this.bounds.width - this.gutterWidth - rightMargin;
 
     // Vertical scrolling
-    if (this.cursor.line < this.scrollTop) {
-      this.scrollTop = this.cursor.line;
-    } else if (this.cursor.line >= this.scrollTop + viewportHeight) {
-      this.scrollTop = this.cursor.line - viewportHeight + 1;
+    if (cursor.position.line < this.scrollTop) {
+      this.scrollTop = cursor.position.line;
+    } else if (cursor.position.line >= this.scrollTop + viewportHeight) {
+      this.scrollTop = cursor.position.line - viewportHeight + 1;
     }
 
     // Horizontal scrolling
-    if (this.cursor.column < this.scrollLeft) {
-      this.scrollLeft = this.cursor.column;
-    } else if (this.cursor.column >= this.scrollLeft + viewportWidth) {
-      this.scrollLeft = this.cursor.column - viewportWidth + 1;
+    if (cursor.position.column < this.scrollLeft) {
+      this.scrollLeft = cursor.position.column;
+    } else if (cursor.position.column >= this.scrollLeft + viewportWidth) {
+      this.scrollLeft = cursor.position.column - viewportWidth + 1;
     }
   }
 
@@ -672,23 +993,42 @@ export class DocumentEditor extends BaseElement {
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Insert text at cursor.
+   * Insert text at all cursor positions.
+   * For multi-cursor, processes from bottom to top to avoid index shifting.
    */
   insertText(text: string): void {
-    // Delete selection first if any
-    if (this.selection) {
-      this.deleteSelection();
+    // Delete selections first
+    this.deleteAllSelections();
+
+    // Process cursors from bottom to top
+    const sortedCursors = [...this.cursors].sort((a, b) => this.comparePositions(b.position, a.position));
+
+    for (const cursor of sortedCursors) {
+      this.insertTextAtPosition(cursor, text);
     }
 
-    const line = this.lines[this.cursor.line]!;
-    const before = line.text.slice(0, this.cursor.column);
-    const after = line.text.slice(this.cursor.column);
+    this.modified = true;
+    this.contentVersion++;
+    this.updateGutterWidth();
+    this.updateFoldRegions();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onContentChange?.(this.getContent());
+    this.ctx.markDirty();
+  }
 
-    // Handle newlines
+  /**
+   * Insert text at a specific cursor position.
+   */
+  private insertTextAtPosition(cursor: Cursor, text: string): void {
+    const line = this.lines[cursor.position.line]!;
+    const before = line.text.slice(0, cursor.position.column);
+    const after = line.text.slice(cursor.position.column);
+
     const insertLines = text.split('\n');
     if (insertLines.length === 1) {
       line.text = before + text + after;
-      this.cursor.column += text.length;
+      cursor.position.column += text.length;
+      cursor.desiredColumn = cursor.position.column;
     } else {
       // Multi-line insert
       line.text = before + insertLines[0]!;
@@ -697,73 +1037,108 @@ export class DocumentEditor extends BaseElement {
         newLines.push({ text: insertLines[i]! });
       }
       newLines.push({ text: insertLines[insertLines.length - 1]! + after });
-      this.lines.splice(this.cursor.line + 1, 0, ...newLines);
-      this.cursor.line += insertLines.length - 1;
-      this.cursor.column = insertLines[insertLines.length - 1]!.length;
+      this.lines.splice(cursor.position.line + 1, 0, ...newLines);
+      cursor.position.line += insertLines.length - 1;
+      cursor.position.column = insertLines[insertLines.length - 1]!.length;
+      cursor.desiredColumn = cursor.position.column;
     }
-
-    this.modified = true;
-    this.contentVersion++;
-    this.updateGutterWidth();
-    this.updateFoldRegions();
-    this.ensureCursorVisible();
-    this.callbacks.onContentChange?.(this.getContent());
-    this.ctx.markDirty();
   }
 
   /**
-   * Delete character before cursor (backspace).
+   * Delete character before all cursors (backspace).
    */
   deleteBackward(): void {
-    if (this.selection) {
-      this.deleteSelection();
+    // If any cursor has a selection, delete selections instead
+    if (this.cursors.some((c) => this.hasSelectionContent(c.selection))) {
+      this.deleteAllSelections();
+      this.modified = true;
+      this.contentVersion++;
+      this.updateFoldRegions();
+      this.ensurePrimaryCursorVisible();
+      this.callbacks.onContentChange?.(this.getContent());
+      this.ctx.markDirty();
       return;
     }
 
-    if (this.cursor.column > 0) {
-      const line = this.lines[this.cursor.line]!;
-      line.text = line.text.slice(0, this.cursor.column - 1) + line.text.slice(this.cursor.column);
-      this.cursor.column--;
-    } else if (this.cursor.line > 0) {
-      // Join with previous line
-      const prevLine = this.lines[this.cursor.line - 1]!;
-      const currLine = this.lines[this.cursor.line]!;
-      const newColumn = prevLine.text.length;
-      prevLine.text += currLine.text;
-      this.lines.splice(this.cursor.line, 1);
-      this.cursor.line--;
-      this.cursor.column = newColumn;
-      this.updateGutterWidth();
+    // Process cursors from bottom to top
+    const sortedCursors = [...this.cursors].sort((a, b) => this.comparePositions(b.position, a.position));
+
+    for (const cursor of sortedCursors) {
+      if (cursor.position.column > 0) {
+        const line = this.lines[cursor.position.line]!;
+        line.text = line.text.slice(0, cursor.position.column - 1) + line.text.slice(cursor.position.column);
+        cursor.position.column--;
+        cursor.desiredColumn = cursor.position.column;
+      } else if (cursor.position.line > 0) {
+        // Join with previous line
+        const prevLine = this.lines[cursor.position.line - 1]!;
+        const currLine = this.lines[cursor.position.line]!;
+        const newColumn = prevLine.text.length;
+        prevLine.text += currLine.text;
+        this.lines.splice(cursor.position.line, 1);
+        cursor.position.line--;
+        cursor.position.column = newColumn;
+        cursor.desiredColumn = newColumn;
+
+        // Adjust other cursors that were on lines below
+        for (const other of this.cursors) {
+          if (other !== cursor && other.position.line > cursor.position.line) {
+            other.position.line--;
+          }
+        }
+      }
     }
 
+    this.mergeOverlappingCursors();
+    this.updateGutterWidth();
     this.modified = true;
     this.contentVersion++;
     this.updateFoldRegions();
-    this.ensureCursorVisible();
+    this.ensurePrimaryCursorVisible();
     this.callbacks.onContentChange?.(this.getContent());
     this.ctx.markDirty();
   }
 
   /**
-   * Delete character at cursor (delete key).
+   * Delete character at all cursors (delete key).
    */
   deleteForward(): void {
-    if (this.selection) {
-      this.deleteSelection();
+    // If any cursor has a selection, delete selections instead
+    if (this.cursors.some((c) => this.hasSelectionContent(c.selection))) {
+      this.deleteAllSelections();
+      this.modified = true;
+      this.contentVersion++;
+      this.updateFoldRegions();
+      this.ensurePrimaryCursorVisible();
+      this.callbacks.onContentChange?.(this.getContent());
+      this.ctx.markDirty();
       return;
     }
 
-    const line = this.lines[this.cursor.line]!;
-    if (this.cursor.column < line.text.length) {
-      line.text = line.text.slice(0, this.cursor.column) + line.text.slice(this.cursor.column + 1);
-    } else if (this.cursor.line < this.lines.length - 1) {
-      // Join with next line
-      const nextLine = this.lines[this.cursor.line + 1]!;
-      line.text += nextLine.text;
-      this.lines.splice(this.cursor.line + 1, 1);
-      this.updateGutterWidth();
+    // Process cursors from bottom to top
+    const sortedCursors = [...this.cursors].sort((a, b) => this.comparePositions(b.position, a.position));
+
+    for (const cursor of sortedCursors) {
+      const line = this.lines[cursor.position.line]!;
+      if (cursor.position.column < line.text.length) {
+        line.text = line.text.slice(0, cursor.position.column) + line.text.slice(cursor.position.column + 1);
+      } else if (cursor.position.line < this.lines.length - 1) {
+        // Join with next line
+        const nextLine = this.lines[cursor.position.line + 1]!;
+        line.text += nextLine.text;
+        this.lines.splice(cursor.position.line + 1, 1);
+
+        // Adjust other cursors that were on lines below
+        for (const other of this.cursors) {
+          if (other !== cursor && other.position.line > cursor.position.line) {
+            other.position.line--;
+          }
+        }
+      }
     }
 
+    this.mergeOverlappingCursors();
+    this.updateGutterWidth();
     this.modified = true;
     this.contentVersion++;
     this.updateFoldRegions();
@@ -772,48 +1147,74 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
-   * Delete selected text.
+   * Delete all selections on all cursors.
    */
-  private deleteSelection(): void {
-    if (!this.selection) return;
+  private deleteAllSelections(): void {
+    // Process cursors with selections from bottom to top
+    const cursorsWithSelections = this.cursors
+      .filter((c) => this.hasSelectionContent(c.selection))
+      .sort((a, b) => {
+        const aRange = this.getSelectionRange(a.selection!);
+        const bRange = this.getSelectionRange(b.selection!);
+        return this.comparePositions(bRange.start, aRange.start);
+      });
 
-    // Normalize selection (start before end)
-    const { start, end } = this.normalizeSelection(this.selection);
+    for (const cursor of cursorsWithSelections) {
+      if (!cursor.selection) continue;
+
+      const { start, end } = this.getSelectionRange(cursor.selection);
+
+      if (start.line === end.line) {
+        // Single line deletion
+        const line = this.lines[start.line]!;
+        line.text = line.text.slice(0, start.column) + line.text.slice(end.column);
+      } else {
+        // Multi-line deletion
+        const startLine = this.lines[start.line]!;
+        const endLine = this.lines[end.line]!;
+        startLine.text = startLine.text.slice(0, start.column) + endLine.text.slice(end.column);
+        const linesRemoved = end.line - start.line;
+        this.lines.splice(start.line + 1, linesRemoved);
+
+        // Adjust other cursors that were on lines below
+        for (const other of this.cursors) {
+          if (other !== cursor && other.position.line > start.line) {
+            other.position.line -= linesRemoved;
+          }
+        }
+      }
+
+      cursor.position = this.clonePosition(start);
+      cursor.desiredColumn = start.column;
+      cursor.selection = null;
+    }
+
+    this.mergeOverlappingCursors();
+    this.updateGutterWidth();
+  }
+
+  /**
+   * Get selected text from primary cursor.
+   */
+  getSelectedText(): string {
+    const cursor = this.getPrimaryCursor();
+    if (!cursor.selection || !this.hasSelectionContent(cursor.selection)) {
+      return '';
+    }
+
+    const { start, end } = this.getSelectionRange(cursor.selection);
 
     if (start.line === end.line) {
-      // Single line
-      const line = this.lines[start.line]!;
-      line.text = line.text.slice(0, start.column) + line.text.slice(end.column);
-    } else {
-      // Multi-line
-      const startLine = this.lines[start.line]!;
-      const endLine = this.lines[end.line]!;
-      startLine.text = startLine.text.slice(0, start.column) + endLine.text.slice(end.column);
-      this.lines.splice(start.line + 1, end.line - start.line);
-      this.updateGutterWidth();
+      return this.lines[start.line]!.text.slice(start.column, end.column);
     }
 
-    this.cursor = { ...start };
-    this.selection = null;
-    this.modified = true;
-    this.contentVersion++;
-    this.updateFoldRegions();
-    this.callbacks.onContentChange?.(this.getContent());
-    this.callbacks.onSelectionChange?.(null);
-    this.ctx.markDirty();
-  }
-
-  /**
-   * Normalize selection so start is before end.
-   */
-  private normalizeSelection(sel: Selection): Selection {
-    if (
-      sel.start.line < sel.end.line ||
-      (sel.start.line === sel.end.line && sel.start.column <= sel.end.column)
-    ) {
-      return sel;
+    const lines: string[] = [];
+    lines.push(this.lines[start.line]!.text.slice(start.column));
+    for (let i = start.line + 1; i < end.line; i++) {
+      lines.push(this.lines[i]!.text);
     }
-    return { start: sel.end, end: sel.start };
+    lines.push(this.lines[end.line]!.text.slice(0, end.column));
+    return lines.join('\n');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -881,8 +1282,8 @@ export class DocumentEditor extends BaseElement {
         continue;
       }
 
-      // Determine line background
-      const isCurrentLine = bufferLine === this.cursor.line;
+      // Determine line background - highlight if any cursor is on this line
+      const isCurrentLine = this.cursors.some((c) => c.position.line === bufferLine);
       const lineBg = isCurrentLine && this.focused ? lineHighlight : bg;
       const currentGutterBg = isCurrentLine && this.focused ? lineHighlight : gutterBg;
 
@@ -917,17 +1318,23 @@ export class DocumentEditor extends BaseElement {
         }
       }
 
-      // Render selection highlight
-      if (this.selection) {
-        this.renderSelectionOnLine(buffer, contentX, screenY, bufferLine, contentWidth, selectionBg);
+      // Render selection highlights for all cursors
+      for (const cursor of this.cursors) {
+        if (cursor.selection && this.hasSelectionContent(cursor.selection)) {
+          this.renderCursorSelectionOnLine(buffer, contentX, screenY, bufferLine, contentWidth, selectionBg, cursor);
+        }
       }
 
-      // Render cursor
-      if (isCurrentLine && this.focused && this.cursor.column >= this.scrollLeft) {
-        const cursorX = contentX + this.cursor.column - this.scrollLeft;
-        if (cursorX < x + width - rightMargin) {
-          const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
-          buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
+      // Render all cursors on this line
+      if (this.focused) {
+        for (const cursor of this.cursors) {
+          if (cursor.position.line === bufferLine && cursor.position.column >= this.scrollLeft) {
+            const cursorX = contentX + cursor.position.column - this.scrollLeft;
+            if (cursorX < x + width - rightMargin) {
+              const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
+              buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
+            }
+          }
         }
       }
 
@@ -1020,32 +1427,33 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
-   * Render selection highlight on a line.
+   * Render selection highlight on a line for a specific cursor.
    */
-  private renderSelectionOnLine(
+  private renderCursorSelectionOnLine(
     buffer: ScreenBuffer,
     x: number,
     y: number,
     lineNum: number,
     width: number,
-    selectionBg: string
+    selectionBg: string,
+    cursor: Cursor
   ): void {
-    if (!this.selection) return;
+    if (!cursor.selection) return;
 
-    const sel = this.normalizeSelection(this.selection);
+    const { start, end } = this.getSelectionRange(cursor.selection);
     const line = this.lines[lineNum]!;
 
     // Check if line is in selection
-    if (lineNum < sel.start.line || lineNum > sel.end.line) return;
+    if (lineNum < start.line || lineNum > end.line) return;
 
     let startCol = 0;
     let endCol = line.text.length;
 
-    if (lineNum === sel.start.line) {
-      startCol = sel.start.column;
+    if (lineNum === start.line) {
+      startCol = start.column;
     }
-    if (lineNum === sel.end.line) {
-      endCol = sel.end.column;
+    if (lineNum === end.line) {
+      endCol = end.column;
     }
 
     // Adjust for scroll
@@ -1306,20 +1714,6 @@ export class DocumentEditor extends BaseElement {
       return true;
     }
 
-    // Select all (Ctrl+A)
-    if (event.ctrl && event.key === 'a') {
-      this.selection = {
-        start: { line: 0, column: 0 },
-        end: {
-          line: this.lines.length - 1,
-          column: this.lines[this.lines.length - 1]!.text.length,
-        },
-      };
-      this.callbacks.onSelectionChange?.(this.selection);
-      this.ctx.markDirty();
-      return true;
-    }
-
     // Regular character input
     if (event.key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
       this.insertText(event.key);
@@ -1336,6 +1730,7 @@ export class DocumentEditor extends BaseElement {
     const minimapX = this.minimapEnabled
       ? x + width - DocumentEditor.SCROLLBAR_WIDTH - DocumentEditor.MINIMAP_WIDTH
       : scrollbarX;
+    const contentWidth = width - this.gutterWidth - rightMargin;
 
     // Check if click is on scrollbar
     if (event.x >= scrollbarX && event.x < x + width) {
@@ -1374,11 +1769,29 @@ export class DocumentEditor extends BaseElement {
       return true;
     }
 
+    // Handle selection drag release
+    if (event.type === 'release' && this.selectionDragging) {
+      this.selectionDragging = false;
+      return true;
+    }
+
+    // Handle selection drag
+    if (event.type === 'drag' && this.selectionDragging) {
+      const relX = event.x - this.bounds.x - this.gutterWidth;
+      const relY = event.y - this.bounds.y;
+      const bufferLine = this.screenRowToBufferLine(relY);
+
+      if (bufferLine !== null) {
+        const column = Math.max(0, Math.min(this.scrollLeft + relX, this.lines[bufferLine]!.text.length));
+        this.setCursorPosition({ line: bufferLine, column }, true);
+      }
+      return true;
+    }
+
     if (event.type === 'press' && event.button === 'left') {
       // Calculate clicked position
       const relX = event.x - this.bounds.x;
       const relY = event.y - this.bounds.y;
-      const contentWidth = width - this.gutterWidth - rightMargin;
 
       // Convert screen row to buffer line (accounting for hidden lines)
       const bufferLine = this.screenRowToBufferLine(relY);
@@ -1398,9 +1811,8 @@ export class DocumentEditor extends BaseElement {
           }
         }
 
-        // Click elsewhere in gutter - move cursor to that line
-        this.setCursor({ line: bufferLine, column: 0 });
-        this.clearSelection();
+        // Click in gutter - select entire line
+        this.selectLine(bufferLine);
         this.ctx.requestFocus();
         return true;
       }
@@ -1411,8 +1823,29 @@ export class DocumentEditor extends BaseElement {
         const lineText = this.lines[bufferLine];
         if (lineText) {
           const column = Math.min(this.scrollLeft + contentRelX, lineText.text.length);
-          this.setCursor({ line: bufferLine, column });
-          this.clearSelection();
+          const clickPos = { line: bufferLine, column };
+
+          // Update click count for double/triple click detection
+          const clickCount = this.updateClickCount(event.x, event.y);
+
+          if (clickCount === 3) {
+            // Triple click - select line
+            this.selectLine(bufferLine);
+          } else if (clickCount === 2) {
+            // Double click - select word
+            this.selectWordAt(clickPos);
+          } else if (event.ctrl) {
+            // Ctrl+click - add cursor
+            this.addCursor(clickPos);
+          } else if (event.shift) {
+            // Shift+click - extend selection
+            this.setCursorPosition(clickPos, true);
+          } else {
+            // Normal click - set cursor and start drag selection
+            this.setCursor(clickPos);
+            this.selectionDragging = true;
+          }
+
           this.ctx.requestFocus();
         }
         return true;
@@ -1427,6 +1860,321 @@ export class DocumentEditor extends BaseElement {
     }
 
     return false;
+  }
+
+  /**
+   * Update click count for double/triple click detection.
+   */
+  private updateClickCount(x: number, y: number): number {
+    const now = Date.now();
+    const timeDiff = now - this.clickState.lastClickTime;
+    const distX = Math.abs(x - this.clickState.lastClickX);
+    const distY = Math.abs(y - this.clickState.lastClickY);
+
+    if (
+      timeDiff < DocumentEditor.CLICK_TIMEOUT &&
+      distX <= DocumentEditor.CLICK_DISTANCE &&
+      distY <= DocumentEditor.CLICK_DISTANCE
+    ) {
+      this.clickState.clickCount = (this.clickState.clickCount % 3) + 1;
+    } else {
+      this.clickState.clickCount = 1;
+    }
+
+    this.clickState.lastClickTime = now;
+    this.clickState.lastClickX = x;
+    this.clickState.lastClickY = y;
+
+    return this.clickState.clickCount;
+  }
+
+  /**
+   * Select a word at the given position.
+   */
+  selectWordAt(pos: CursorPosition): void {
+    const line = this.lines[pos.line]!.text;
+    let start = pos.column;
+    let end = pos.column;
+
+    // Expand backwards to word boundary
+    while (start > 0 && /\w/.test(line[start - 1]!)) {
+      start--;
+    }
+
+    // Expand forwards to word boundary
+    while (end < line.length && /\w/.test(line[end]!)) {
+      end++;
+    }
+
+    // Set cursor with selection
+    this.cursors = [{
+      position: { line: pos.line, column: end },
+      selection: {
+        anchor: { line: pos.line, column: start },
+        head: { line: pos.line, column: end },
+      },
+      desiredColumn: end,
+    }];
+    this.primaryCursorIndex = 0;
+    this.callbacks.onCursorChange?.(this.cursors);
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Select an entire line.
+   */
+  selectLine(lineNum: number): void {
+    const lineLen = this.lines[lineNum]!.text.length;
+
+    this.cursors = [{
+      position: { line: lineNum, column: lineLen },
+      selection: {
+        anchor: { line: lineNum, column: 0 },
+        head: { line: lineNum, column: lineLen },
+      },
+      desiredColumn: lineLen,
+    }];
+    this.primaryCursorIndex = 0;
+    this.callbacks.onCursorChange?.(this.cursors);
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Select the next occurrence of the currently selected text.
+   * If nothing is selected, selects the word under the cursor first.
+   */
+  selectNextOccurrence(): void {
+    const primaryCursor = this.getPrimaryCursor();
+
+    // If no selection, select word under cursor first
+    if (!primaryCursor.selection || !this.hasSelectionContent(primaryCursor.selection)) {
+      this.selectWordAt(primaryCursor.position);
+      return;
+    }
+
+    // Get the selected text
+    const selectedText = this.getSelectedText();
+    if (!selectedText) return;
+
+    // Find the last cursor's position to search from
+    const lastCursor = this.cursors[this.cursors.length - 1]!;
+    const searchStart = lastCursor.selection
+      ? this.getSelectionRange(lastCursor.selection).end
+      : lastCursor.position;
+
+    // Search for next occurrence
+    const occurrence = this.findTextOccurrence(selectedText, searchStart, true);
+
+    if (occurrence) {
+      this.addCursorWithSelection(occurrence.start, occurrence.end);
+      this.ensurePrimaryCursorVisible();
+      this.callbacks.onCursorChange?.(this.cursors);
+    }
+  }
+
+  /**
+   * Select all occurrences of the currently selected text.
+   * If nothing is selected, selects the word under the cursor first.
+   */
+  selectAllOccurrences(): void {
+    const primaryCursor = this.getPrimaryCursor();
+
+    // If no selection, select word under cursor first
+    if (!primaryCursor.selection || !this.hasSelectionContent(primaryCursor.selection)) {
+      this.selectWordAt(primaryCursor.position);
+    }
+
+    // Get the selected text
+    const selectedText = this.getSelectedText();
+    if (!selectedText) return;
+
+    // Find all occurrences
+    const occurrences = this.findAllTextOccurrences(selectedText);
+
+    if (occurrences.length === 0) return;
+
+    // Create cursors for all occurrences
+    this.cursors = occurrences.map((occ) => ({
+      position: this.clonePosition(occ.end),
+      selection: {
+        anchor: this.clonePosition(occ.start),
+        head: this.clonePosition(occ.end),
+      },
+      desiredColumn: occ.end.column,
+    }));
+
+    this.primaryCursorIndex = 0;
+    this.callbacks.onCursorChange?.(this.cursors);
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Find the next occurrence of text starting from a position.
+   * Wraps around to the beginning of the document.
+   */
+  private findTextOccurrence(
+    text: string,
+    start: CursorPosition,
+    wrap: boolean
+  ): { start: CursorPosition; end: CursorPosition } | null {
+    const searchLines = text.split('\n');
+    const isSingleLine = searchLines.length === 1;
+
+    if (isSingleLine) {
+      // Single-line search
+      for (let line = start.line; line < this.lines.length; line++) {
+        const lineText = this.lines[line]!.text;
+        const startCol = line === start.line ? start.column : 0;
+        const idx = lineText.indexOf(text, startCol);
+
+        if (idx !== -1) {
+          // Check if this position is already selected
+          const isAlreadySelected = this.cursors.some((c) => {
+            if (!c.selection) return false;
+            const range = this.getSelectionRange(c.selection);
+            return range.start.line === line && range.start.column === idx;
+          });
+
+          if (!isAlreadySelected) {
+            return {
+              start: { line, column: idx },
+              end: { line, column: idx + text.length },
+            };
+          }
+        }
+      }
+
+      // Wrap around to beginning
+      if (wrap) {
+        for (let line = 0; line <= start.line; line++) {
+          const lineText = this.lines[line]!.text;
+          const endCol = line === start.line ? start.column : lineText.length;
+          const idx = lineText.indexOf(text);
+
+          if (idx !== -1 && idx < endCol) {
+            // Check if this position is already selected
+            const isAlreadySelected = this.cursors.some((c) => {
+              if (!c.selection) return false;
+              const range = this.getSelectionRange(c.selection);
+              return range.start.line === line && range.start.column === idx;
+            });
+
+            if (!isAlreadySelected) {
+              return {
+                start: { line, column: idx },
+                end: { line, column: idx + text.length },
+              };
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find all occurrences of text in the document.
+   */
+  private findAllTextOccurrences(text: string): { start: CursorPosition; end: CursorPosition }[] {
+    const occurrences: { start: CursorPosition; end: CursorPosition }[] = [];
+    const searchLines = text.split('\n');
+    const isSingleLine = searchLines.length === 1;
+
+    if (isSingleLine) {
+      for (let line = 0; line < this.lines.length; line++) {
+        const lineText = this.lines[line]!.text;
+        let startIdx = 0;
+
+        while (startIdx < lineText.length) {
+          const idx = lineText.indexOf(text, startIdx);
+          if (idx === -1) break;
+
+          occurrences.push({
+            start: { line, column: idx },
+            end: { line, column: idx + text.length },
+          });
+
+          startIdx = idx + 1;
+        }
+      }
+    }
+
+    return occurrences;
+  }
+
+  /**
+   * Add cursors above all current cursors.
+   */
+  addCursorAbove(): void {
+    const newCursors: Cursor[] = [];
+
+    for (const cursor of this.cursors) {
+      if (cursor.position.line > 0) {
+        const newLine = cursor.position.line - 1;
+        const newColumn = Math.min(cursor.desiredColumn, this.lines[newLine]!.text.length);
+
+        // Check if cursor already exists at this position
+        const exists = this.cursors.some(
+          (c) => c.position.line === newLine && c.position.column === newColumn
+        ) || newCursors.some(
+          (c) => c.position.line === newLine && c.position.column === newColumn
+        );
+
+        if (!exists) {
+          newCursors.push({
+            position: { line: newLine, column: newColumn },
+            selection: null,
+            desiredColumn: cursor.desiredColumn,
+          });
+        }
+      }
+    }
+
+    if (newCursors.length > 0) {
+      this.cursors.push(...newCursors);
+      this.sortCursors();
+      this.ensurePrimaryCursorVisible();
+      this.callbacks.onCursorChange?.(this.cursors);
+      this.ctx.markDirty();
+    }
+  }
+
+  /**
+   * Add cursors below all current cursors.
+   */
+  addCursorBelow(): void {
+    const newCursors: Cursor[] = [];
+
+    for (const cursor of this.cursors) {
+      if (cursor.position.line < this.lines.length - 1) {
+        const newLine = cursor.position.line + 1;
+        const newColumn = Math.min(cursor.desiredColumn, this.lines[newLine]!.text.length);
+
+        // Check if cursor already exists at this position
+        const exists = this.cursors.some(
+          (c) => c.position.line === newLine && c.position.column === newColumn
+        ) || newCursors.some(
+          (c) => c.position.line === newLine && c.position.column === newColumn
+        );
+
+        if (!exists) {
+          newCursors.push({
+            position: { line: newLine, column: newColumn },
+            selection: null,
+            desiredColumn: cursor.desiredColumn,
+          });
+        }
+      }
+    }
+
+    if (newCursors.length > 0) {
+      this.cursors.push(...newCursors);
+      this.sortCursors();
+      this.ensurePrimaryCursorVisible();
+      this.callbacks.onCursorChange?.(this.cursors);
+      this.ctx.markDirty();
+    }
   }
 
   /**
@@ -1509,8 +2257,7 @@ export class DocumentEditor extends BaseElement {
     return {
       uri: this.uri ?? undefined,
       scrollTop: this.scrollTop,
-      cursor: { ...this.cursor },
-      selection: this.selection ? { ...this.selection } : undefined,
+      cursors: this.cursors.map((c) => this.cloneCursor(c)),
       foldedRegions: this.foldManager.getFoldedLines(),
     };
   }
@@ -1520,11 +2267,9 @@ export class DocumentEditor extends BaseElement {
     if (s.scrollTop !== undefined) {
       this.scrollTop = s.scrollTop;
     }
-    if (s.cursor) {
-      this.cursor = { ...s.cursor };
-    }
-    if (s.selection) {
-      this.selection = { ...s.selection };
+    if (s.cursors && s.cursors.length > 0) {
+      this.cursors = s.cursors.map((c) => this.cloneCursor(c));
+      this.primaryCursorIndex = 0;
     }
     // Restore folded regions
     if (s.foldedRegions && s.foldedRegions.length > 0) {

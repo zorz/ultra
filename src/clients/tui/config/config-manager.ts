@@ -353,6 +353,10 @@ export class TUIConfigManager {
       { key: 'ctrl+v', command: 'edit.paste' },
       { key: 'ctrl+a', command: 'edit.selectAll' },
       { key: 'ctrl+d', command: 'edit.selectNextMatch' },
+      { key: 'ctrl+shift+d', command: 'edit.selectAllOccurrences' },
+      { key: 'ctrl+alt+up', command: 'editor.addCursorAbove' },
+      { key: 'ctrl+alt+down', command: 'editor.addCursorBelow' },
+      { key: 'escape', command: 'editor.clearCursors', when: 'editorHasMultipleCursors' },
 
       // Search
       { key: 'ctrl+f', command: 'search.find' },

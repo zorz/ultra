@@ -17,6 +17,12 @@ Issues and improvements to address in future sessions.
 
 - [ ] **Double-click file opening delay** - There is a noticeable delay when double-clicking a file to open it from either the file tree or git panel. Investigate and optimize the file opening path.
 
+- [ ] **Chord keybinding support** - Add support for chord keybindings (e.g., `ctrl+d a` to select all occurrences). The keybinding system should:
+  - Detect when a partial chord is entered and wait for the next key
+  - Show a visual indicator that a chord is in progress
+  - Timeout after a reasonable delay if no second key is pressed
+  - Support arbitrary chord lengths (2+ keys)
+
 ## Services
 
 ## ECP
