@@ -15,6 +15,8 @@ Issues and improvements to address in future sessions.
   - Creating a `ListElement` base class with shared selection rendering
   - Extracting theme color constants for list selection states
 
+- [ ] **Double-click file opening delay** - There is a noticeable delay when double-clicking a file to open it from either the file tree or git panel. Investigate and optimize the file opening path.
+
 ## Services
 
 ## ECP

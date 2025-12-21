@@ -927,22 +927,34 @@ export class TUIClient {
 
     // Folding commands
     this.commandHandlers.set('editor.fold', () => {
-      this.window.showNotification('Fold not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.foldAtCursor();
+      }
       return true;
     });
 
     this.commandHandlers.set('editor.unfold', () => {
-      this.window.showNotification('Unfold not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.unfoldAtCursor();
+      }
       return true;
     });
 
     this.commandHandlers.set('editor.foldAll', () => {
-      this.window.showNotification('Fold all not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.foldAll();
+      }
       return true;
     });
 
     this.commandHandlers.set('editor.unfoldAll', () => {
-      this.window.showNotification('Unfold all not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        element.unfoldAll();
+      }
       return true;
     });
   }

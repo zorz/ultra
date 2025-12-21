@@ -9,6 +9,7 @@ import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent, Position } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../ui/colors.ts';
+import { FoldManager } from '../../../core/fold.ts';
 
 // ============================================
 // Types
@@ -56,6 +57,7 @@ export interface DocumentEditorState {
   scrollTop: number;
   cursor: CursorPosition;
   selection?: Selection;
+  foldedRegions?: number[];
 }
 
 /**
@@ -70,6 +72,8 @@ export interface DocumentEditorCallbacks {
   onSelectionChange?: (selection: Selection | null) => void;
   /** Called when document is saved */
   onSave?: () => void;
+  /** Called when fold state changes */
+  onFoldChange?: () => void;
 }
 
 // ============================================
@@ -121,6 +125,18 @@ export class DocumentEditor extends BaseElement {
 
   /** Whether scrollbar dragging is active */
   private scrollbarDragging = false;
+
+  /** Fold manager for code folding */
+  private foldManager: FoldManager = new FoldManager();
+
+  /** Whether folding is enabled */
+  private foldingEnabled = true;
+
+  /** Version of content when fold regions were last computed */
+  private lastFoldVersion = -1;
+
+  /** Current content version (increments on change) */
+  private contentVersion = 0;
 
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
@@ -177,6 +193,203 @@ export class DocumentEditor extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Folding
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Enable or disable code folding.
+   */
+  setFoldingEnabled(enabled: boolean): void {
+    this.foldingEnabled = enabled;
+    this.updateGutterWidth();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Check if folding is enabled.
+   */
+  isFoldingEnabled(): boolean {
+    return this.foldingEnabled;
+  }
+
+  /**
+   * Get the fold manager.
+   */
+  getFoldManager(): FoldManager {
+    return this.foldManager;
+  }
+
+  /**
+   * Toggle fold at the current cursor line.
+   */
+  toggleFoldAtCursor(): boolean {
+    if (!this.foldingEnabled) return false;
+
+    // First check if cursor line starts a fold
+    if (this.foldManager.canFold(this.cursor.line) || this.foldManager.isFolded(this.cursor.line)) {
+      const result = this.foldManager.toggleFold(this.cursor.line);
+      if (result) {
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    // Otherwise, try to fold the containing region
+    const region = this.foldManager.findRegionContaining(this.cursor.line);
+    if (region) {
+      const result = this.foldManager.toggleFold(region.startLine);
+      if (result) {
+        // Move cursor to fold start line if it would be hidden
+        if (this.foldManager.isHidden(this.cursor.line)) {
+          this.cursor.line = region.startLine;
+          this.ensureColumnInBounds();
+        }
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    return false;
+  }
+
+  /**
+   * Toggle fold at a specific line.
+   */
+  toggleFoldAt(line: number): boolean {
+    if (!this.foldingEnabled) return false;
+
+    const result = this.foldManager.toggleFold(line);
+    if (result) {
+      // Move cursor if it would be hidden
+      if (this.foldManager.isHidden(this.cursor.line)) {
+        this.cursor.line = line;
+        this.ensureColumnInBounds();
+      }
+      this.callbacks.onFoldChange?.();
+      this.ctx.markDirty();
+    }
+    return result;
+  }
+
+  /**
+   * Fold at the current cursor line.
+   */
+  foldAtCursor(): boolean {
+    if (!this.foldingEnabled) return false;
+
+    // First check if cursor line starts a fold
+    if (this.foldManager.canFold(this.cursor.line)) {
+      const result = this.foldManager.fold(this.cursor.line);
+      if (result) {
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    // Otherwise, fold the containing region
+    const result = this.foldManager.foldContaining(this.cursor.line);
+    if (result) {
+      this.callbacks.onFoldChange?.();
+      this.ctx.markDirty();
+    }
+    return result;
+  }
+
+  /**
+   * Unfold at the current cursor line.
+   */
+  unfoldAtCursor(): boolean {
+    if (!this.foldingEnabled) return false;
+
+    // First check if cursor line starts a fold
+    if (this.foldManager.isFolded(this.cursor.line)) {
+      const result = this.foldManager.unfold(this.cursor.line);
+      if (result) {
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    // Find containing folded region
+    const region = this.foldManager.findRegionContaining(this.cursor.line);
+    if (region && region.isFolded) {
+      const result = this.foldManager.unfold(region.startLine);
+      if (result) {
+        this.callbacks.onFoldChange?.();
+        this.ctx.markDirty();
+      }
+      return result;
+    }
+
+    return false;
+  }
+
+  /**
+   * Fold all regions.
+   */
+  foldAll(): void {
+    if (!this.foldingEnabled) return;
+
+    this.foldManager.foldAll();
+
+    // Move cursor if it would be hidden
+    if (this.foldManager.isHidden(this.cursor.line)) {
+      // Find nearest visible line before cursor
+      for (let i = this.cursor.line; i >= 0; i--) {
+        if (!this.foldManager.isHidden(i)) {
+          this.cursor.line = i;
+          break;
+        }
+      }
+      this.ensureColumnInBounds();
+    }
+
+    this.callbacks.onFoldChange?.();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Unfold all regions.
+   */
+  unfoldAll(): void {
+    if (!this.foldingEnabled) return;
+
+    this.foldManager.unfoldAll();
+    this.callbacks.onFoldChange?.();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Update fold regions when content changes.
+   */
+  private updateFoldRegions(): void {
+    if (!this.foldingEnabled) return;
+    if (this.contentVersion === this.lastFoldVersion) return;
+
+    const lineTexts = this.lines.map((l) => l.text);
+    this.foldManager.computeRegions(lineTexts);
+    this.lastFoldVersion = this.contentVersion;
+  }
+
+  /**
+   * Get the fold indicator character for a line.
+   */
+  private getFoldIndicator(line: number): string {
+    if (!this.foldingEnabled) return ' ';
+
+    if (this.foldManager.isFolded(line)) {
+      return '▸';
+    } else if (this.foldManager.canFold(line)) {
+      return '▾';
+    }
+    return ' ';
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Content Management
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -189,8 +402,10 @@ export class DocumentEditor extends BaseElement {
       this.lines = [{ text: '' }];
     }
     this.modified = false;
+    this.contentVersion++;
     this.ensureCursorInBounds();
     this.updateGutterWidth();
+    this.updateFoldRegions();
     this.ctx.markDirty();
   }
 
@@ -488,7 +703,9 @@ export class DocumentEditor extends BaseElement {
     }
 
     this.modified = true;
+    this.contentVersion++;
     this.updateGutterWidth();
+    this.updateFoldRegions();
     this.ensureCursorVisible();
     this.callbacks.onContentChange?.(this.getContent());
     this.ctx.markDirty();
@@ -520,6 +737,8 @@ export class DocumentEditor extends BaseElement {
     }
 
     this.modified = true;
+    this.contentVersion++;
+    this.updateFoldRegions();
     this.ensureCursorVisible();
     this.callbacks.onContentChange?.(this.getContent());
     this.ctx.markDirty();
@@ -546,6 +765,8 @@ export class DocumentEditor extends BaseElement {
     }
 
     this.modified = true;
+    this.contentVersion++;
+    this.updateFoldRegions();
     this.callbacks.onContentChange?.(this.getContent());
     this.ctx.markDirty();
   }
@@ -575,6 +796,8 @@ export class DocumentEditor extends BaseElement {
     this.cursor = { ...start };
     this.selection = null;
     this.modified = true;
+    this.contentVersion++;
+    this.updateFoldRegions();
     this.callbacks.onContentChange?.(this.getContent());
     this.callbacks.onSelectionChange?.(null);
     this.ctx.markDirty();
@@ -633,34 +856,44 @@ export class DocumentEditor extends BaseElement {
     const cursorBg = this.ctx.getThemeColor('editorCursor.foreground', '#aeafad');
     const selectionBg = this.ctx.getThemeColor('editor.selectionBackground', '#264f78');
     const lineHighlight = this.ctx.getThemeColor('editor.lineHighlightBackground', '#2a2d2e');
+    const foldEllipsisFg = this.ctx.getThemeColor('editorGutter.foldingControlForeground', '#c5c5c5');
 
     // Calculate layout dimensions
     const rightMargin = this.getRightMarginWidth();
     const contentWidth = width - this.gutterWidth - rightMargin;
     const contentX = x + this.gutterWidth;
 
-    // Render each visible line
-    for (let row = 0; row < height; row++) {
-      const lineNum = this.scrollTop + row;
+    // Calculate gutter component widths
+    const digits = String(this.lines.length).length;
+    const lineNumWidth = Math.max(3, digits);
+    const foldIndicatorWidth = this.foldingEnabled ? 1 : 0;
+
+    // Get visible lines starting from scrollTop, skipping hidden lines
+    let bufferLine = this.scrollTop;
+    let row = 0;
+
+    while (row < height && bufferLine < this.lines.length) {
       const screenY = y + row;
 
-      if (lineNum >= this.lines.length) {
-        // Empty area
-        buffer.writeString(x, screenY, ' '.repeat(width - rightMargin), fg, bg);
+      // Skip hidden lines (inside folded regions)
+      if (this.foldManager.isHidden(bufferLine)) {
+        bufferLine++;
         continue;
       }
 
       // Determine line background
-      const isCurrentLine = lineNum === this.cursor.line;
+      const isCurrentLine = bufferLine === this.cursor.line;
       const lineBg = isCurrentLine && this.focused ? lineHighlight : bg;
-
-      // Render gutter (line number) - extend highlight through gutter on current line
-      const lineNumStr = String(lineNum + 1).padStart(this.gutterWidth - 1, ' ') + ' ';
       const currentGutterBg = isCurrentLine && this.focused ? lineHighlight : gutterBg;
-      buffer.writeString(x, screenY, lineNumStr, gutterFg, currentGutterBg);
+
+      // Render gutter: [line number][fold indicator][space]
+      const lineNumStr = String(bufferLine + 1).padStart(lineNumWidth, ' ');
+      const foldIndicator = this.foldingEnabled ? this.getFoldIndicator(bufferLine) : '';
+      const gutterStr = lineNumStr + foldIndicator + ' ';
+      buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
 
       // Render line content
-      const line = this.lines[lineNum]!;
+      const line = this.lines[bufferLine]!;
       const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
 
       // Fill background
@@ -673,9 +906,20 @@ export class DocumentEditor extends BaseElement {
         buffer.writeString(contentX, screenY, visibleText, fg, lineBg);
       }
 
+      // If this line is folded, show ellipsis indicator after content
+      if (this.foldManager.isFolded(bufferLine)) {
+        const foldedCount = this.foldManager.getFoldedLineCount(bufferLine);
+        const ellipsis = ` ... ${foldedCount} lines`;
+        const textLen = line.text.length - this.scrollLeft;
+        const ellipsisX = contentX + Math.max(0, textLen);
+        if (ellipsisX < x + width - rightMargin - ellipsis.length) {
+          buffer.writeString(ellipsisX, screenY, ellipsis, foldEllipsisFg, lineBg);
+        }
+      }
+
       // Render selection highlight
       if (this.selection) {
-        this.renderSelectionOnLine(buffer, contentX, screenY, lineNum, contentWidth, selectionBg);
+        this.renderSelectionOnLine(buffer, contentX, screenY, bufferLine, contentWidth, selectionBg);
       }
 
       // Render cursor
@@ -686,6 +930,16 @@ export class DocumentEditor extends BaseElement {
           buffer.set(cursorX, screenY, { char: cursorChar, fg: bg, bg: cursorBg });
         }
       }
+
+      bufferLine++;
+      row++;
+    }
+
+    // Fill remaining rows with empty lines
+    while (row < height) {
+      const screenY = y + row;
+      buffer.writeString(x, screenY, ' '.repeat(width - rightMargin), fg, bg);
+      row++;
     }
 
     // Render minimap if enabled
@@ -809,10 +1063,14 @@ export class DocumentEditor extends BaseElement {
 
   /**
    * Update gutter width based on line count.
+   * Gutter layout: [line number][fold indicator][space]
    */
   private updateGutterWidth(): void {
     const digits = String(this.lines.length).length;
-    this.gutterWidth = Math.max(4, digits + 2);
+    // digits + 1 (fold indicator) + 1 (space) = digits + 2
+    // Add 1 more for fold indicator when folding is enabled
+    const foldWidth = this.foldingEnabled ? 1 : 0;
+    this.gutterWidth = Math.max(4, digits + 1 + foldWidth + 1);
   }
 
   /**
@@ -1117,17 +1375,43 @@ export class DocumentEditor extends BaseElement {
     }
 
     if (event.type === 'press' && event.button === 'left') {
-      // Calculate clicked position in content area
-      const relX = event.x - this.bounds.x - this.gutterWidth;
+      // Calculate clicked position
+      const relX = event.x - this.bounds.x;
       const relY = event.y - this.bounds.y;
       const contentWidth = width - this.gutterWidth - rightMargin;
 
-      if (relX >= 0 && relX < contentWidth && this.lines.length > 0) {
-        const line = Math.max(0, Math.min(this.scrollTop + relY, this.lines.length - 1));
-        const lineText = this.lines[line];
+      // Convert screen row to buffer line (accounting for hidden lines)
+      const bufferLine = this.screenRowToBufferLine(relY);
+
+      // Check if click is in gutter area
+      if (relX >= 0 && relX < this.gutterWidth && bufferLine !== null) {
+        // Calculate fold indicator column position
+        const digits = String(this.lines.length).length;
+        const lineNumWidth = Math.max(3, digits);
+        const foldIndicatorCol = lineNumWidth;
+
+        // Check if click is on fold indicator
+        if (this.foldingEnabled && relX === foldIndicatorCol) {
+          if (this.foldManager.canFold(bufferLine) || this.foldManager.isFolded(bufferLine)) {
+            this.toggleFoldAt(bufferLine);
+            return true;
+          }
+        }
+
+        // Click elsewhere in gutter - move cursor to that line
+        this.setCursor({ line: bufferLine, column: 0 });
+        this.clearSelection();
+        this.ctx.requestFocus();
+        return true;
+      }
+
+      // Click in content area
+      const contentRelX = relX - this.gutterWidth;
+      if (contentRelX >= 0 && contentRelX < contentWidth && bufferLine !== null) {
+        const lineText = this.lines[bufferLine];
         if (lineText) {
-          const column = Math.min(this.scrollLeft + relX, lineText.text.length);
-          this.setCursor({ line, column });
+          const column = Math.min(this.scrollLeft + contentRelX, lineText.text.length);
+          this.setCursor({ line: bufferLine, column });
           this.clearSelection();
           this.ctx.requestFocus();
         }
@@ -1168,6 +1452,32 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
+   * Convert a screen row to a buffer line number.
+   * Accounts for hidden (folded) lines.
+   */
+  private screenRowToBufferLine(screenRow: number): number | null {
+    let bufferLine = this.scrollTop;
+    let row = 0;
+
+    while (bufferLine < this.lines.length) {
+      // Skip hidden lines
+      if (this.foldManager.isHidden(bufferLine)) {
+        bufferLine++;
+        continue;
+      }
+
+      if (row === screenRow) {
+        return bufferLine;
+      }
+
+      bufferLine++;
+      row++;
+    }
+
+    return null;
+  }
+
+  /**
    * Handle click on the minimap.
    */
   private handleMinimapClick(mouseY: number): void {
@@ -1201,6 +1511,7 @@ export class DocumentEditor extends BaseElement {
       scrollTop: this.scrollTop,
       cursor: { ...this.cursor },
       selection: this.selection ? { ...this.selection } : undefined,
+      foldedRegions: this.foldManager.getFoldedLines(),
     };
   }
 
@@ -1214,6 +1525,12 @@ export class DocumentEditor extends BaseElement {
     }
     if (s.selection) {
       this.selection = { ...s.selection };
+    }
+    // Restore folded regions
+    if (s.foldedRegions && s.foldedRegions.length > 0) {
+      for (const line of s.foldedRegions) {
+        this.foldManager.fold(line);
+      }
     }
     this.ctx.markDirty();
   }
