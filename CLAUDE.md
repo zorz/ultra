@@ -446,3 +446,144 @@ ECP methods use namespaced naming:
 3. **Fix issues as you go** - Address known issues when touching files
 4. **Add tests** - New service code should have test coverage
 5. **Update this file** - Keep CLAUDE.md current with new patterns
+
+## Architecture Principles
+
+These principles MUST be followed when writing code for Ultra:
+
+### 1. Use Services, Don't Duplicate
+
+All core functionality must go through the service layer. Do NOT duplicate service logic in the TUI or other clients.
+
+```typescript
+// GOOD - Use the service
+const content = await documentService.getContent(documentId);
+await gitService.commit(message);
+const settings = sessionService.getSetting('editor.tabSize');
+
+// BAD - Duplicating service logic in TUI
+const content = fs.readFileSync(filePath, 'utf-8'); // Don't do file I/O directly
+await $`git commit -m ${message}`.quiet();          // Don't shell out directly from TUI
+const tabSize = 4;                                   // Don't hardcode settings
+```
+
+### 2. Settings Over Hardcoded Values
+
+Never hardcode values that should be configurable. Use the session service:
+
+```typescript
+// GOOD - Read from settings
+const tabSize = sessionService.getSetting('editor.tabSize');
+const theme = sessionService.getSetting('workbench.colorTheme');
+const scrollback = sessionService.getSetting('terminal.integrated.scrollback');
+
+// BAD - Magic numbers
+const tabSize = 4;
+const theme = 'catppuccin-mocha';
+const scrollback = 1000;
+```
+
+If a setting doesn't exist yet, add it to the settings schema in `src/services/session/`.
+
+### 3. TUI Translates to ECP, Doesn't Implement Logic
+
+The TUI layer should:
+- Render UI elements
+- Handle user input (keyboard, mouse)
+- Translate user actions into service calls or ECP commands
+- Display results from services
+
+The TUI should NOT:
+- Implement business logic directly
+- Perform file I/O directly
+- Execute git commands directly
+- Parse or manipulate document content directly
+
+```typescript
+// GOOD - TUI delegates to services
+class DocumentEditor {
+  async save(): Promise<void> {
+    await this.documentService.save(this.documentId);
+  }
+}
+
+// BAD - TUI implements logic directly
+class DocumentEditor {
+  async save(): Promise<void> {
+    const content = this.getContent();
+    await Bun.write(this.filePath, content);
+  }
+}
+```
+
+### 4. Error Handling, Not Silent Failures
+
+All operations must provide feedback on failure. Never swallow errors silently:
+
+```typescript
+// GOOD - Proper error handling with feedback
+try {
+  await gitService.commit(message);
+  this.showNotification('Commit successful');
+} catch (error) {
+  debugLog(`[Git] Commit failed: ${error}`);
+  this.showError(`Commit failed: ${error.message}`);
+}
+
+// BAD - Silent failure
+const result = await gitService.commit(message);
+if (!result) {
+  return; // User has no idea what happened
+}
+```
+
+### 5. Service Layer Structure
+
+When adding new functionality, follow this service pattern:
+
+```
+src/services/<service-name>/
+├── interface.ts      # Abstract interface (contract)
+├── types.ts          # Type definitions
+├── local.ts          # Local implementation
+├── adapter.ts        # ECP JSON-RPC adapter
+└── index.ts          # Public exports
+```
+
+Available services:
+- **DocumentService**: Buffer, cursor, undo operations
+- **FileService**: File system abstraction (local, SSH, cloud)
+- **GitService**: Version control operations
+- **LSPService**: Language server integration
+- **SessionService**: Settings, keybindings, themes, session state
+- **SyntaxService**: Syntax highlighting
+- **TerminalService**: PTY management (TUI-specific)
+
+### 6. Single Source of Truth
+
+- **Settings defaults**: `src/services/session/defaults.ts` (not scattered across files)
+- **Keybinding defaults**: `src/clients/tui/config/keybindings.json`
+- **Theme definitions**: `src/config/themes/`
+- **Constants**: `src/constants.ts`
+
+Never duplicate default values. Import from the canonical source.
+
+### 7. Validation at Boundaries
+
+Validate input at system boundaries (user input, file parsing, API responses), not internally:
+
+```typescript
+// GOOD - Validate at boundary (user input)
+function handleUserInput(value: string): void {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed < 1 || parsed > 100) {
+    throw new Error('Value must be between 1 and 100');
+  }
+  this.setValue(parsed);
+}
+
+// Service trusts validated input internally
+function setValue(value: number): void {
+  this.value = value; // No need to re-validate
+}
+```
