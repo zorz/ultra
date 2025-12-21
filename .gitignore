@@ -9,3 +9,5 @@ ultra
 debug.log
 debug_stderr.log
 .DS_Store
+.ultra-new/
+.new-tui/

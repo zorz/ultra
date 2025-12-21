@@ -1020,8 +1020,15 @@ export class TUIClient {
       return true;
     });
 
-    this.commandHandlers.set('workbench.openSettings', () => {
-      this.window.showNotification('Settings dialog not yet implemented', 'info');
+    this.commandHandlers.set('workbench.openSettings', async () => {
+      const paths = this.configManager.getPaths();
+      await this.openFile(`file://${paths.userSettings}`);
+      return true;
+    });
+
+    this.commandHandlers.set('workbench.openKeybindings', async () => {
+      const paths = this.configManager.getPaths();
+      await this.openFile(`file://${paths.userKeybindings}`);
       return true;
     });
 
