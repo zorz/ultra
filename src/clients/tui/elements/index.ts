@@ -62,6 +62,11 @@ export {
   type GitPanelCallbacks,
 } from './git-panel.ts';
 
+export {
+  TerminalPanel,
+  createTerminalPanel,
+} from './terminal-panel.ts';
+
 // ============================================
 // Element Registration
 // ============================================
@@ -71,6 +76,7 @@ import { DocumentEditor } from './document-editor.ts';
 import { FileTree } from './file-tree.ts';
 import { TerminalSession } from './terminal-session.ts';
 import { GitPanel } from './git-panel.ts';
+import { TerminalPanel } from './terminal-panel.ts';
 
 /**
  * Register all built-in elements with the factory.

@@ -36,6 +36,7 @@ export type ElementType =
   | 'GitDiffView'
   | 'AgentChat'
   | 'TerminalSession'
+  | 'TerminalPanel'
   | 'SearchResults'
   | 'ProjectSearch'
   | 'DiagnosticsView';

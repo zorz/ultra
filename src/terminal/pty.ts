@@ -79,7 +79,7 @@ function ansiToHex(code: number): string | null {
 /**
  * Simple screen buffer for terminal rendering
  */
-class ScreenBuffer {
+export class ScreenBuffer {
   private buffer: TerminalCell[][];
   private scrollback: TerminalCell[][] = [];
   private viewOffset: number = 0;  // How many lines scrolled back (0 = showing current)
@@ -471,7 +471,7 @@ class ScreenBuffer {
 /**
  * Simple ANSI escape sequence parser
  */
-class AnsiParser {
+export class AnsiParser {
   private state: 'normal' | 'escape' | 'csi' | 'osc' = 'normal';
   private csiParams: string = '';
   private oscData: string = '';

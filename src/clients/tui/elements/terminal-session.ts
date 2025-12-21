@@ -2,11 +2,17 @@
  * TerminalSession Element
  *
  * An embedded terminal element for running shell commands.
+ * Can optionally be connected to a PTYBackend for live terminal emulation.
  */
 
 import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent, Cell } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
+import type {
+  PTYBackend,
+  TerminalCell,
+  Unsubscribe,
+} from '../../../terminal/pty-backend.ts';
 
 // ============================================
 // Types
@@ -86,6 +92,10 @@ export class TerminalSession extends BaseElement {
   private savedCursorX = 0;
   private savedCursorY = 0;
 
+  /** PTY Backend (optional - for live terminal emulation) */
+  private pty: PTYBackend | null = null;
+  private ptyUnsubscribes: Unsubscribe[] = [];
+
   constructor(id: string, title: string, ctx: ElementContext, callbacks: TerminalSessionCallbacks = {}) {
     super('TerminalSession', id, title, ctx);
     this.callbacks = callbacks;
@@ -109,6 +119,81 @@ export class TerminalSession extends BaseElement {
    */
   getCallbacks(): TerminalSessionCallbacks {
     return this.callbacks;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PTY Backend Connection
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Attach a PTY backend for live terminal emulation.
+   * When attached, rendering uses the PTY buffer and input is forwarded to PTY.
+   */
+  attachPty(pty: PTYBackend): void {
+    // Detach existing PTY if any
+    this.detachPty();
+
+    this.pty = pty;
+
+    // Wire up PTY callbacks
+    this.ptyUnsubscribes.push(
+      pty.onUpdate(() => {
+        this.ctx.markDirty();
+      })
+    );
+
+    this.ptyUnsubscribes.push(
+      pty.onTitle((title) => {
+        this.setTitle(title);
+        this.callbacks.onTitleChange?.(title);
+      })
+    );
+
+    this.ptyUnsubscribes.push(
+      pty.onExit((code) => {
+        this.exited = true;
+        this.exitCode = code;
+        this.callbacks.onExit?.(code);
+        this.ctx.markDirty();
+      })
+    );
+
+    // Sync initial size
+    const size = pty.getSize();
+    this.visibleCols = size.cols;
+    this.visibleRows = size.rows;
+
+    // Sync CWD if available
+    const cwd = pty.getCwd();
+    if (cwd) {
+      this.cwd = cwd;
+    }
+  }
+
+  /**
+   * Detach the PTY backend.
+   */
+  detachPty(): void {
+    // Unsubscribe all PTY callbacks
+    for (const unsub of this.ptyUnsubscribes) {
+      unsub();
+    }
+    this.ptyUnsubscribes = [];
+    this.pty = null;
+  }
+
+  /**
+   * Check if PTY is attached.
+   */
+  hasPty(): boolean {
+    return this.pty !== null;
+  }
+
+  /**
+   * Get the attached PTY backend.
+   */
+  getPty(): PTYBackend | null {
+    return this.pty;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -626,16 +711,21 @@ export class TerminalSession extends BaseElement {
       this.visibleCols = newCols;
       this.visibleRows = newRows;
 
-      // Resize existing lines
-      for (const line of this.lines) {
-        while (line.cells.length < newCols) {
-          line.cells.push({ char: ' ', fg: this.currentFg, bg: this.currentBg });
+      // Resize PTY if attached
+      if (this.pty) {
+        this.pty.resize(newCols, newRows);
+      } else {
+        // Resize internal buffer (only when no PTY)
+        for (const line of this.lines) {
+          while (line.cells.length < newCols) {
+            line.cells.push({ char: ' ', fg: this.currentFg, bg: this.currentBg });
+          }
         }
-      }
 
-      // Add/remove rows
-      while (this.lines.length < newRows) {
-        this.lines.push(this.createEmptyLine());
+        // Add/remove rows
+        while (this.lines.length < newRows) {
+          this.lines.push(this.createEmptyLine());
+        }
       }
 
       this.callbacks.onResize?.(newCols, newRows);
@@ -652,6 +742,87 @@ export class TerminalSession extends BaseElement {
     const defaultFg = this.ctx.getThemeColor('terminal.foreground', '#cccccc');
     const cursorBg = this.ctx.getThemeColor('terminalCursor.foreground', '#ffffff');
 
+    // Use PTY buffer if attached, otherwise use internal buffer
+    if (this.pty) {
+      this.renderFromPty(buffer, x, y, width, height, defaultFg, defaultBg, cursorBg);
+    } else {
+      this.renderFromInternal(buffer, x, y, width, height, defaultFg, defaultBg, cursorBg);
+    }
+
+    // Show exit status if terminal has exited
+    if (this.exited) {
+      const msg = `[Process exited with code ${this.exitCode}]`;
+      const msgX = x + Math.floor((width - msg.length) / 2);
+      const msgY = y + height - 1;
+      buffer.writeString(msgX, msgY, msg, '#888888', defaultBg);
+    }
+  }
+
+  /**
+   * Render from PTY backend buffer.
+   */
+  private renderFromPty(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    defaultFg: string,
+    defaultBg: string,
+    cursorBg: string
+  ): void {
+    if (!this.pty) return;
+
+    const ptyBuffer = this.pty.getBuffer();
+    const cursor = this.pty.getCursor();
+    const viewOffset = this.pty.getViewOffset();
+
+    for (let row = 0; row < height; row++) {
+      const lineIdx = row + viewOffset;
+      const screenY = y + row;
+
+      if (lineIdx < 0 || lineIdx >= ptyBuffer.length) {
+        // Empty row
+        buffer.writeString(x, screenY, ' '.repeat(width), defaultFg, defaultBg);
+        continue;
+      }
+
+      const line = ptyBuffer[lineIdx]!;
+
+      for (let col = 0; col < width; col++) {
+        const cell = line[col];
+        if (cell) {
+          buffer.set(x + col, screenY, this.convertTerminalCell(cell, defaultFg, defaultBg));
+        } else {
+          buffer.set(x + col, screenY, { char: ' ', fg: defaultFg, bg: defaultBg });
+        }
+      }
+
+      // Render cursor (only when not scrolled back and focused)
+      if (this.focused && viewOffset === 0 && row === cursor.y && cursor.x < width) {
+        const cursorCell = buffer.get(x + cursor.x, screenY);
+        buffer.set(x + cursor.x, screenY, {
+          char: cursorCell?.char ?? ' ',
+          fg: defaultBg,
+          bg: cursorBg,
+        });
+      }
+    }
+  }
+
+  /**
+   * Render from internal buffer (when no PTY attached).
+   */
+  private renderFromInternal(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    defaultFg: string,
+    defaultBg: string,
+    cursorBg: string
+  ): void {
     // Calculate visible range
     const startLine = this.lines.length - this.visibleRows - this.scrollTop;
 
@@ -694,14 +865,21 @@ export class TerminalSession extends BaseElement {
         }
       }
     }
+  }
 
-    // Show exit status if terminal has exited
-    if (this.exited) {
-      const msg = `[Process exited with code ${this.exitCode}]`;
-      const msgX = x + Math.floor((width - msg.length) / 2);
-      const msgY = y + height - 1;
-      buffer.writeString(msgX, msgY, msg, '#888888', defaultBg);
-    }
+  /**
+   * Convert PTY TerminalCell to TUI Cell.
+   */
+  private convertTerminalCell(cell: TerminalCell, defaultFg: string, defaultBg: string): Cell {
+    return {
+      char: cell.char,
+      fg: cell.fg ?? defaultFg,
+      bg: cell.bg ?? defaultBg,
+      bold: cell.bold || undefined,
+      italic: cell.italic || undefined,
+      underline: cell.underline || undefined,
+      dim: cell.dim || undefined,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -711,80 +889,89 @@ export class TerminalSession extends BaseElement {
   override handleKey(event: KeyEvent): boolean {
     if (this.exited) return false;
 
-    // Convert key event to terminal input
-    let data = '';
-
-    if (event.ctrl) {
-      // Control sequences
-      if (event.key.length === 1) {
-        const code = event.key.toLowerCase().charCodeAt(0);
-        if (code >= 97 && code <= 122) {
-          // Ctrl+A = 1, Ctrl+Z = 26
-          data = String.fromCharCode(code - 96);
-        }
-      }
-    } else if (event.key.length === 1) {
-      // Regular character
-      data = event.key;
-    } else {
-      // Special keys
-      switch (event.key) {
-        case 'Enter':
-          data = '\r';
-          break;
-        case 'Backspace':
-          data = '\x7f';
-          break;
-        case 'Tab':
-          data = '\t';
-          break;
-        case 'Escape':
-          data = '\x1b';
-          break;
-        case 'ArrowUp':
-          data = '\x1b[A';
-          break;
-        case 'ArrowDown':
-          data = '\x1b[B';
-          break;
-        case 'ArrowRight':
-          data = '\x1b[C';
-          break;
-        case 'ArrowLeft':
-          data = '\x1b[D';
-          break;
-        case 'Home':
-          data = '\x1b[H';
-          break;
-        case 'End':
-          data = '\x1b[F';
-          break;
-        case 'Delete':
-          data = '\x1b[3~';
-          break;
-        case 'PageUp':
-          data = '\x1b[5~';
-          break;
-        case 'PageDown':
-          data = '\x1b[6~';
-          break;
-      }
-    }
+    // Convert key event to terminal input sequence
+    const data = this.keyToSequence(event);
 
     if (data) {
-      this.callbacks.onData?.(data);
+      // Write to PTY if attached, otherwise use callback
+      if (this.pty) {
+        this.pty.write(data);
+      } else {
+        this.callbacks.onData?.(data);
+      }
       return true;
     }
 
     return false;
   }
 
+  /**
+   * Convert key event to terminal escape sequence.
+   */
+  private keyToSequence(event: KeyEvent): string {
+    if (event.ctrl) {
+      // Control sequences
+      if (event.key.length === 1) {
+        const code = event.key.toLowerCase().charCodeAt(0);
+        if (code >= 97 && code <= 122) {
+          // Ctrl+A = 1, Ctrl+Z = 26
+          return String.fromCharCode(code - 96);
+        }
+      }
+    } else if (event.key.length === 1) {
+      // Regular character
+      return event.key;
+    } else {
+      // Special keys
+      switch (event.key) {
+        case 'Enter':
+          return '\r';
+        case 'Backspace':
+          return '\x7f';
+        case 'Tab':
+          return '\t';
+        case 'Escape':
+          return '\x1b';
+        case 'ArrowUp':
+          return '\x1b[A';
+        case 'ArrowDown':
+          return '\x1b[B';
+        case 'ArrowRight':
+          return '\x1b[C';
+        case 'ArrowLeft':
+          return '\x1b[D';
+        case 'Home':
+          return '\x1b[H';
+        case 'End':
+          return '\x1b[F';
+        case 'Delete':
+          return '\x1b[3~';
+        case 'PageUp':
+          return '\x1b[5~';
+        case 'PageDown':
+          return '\x1b[6~';
+      }
+    }
+    return '';
+  }
+
   override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'scroll') {
-      // Scrollback
-      const delta = event.y > 0 ? 3 : -3;
-      const maxScroll = Math.max(0, this.lines.length - this.visibleRows);
-      this.scrollTop = Math.max(0, Math.min(this.scrollTop - delta, maxScroll));
+      // Scrollback - use PTY scrolling if attached
+      const scrollUp = event.y > 0;
+      const lines = 3;
+
+      if (this.pty) {
+        if (scrollUp) {
+          this.pty.scrollViewUp(lines);
+        } else {
+          this.pty.scrollViewDown(lines);
+        }
+      } else {
+        const delta = scrollUp ? lines : -lines;
+        const maxScroll = Math.max(0, this.lines.length - this.visibleRows);
+        this.scrollTop = Math.max(0, Math.min(this.scrollTop + delta, maxScroll));
+      }
       this.ctx.markDirty();
       return true;
     }

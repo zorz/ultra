@@ -15,6 +15,9 @@ import {
   FileTree,
   GitPanel,
   TerminalSession,
+  TerminalPanel,
+  createTerminalPanel,
+  createTestContext,
   registerBuiltinElements,
   type FileNode,
   type DocumentEditorCallbacks,
@@ -144,6 +147,15 @@ export class TUIClient {
 
   /** Git status polling rate in ms */
   private static readonly GIT_STATUS_POLL_INTERVAL = 1000;
+
+  /** Terminal panel */
+  private terminalPanel: TerminalPanel | null = null;
+
+  /** Terminal panel visible */
+  private terminalPanelVisible = false;
+
+  /** Terminal panel height (in rows) */
+  private terminalPanelHeight = 12;
 
   constructor(options: TUIClientOptions = {}) {
     this.workingDirectory = options.workingDirectory ?? process.cwd();
@@ -1051,7 +1063,7 @@ export class TUIClient {
     });
 
     this.commandHandlers.set('workbench.toggleTerminal', () => {
-      this.window.showNotification('Terminal toggle not yet implemented', 'info');
+      this.toggleTerminalPanel();
       return true;
     });
 
@@ -1068,8 +1080,32 @@ export class TUIClient {
     });
 
     // Terminal commands
-    this.commandHandlers.set('terminal.new', () => {
-      this.window.showNotification('New terminal not yet implemented', 'info');
+    this.commandHandlers.set('terminal.new', async () => {
+      await this.createNewTerminal();
+      return true;
+    });
+
+    this.commandHandlers.set('terminal.close', () => {
+      this.closeActiveTerminal();
+      return true;
+    });
+
+    this.commandHandlers.set('terminal.focus', () => {
+      this.focusTerminalPanel();
+      return true;
+    });
+
+    this.commandHandlers.set('terminal.nextTab', () => {
+      if (this.terminalPanel) {
+        this.terminalPanel.nextTerminal();
+      }
+      return true;
+    });
+
+    this.commandHandlers.set('terminal.previousTab', () => {
+      if (this.terminalPanel) {
+        this.terminalPanel.previousTerminal();
+      }
       return true;
     });
 
@@ -1298,6 +1334,141 @@ export class TUIClient {
       }
     }
     this.window.showNotification('Git panel not found', 'warning');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Terminal Panel
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Toggle terminal panel visibility.
+   */
+  private toggleTerminalPanel(): void {
+    if (this.terminalPanelVisible) {
+      this.hideTerminalPanel();
+    } else {
+      this.showTerminalPanel();
+    }
+  }
+
+  /**
+   * Show the terminal panel.
+   */
+  private async showTerminalPanel(): Promise<void> {
+    if (this.terminalPanelVisible) return;
+
+    debugLog('[TUIClient] Showing terminal panel');
+
+    // Create terminal panel if it doesn't exist
+    if (!this.terminalPanel) {
+      // Create element context for terminal panel
+      const ctx = createTestContext({
+        markDirty: () => this.scheduleRender(),
+        requestFocus: () => {
+          if (this.terminalPanel) {
+            const session = this.terminalPanel.getActiveSession();
+            if (session) {
+              this.window.focusElement(session);
+            }
+          }
+        },
+        getThemeColor: (key: string, fallback = '#ffffff') =>
+          this.theme[key] ?? fallback,
+        isPaneFocused: () => this.terminalPanelVisible,
+      });
+
+      this.terminalPanel = createTerminalPanel(ctx);
+
+      // Create first terminal if panel is empty
+      await this.terminalPanel.createTerminal(this.workingDirectory);
+    }
+
+    this.terminalPanelVisible = true;
+    this.layoutTerminalPanel();
+    this.scheduleRender();
+  }
+
+  /**
+   * Hide the terminal panel.
+   */
+  private hideTerminalPanel(): void {
+    if (!this.terminalPanelVisible) return;
+
+    debugLog('[TUIClient] Hiding terminal panel');
+
+    this.terminalPanelVisible = false;
+
+    // Re-layout without terminal panel
+    this.layoutTerminalPanel();
+    this.scheduleRender();
+  }
+
+  /**
+   * Layout terminal panel at the bottom of the screen.
+   */
+  private layoutTerminalPanel(): void {
+    if (!this.terminalPanel) return;
+
+    const size = this.getTerminalSize();
+    const panelHeight = this.terminalPanelVisible ? this.terminalPanelHeight : 0;
+
+    if (this.terminalPanelVisible) {
+      // Position terminal panel at bottom
+      this.terminalPanel.setBounds({
+        x: 0,
+        y: size.height - panelHeight,
+        width: size.width,
+        height: panelHeight,
+      });
+    }
+
+    // Adjust main content area height
+    // Note: This should trigger re-layout of the pane container
+    // For now, we rely on the window's layout system
+  }
+
+  /**
+   * Create a new terminal in the panel.
+   */
+  private async createNewTerminal(): Promise<void> {
+    // Show panel if not visible
+    if (!this.terminalPanelVisible) {
+      await this.showTerminalPanel();
+    }
+
+    // Create new terminal
+    if (this.terminalPanel) {
+      await this.terminalPanel.createTerminal(this.workingDirectory);
+      this.focusTerminalPanel();
+    }
+  }
+
+  /**
+   * Close the active terminal.
+   */
+  private closeActiveTerminal(): void {
+    if (this.terminalPanel) {
+      this.terminalPanel.closeActiveTerminal();
+
+      // Hide panel if no more terminals
+      if (!this.terminalPanel.hasTerminals()) {
+        this.hideTerminalPanel();
+      }
+    }
+  }
+
+  /**
+   * Focus the terminal panel.
+   */
+  private focusTerminalPanel(): void {
+    if (this.terminalPanel && this.terminalPanelVisible) {
+      const session = this.terminalPanel.getActiveSession();
+      if (session) {
+        this.window.focusElement(session);
+      } else {
+        this.window.focusElement(this.terminalPanel);
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -2035,8 +2206,8 @@ export class TUIClient {
     const ui: SessionUIState = {
       sidebarVisible: this.sidebarPaneId !== null,
       sidebarWidth: this.configManager.getWithDefault('tui.sidebar.width', 30),
-      terminalVisible: false, // TODO: Track terminal state
-      terminalHeight: this.configManager.getWithDefault('tui.terminal.height', 12),
+      terminalVisible: this.terminalPanelVisible,
+      terminalHeight: this.terminalPanelHeight,
       gitPanelVisible: false,
       gitPanelWidth: 40,
       activeSidebarPanel: 'files',
@@ -2193,6 +2364,19 @@ export class TUIClient {
         if (editor) {
           this.window.focusElement(editor);
         }
+      }
+    }
+
+    // Restore UI state
+    if (session.ui) {
+      // Restore terminal panel height
+      if (session.ui.terminalHeight) {
+        this.terminalPanelHeight = session.ui.terminalHeight;
+      }
+
+      // Restore terminal visibility
+      if (session.ui.terminalVisible) {
+        await this.showTerminalPanel();
       }
     }
 
