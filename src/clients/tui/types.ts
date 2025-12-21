@@ -88,6 +88,7 @@ export interface Cell {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  underlineColor?: string; // Color for underline (used for diagnostics)
   strikethrough?: boolean;
   dim?: boolean;
 }

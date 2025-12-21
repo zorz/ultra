@@ -61,6 +61,9 @@ import {
 import { createPtyBackend } from '../../../terminal/pty-factory.ts';
 import type { PTYBackend } from '../../../terminal/pty-backend.ts';
 
+// LSP
+import { createLSPIntegration, type LSPIntegration } from './lsp-integration.ts';
+
 // ============================================
 // Types
 // ============================================
@@ -168,6 +171,9 @@ export class TUIClient {
   /** Whether terminal panel has focus */
   private terminalFocused = false;
 
+  /** LSP integration */
+  private lspIntegration: LSPIntegration | null = null;
+
   constructor(options: TUIClientOptions = {}) {
     this.workingDirectory = options.workingDirectory ?? process.cwd();
     this.debug = options.debug ?? false;
@@ -272,6 +278,10 @@ export class TUIClient {
     this.syntaxService.setTheme(themeName);
     this.log('Syntax service ready');
 
+    // Initialize LSP integration
+    this.initLSPIntegration();
+    this.log('LSP integration initialized');
+
     // Initialize renderer
     this.renderer.initialize();
 
@@ -335,6 +345,12 @@ export class TUIClient {
 
     // Cleanup renderer
     this.renderer.cleanup();
+
+    // Shutdown LSP integration
+    if (this.lspIntegration) {
+      await this.lspIntegration.shutdown();
+      this.lspIntegration = null;
+    }
 
     // Close all documents and dispose syntax sessions
     for (const [, { documentId, syntaxSessionId }] of this.openDocuments) {
@@ -514,9 +530,11 @@ export class TUIClient {
   private configureDocumentEditor(editor: DocumentEditor, uri: string): void {
     // Debounce timer for syntax highlighting updates
     let syntaxUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+    // Debounce timer for LSP document change notifications
+    let lspUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
     const callbacks: DocumentEditorCallbacks = {
-      onContentChange: () => {
+      onContentChange: (content) => {
         // Update status bar (dirty indicator may change)
         this.updateStatusBarFile(editor);
 
@@ -527,6 +545,14 @@ export class TUIClient {
         syntaxUpdateTimer = setTimeout(() => {
           this.updateSyntaxHighlighting(uri, editor);
         }, 200);
+
+        // Debounce LSP document change notifications
+        if (lspUpdateTimer) {
+          clearTimeout(lspUpdateTimer);
+        }
+        lspUpdateTimer = setTimeout(() => {
+          this.lspDocumentChanged(uri, content);
+        }, 100);
       },
       onCursorChange: () => {
         // Update cursor position in status bar
@@ -534,6 +560,10 @@ export class TUIClient {
       },
       onSave: () => {
         this.saveCurrentDocument();
+      },
+      onCharTyped: (char, position) => {
+        // Trigger autocomplete if character is a trigger
+        this.handleCharTyped(editor, uri, char, position);
       },
     };
     editor.setCallbacks(callbacks);
@@ -630,6 +660,9 @@ export class TUIClient {
       // Track open document
       this.openDocuments.set(uri, { documentId: result.documentId, editorId, syntaxSessionId });
 
+      // Notify LSP of document open
+      await this.lspDocumentOpened(uri, fileContent.content);
+
       // Focus if requested
       if (options.focus !== false) {
         this.window.focusElement(editor);
@@ -668,6 +701,10 @@ export class TUIClient {
     try {
       const content = editor.getContent();
       await this.fileService.write(uri, content);
+
+      // Notify LSP of document save
+      await this.lspDocumentSaved(uri, content);
+
       this.window.showNotification('File saved', 'success');
       return true;
     } catch (error) {
@@ -692,6 +729,8 @@ export class TUIClient {
         await this.documentService.close(doc.documentId);
         this.openDocuments.delete(uri);
       }
+      // Notify LSP of document close
+      await this.lspDocumentClosed(uri);
     }
 
     // Remove from pane
@@ -725,6 +764,9 @@ export class TUIClient {
           if (doc.syntaxSessionId) {
             this.syntaxService.disposeSession(doc.syntaxSessionId);
           }
+
+          // Notify LSP of document close
+          this.lspDocumentClosed(uri);
 
           this.openDocuments.delete(uri);
 
@@ -1330,6 +1372,27 @@ export class TUIClient {
       if (element instanceof DocumentEditor) {
         element.clearSecondaryCursors();
       }
+      return true;
+    });
+
+    // LSP commands
+    this.commandHandlers.set('lsp.showHover', async () => {
+      await this.lspShowHover();
+      return true;
+    });
+
+    this.commandHandlers.set('lsp.goToDefinition', async () => {
+      await this.lspGoToDefinition();
+      return true;
+    });
+
+    this.commandHandlers.set('lsp.triggerCompletion', async () => {
+      await this.lspTriggerCompletion();
+      return true;
+    });
+
+    this.commandHandlers.set('lsp.triggerSignatureHelp', async () => {
+      await this.lspTriggerSignatureHelp();
       return true;
     });
   }
@@ -2784,6 +2847,250 @@ export class TUIClient {
    */
   notify(message: string, type: 'info' | 'warning' | 'error' | 'success' = 'info'): void {
     this.window.showNotification(message, type);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LSP Integration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Initialize LSP integration.
+   */
+  private initLSPIntegration(): void {
+    this.lspIntegration = createLSPIntegration(
+      this.window.getOverlayManager(),
+      {
+        onDirty: () => this.scheduleRender(),
+        getThemeColor: (key, fallback) => this.getThemeColor(key, fallback),
+        getScreenSize: () => this.getTerminalSize(),
+        getSetting: (key) => this.configManager.get(key),
+        openFile: async (uri, line, column) => {
+          await this.openFile(uri, { focus: true });
+          // Navigate to line/column if specified
+          if (line !== undefined) {
+            const element = this.window.getFocusedElement();
+            if (element instanceof DocumentEditor) {
+              element.goToLine(line + 1); // Convert 0-indexed to 1-indexed
+              if (column !== undefined) {
+                element.goToColumn(column);
+              }
+            }
+          }
+        },
+        showNotification: (message, type) => {
+          this.window.showNotification(message, type);
+        },
+        onDiagnosticsUpdate: (uri, lspDiagnostics) => {
+          this.updateEditorDiagnostics(uri, lspDiagnostics);
+        },
+      },
+      this.workingDirectory
+    );
+  }
+
+  /**
+   * Get the current document info for LSP.
+   */
+  private getCurrentEditorInfo(): {
+    uri: string;
+    position: { line: number; character: number };
+    screenX: number;
+    screenY: number;
+  } | null {
+    const element = this.window.getFocusedElement();
+    if (!(element instanceof DocumentEditor)) {
+      return null;
+    }
+
+    const uri = element.getUri();
+    if (!uri) return null;
+
+    const cursor = element.getPrimaryCursor();
+    const bounds = element.getBounds();
+
+    // Calculate screen position from cursor
+    // The cursor position is relative to the document, not the screen
+    const screenX = bounds.x + element.getGutterWidth() + cursor.position.column - element.getScrollLeft();
+    const screenY = bounds.y + cursor.position.line - element.getScrollTop();
+
+    return {
+      uri,
+      position: {
+        line: cursor.position.line,
+        character: cursor.position.column,
+      },
+      screenX,
+      screenY,
+    };
+  }
+
+  /**
+   * Show hover information at current cursor position.
+   */
+  private async lspShowHover(): Promise<void> {
+    if (!this.lspIntegration) return;
+
+    const info = this.getCurrentEditorInfo();
+    if (!info) {
+      this.window.showNotification('No editor focused', 'info');
+      return;
+    }
+
+    await this.lspIntegration.showHover(info.uri, info.position, info.screenX, info.screenY);
+  }
+
+  /**
+   * Go to definition at current cursor position.
+   */
+  private async lspGoToDefinition(): Promise<void> {
+    if (!this.lspIntegration) return;
+
+    const info = this.getCurrentEditorInfo();
+    if (!info) {
+      this.window.showNotification('No editor focused', 'info');
+      return;
+    }
+
+    await this.lspIntegration.goToDefinition(info.uri, info.position);
+  }
+
+  /**
+   * Trigger completion at current cursor position.
+   */
+  private async lspTriggerCompletion(): Promise<void> {
+    if (!this.lspIntegration) return;
+
+    const info = this.getCurrentEditorInfo();
+    if (!info) return;
+
+    await this.lspIntegration.triggerCompletion(info.uri, info.position, info.screenX, info.screenY);
+  }
+
+  /**
+   * Trigger signature help at current cursor position.
+   */
+  private async lspTriggerSignatureHelp(): Promise<void> {
+    if (!this.lspIntegration) return;
+
+    const info = this.getCurrentEditorInfo();
+    if (!info) return;
+
+    await this.lspIntegration.triggerSignatureHelp(info.uri, info.position, info.screenX, info.screenY);
+  }
+
+  /**
+   * Notify LSP that a document was opened.
+   */
+  private async lspDocumentOpened(uri: string, content: string): Promise<void> {
+    if (!this.lspIntegration) return;
+    await this.lspIntegration.initForDocument(uri, content);
+  }
+
+  /**
+   * Notify LSP that a document changed.
+   */
+  private async lspDocumentChanged(uri: string, content: string): Promise<void> {
+    if (!this.lspIntegration) return;
+    await this.lspIntegration.documentChanged(uri, content);
+  }
+
+  /**
+   * Notify LSP that a document was saved.
+   */
+  private async lspDocumentSaved(uri: string, content: string): Promise<void> {
+    if (!this.lspIntegration) return;
+    await this.lspIntegration.documentSaved(uri, content);
+  }
+
+  /**
+   * Notify LSP that a document was closed.
+   */
+  private async lspDocumentClosed(uri: string): Promise<void> {
+    if (!this.lspIntegration) return;
+    await this.lspIntegration.documentClosed(uri);
+  }
+
+  /**
+   * Get diagnostics for a document.
+   */
+  getLSPDiagnostics(uri: string): import('../../../services/lsp/types.ts').LSPDiagnostic[] {
+    if (!this.lspIntegration) return [];
+    return this.lspIntegration.getDiagnostics(uri);
+  }
+
+  /**
+   * Handle a character being typed in the editor.
+   * Triggers autocomplete if the character is a trigger character.
+   */
+  private handleCharTyped(
+    editor: DocumentEditor,
+    uri: string,
+    char: string,
+    position: { line: number; column: number }
+  ): void {
+    if (!this.lspIntegration) return;
+
+    // Check if this character should trigger completion
+    if (this.lspIntegration.shouldTriggerCompletion(char)) {
+      // Calculate screen coordinates for popup positioning
+      const bounds = editor.getBounds();
+      const gutterWidth = editor.getGutterWidth();
+      const scrollTop = editor.getScrollTop();
+      const scrollLeft = editor.getScrollLeft();
+
+      const screenX = bounds.x + gutterWidth + (position.column - scrollLeft);
+      const screenY = bounds.y + (position.line - scrollTop) + 1; // +1 to show below cursor
+
+      // Trigger completion with debounce
+      this.lspIntegration.triggerCompletionDebounced(
+        uri,
+        { line: position.line, character: position.column },
+        screenX,
+        screenY
+      );
+    } else if (this.lspIntegration.isCompletionVisible()) {
+      // Update filter if completion is already visible
+      // Get the current word prefix up to cursor
+      const line = editor.getLines()[position.line];
+      if (line) {
+        let prefix = '';
+        for (let i = position.column - 1; i >= 0; i--) {
+          const ch = line.text[i];
+          if (ch && /[\w_$]/.test(ch)) {
+            prefix = ch + prefix;
+          } else {
+            break;
+          }
+        }
+        this.lspIntegration.updateCompletionFilter(prefix);
+      }
+    }
+  }
+
+  /**
+   * Update diagnostics for a document editor.
+   * Converts LSP diagnostics to the DocumentEditor's format.
+   */
+  private updateEditorDiagnostics(uri: string, lspDiagnostics: import('../../../services/lsp/types.ts').LSPDiagnostic[]): void {
+    // Find the editor for this URI
+    const docInfo = this.openDocuments.get(uri);
+    if (!docInfo) return;
+
+    const editor = this.findEditorById(docInfo.editorId);
+    if (!editor || !(editor instanceof DocumentEditor)) return;
+
+    // Convert LSP diagnostics to DocumentEditor format
+    const diagnostics: import('../elements/document-editor.ts').DiagnosticInfo[] = lspDiagnostics.map((d) => ({
+      startLine: d.range.start.line,
+      startColumn: d.range.start.character,
+      endLine: d.range.end.line,
+      endColumn: d.range.end.character,
+      message: d.message,
+      severity: (d.severity ?? 1) as import('../elements/document-editor.ts').DiagnosticSeverity,
+      source: d.source,
+    }));
+
+    editor.setDiagnostics(diagnostics);
   }
 }
 

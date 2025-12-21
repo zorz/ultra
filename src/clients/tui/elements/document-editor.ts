@@ -61,6 +61,29 @@ export interface Cursor {
 }
 
 /**
+ * Diagnostic severity levels.
+ */
+export enum DiagnosticSeverity {
+  Error = 1,
+  Warning = 2,
+  Information = 3,
+  Hint = 4,
+}
+
+/**
+ * Diagnostic information for a range of text.
+ */
+export interface DiagnosticInfo {
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  message: string;
+  severity: DiagnosticSeverity;
+  source?: string;
+}
+
+/**
  * Document state for serialization.
  */
 export interface DocumentEditorState {
@@ -82,6 +105,8 @@ export interface DocumentEditorCallbacks {
   onSave?: () => void;
   /** Called when fold state changes */
   onFoldChange?: () => void;
+  /** Called when a character is typed (for autocomplete triggers) */
+  onCharTyped?: (char: string, position: CursorPosition) => void;
 }
 
 // ============================================
@@ -171,6 +196,9 @@ export class DocumentEditor extends BaseElement {
 
   /** Last width used for wrapping calculation */
   private lastWrapWidth = 0;
+
+  /** Diagnostics for this document (errors, warnings, etc.) */
+  private diagnostics: DiagnosticInfo[] = [];
 
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
@@ -499,6 +527,79 @@ export class DocumentEditor extends BaseElement {
    */
   getContent(): string {
     return this.lines.map((l) => l.text).join('\n');
+  }
+
+  /**
+   * Get lines (read-only access for external use).
+   */
+  getLines(): readonly DocumentLine[] {
+    return this.lines;
+  }
+
+  /**
+   * Set diagnostics for this document.
+   */
+  setDiagnostics(diagnostics: DiagnosticInfo[]): void {
+    this.diagnostics = diagnostics;
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Get diagnostics for this document.
+   */
+  getDiagnostics(): readonly DiagnosticInfo[] {
+    return this.diagnostics;
+  }
+
+  /**
+   * Get diagnostics for a specific line (for gutter rendering).
+   */
+  private getDiagnosticsForLine(line: number): DiagnosticInfo[] {
+    return this.diagnostics.filter(
+      (d) => line >= d.startLine && line <= d.endLine
+    );
+  }
+
+  /**
+   * Get the highest severity diagnostic for a line (for gutter icon).
+   */
+  private getHighestSeverityForLine(line: number): DiagnosticSeverity | null {
+    const lineDiagnostics = this.getDiagnosticsForLine(line);
+    if (lineDiagnostics.length === 0) return null;
+
+    // Lower number = higher severity (1=Error, 4=Hint)
+    return lineDiagnostics.reduce<DiagnosticSeverity>(
+      (min, d) => (d.severity < min ? d.severity : min),
+      DiagnosticSeverity.Hint
+    );
+  }
+
+  /**
+   * Get the gutter icon and color for a diagnostic severity.
+   */
+  private getDiagnosticIconAndColor(severity: DiagnosticSeverity): { icon: string; color: string } {
+    switch (severity) {
+      case DiagnosticSeverity.Error:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorError.foreground', '#f14c4c'),
+        };
+      case DiagnosticSeverity.Warning:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorWarning.foreground', '#cca700'),
+        };
+      case DiagnosticSeverity.Information:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorInfo.foreground', '#3794ff'),
+        };
+      case DiagnosticSeverity.Hint:
+        return {
+          icon: '○',
+          color: this.ctx.getThemeColor('editorHint.foreground', '#75beff'),
+        };
+    }
   }
 
   /**
@@ -1287,6 +1388,47 @@ export class DocumentEditor extends BaseElement {
     return this.scrollTop;
   }
 
+  /**
+   * Get horizontal scroll position.
+   */
+  getScrollLeft(): number {
+    return this.scrollLeft;
+  }
+
+  /**
+   * Get gutter width in characters.
+   */
+  getGutterWidth(): number {
+    return this.gutterWidth;
+  }
+
+  /**
+   * Go to a specific line number (1-indexed).
+   */
+  goToLine(lineNumber: number): void {
+    const targetLine = Math.max(0, Math.min(lineNumber - 1, this.lines.length - 1));
+    const primaryCursor = this.getPrimaryCursor();
+    primaryCursor.position.line = targetLine;
+    primaryCursor.position.column = 0;
+    primaryCursor.selection = null;
+    this.ensurePrimaryCursorVisible();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Go to a specific column on the current line (0-indexed).
+   */
+  goToColumn(column: number): void {
+    const primaryCursor = this.getPrimaryCursor();
+    const line = this.lines[primaryCursor.position.line];
+    if (line) {
+      primaryCursor.position.column = Math.max(0, Math.min(column, line.text.length));
+      primaryCursor.selection = null;
+      this.ensurePrimaryCursorVisible();
+      this.ctx.markDirty();
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Word Wrap Support
   // ─────────────────────────────────────────────────────────────────────────
@@ -1497,13 +1639,20 @@ export class DocumentEditor extends BaseElement {
       const lineBg = isCurrentLine && this.focused ? lineHighlight : bg;
       const currentGutterBg = isCurrentLine && this.focused ? lineHighlight : gutterBg;
 
-      // Render gutter: [line number][fold indicator][space]
+      // Render gutter: [diagnostic icon][line number][fold indicator][space]
       // Only show line number on first wrapped row
       if (wrapOffset === 0) {
         const lineNumStr = String(bufferLine + 1).padStart(lineNumWidth, ' ');
         const foldIndicator = this.foldingEnabled ? this.getFoldIndicator(bufferLine) : '';
         const gutterStr = lineNumStr + foldIndicator + ' ';
         buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
+
+        // Overlay diagnostic icon in first column if there's a diagnostic
+        const severity = this.getHighestSeverityForLine(bufferLine);
+        if (severity !== null) {
+          const { icon, color } = this.getDiagnosticIconAndColor(severity);
+          buffer.set(x, screenY, { char: icon, fg: color, bg: currentGutterBg });
+        }
       } else {
         // Wrapped continuation - show continuation marker or empty gutter
         const gutterStr = ' '.repeat(lineNumWidth) + (this.foldingEnabled ? ' ' : '') + ' ';
@@ -1550,6 +1699,12 @@ export class DocumentEditor extends BaseElement {
         if (cursor.selection && this.hasSelectionContent(cursor.selection)) {
           this.renderCursorSelectionOnLineWrapped(buffer, contentX, screenY, bufferLine, wrapOffset, contentWidth, selectionBg, cursor);
         }
+      }
+
+      // Render diagnostic underlines
+      if (wrapOffset === 0) {
+        // Only render underlines on first wrapped row (simplification)
+        this.renderDiagnosticUnderlines(buffer, contentX, screenY, bufferLine, contentWidth, lineBg);
       }
 
       // Render all cursors on this line
@@ -1600,6 +1755,83 @@ export class DocumentEditor extends BaseElement {
 
     // Render scrollbar
     this.renderScrollbar(buffer);
+  }
+
+  /**
+   * Render diagnostic underlines for a line.
+   * Adds a colored underline character under the diagnostic range.
+   */
+  private renderDiagnosticUnderlines(
+    buffer: ScreenBuffer,
+    contentX: number,
+    screenY: number,
+    bufferLine: number,
+    contentWidth: number,
+    bg: string
+  ): void {
+    const lineDiagnostics = this.getDiagnosticsForLine(bufferLine);
+    if (lineDiagnostics.length === 0) return;
+
+    for (const diag of lineDiagnostics) {
+      // Determine the color based on severity
+      const underlineColor = this.getDiagnosticUnderlineColor(diag.severity);
+
+      // Calculate the visible range on this line
+      let startCol: number;
+      let endCol: number;
+
+      if (diag.startLine === bufferLine) {
+        startCol = diag.startColumn;
+      } else {
+        startCol = 0; // Diagnostic starts on a previous line
+      }
+
+      if (diag.endLine === bufferLine) {
+        endCol = diag.endColumn;
+      } else {
+        // Diagnostic continues to next line
+        const line = this.lines[bufferLine];
+        endCol = line ? line.text.length : 0;
+      }
+
+      // Adjust for horizontal scroll
+      const visibleStart = Math.max(0, startCol - this.scrollLeft);
+      const visibleEnd = Math.min(contentWidth, endCol - this.scrollLeft);
+
+      // Draw underline characters
+      for (let col = visibleStart; col < visibleEnd; col++) {
+        const cellX = contentX + col;
+        const cell = buffer.get(cellX, screenY);
+        if (cell) {
+          // Keep the original character but change the foreground to show underline
+          // Since terminal can't do true underlines easily, we use the underline color as fg
+          // and rely on a styled character or attribute
+          buffer.set(cellX, screenY, {
+            char: cell.char,
+            fg: cell.fg,
+            bg: cell.bg,
+            underline: true,
+            underlineColor,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Get the underline color for a diagnostic severity.
+   */
+  private getDiagnosticUnderlineColor(severity: DiagnosticSeverity): string {
+    switch (severity) {
+      case DiagnosticSeverity.Error:
+        return this.ctx.getThemeColor('editorError.foreground', '#f14c4c');
+      case DiagnosticSeverity.Warning:
+        return this.ctx.getThemeColor('editorWarning.foreground', '#cca700');
+      case DiagnosticSeverity.Information:
+        return this.ctx.getThemeColor('editorInfo.foreground', '#3794ff');
+      case DiagnosticSeverity.Hint:
+        return this.ctx.getThemeColor('editorHint.foreground', '#75beff');
+    }
   }
 
   /**
@@ -2061,6 +2293,9 @@ export class DocumentEditor extends BaseElement {
     // Regular character input
     if (event.key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
       this.insertText(event.key);
+      // Notify of character typed for autocomplete trigger
+      const position = this.getPrimaryCursor().position;
+      this.callbacks.onCharTyped?.(event.key, { line: position.line, column: position.column });
       return true;
     }
 

@@ -479,6 +479,12 @@ export class TUIConfigManager {
       { key: 'ctrl+shift+]', command: 'editor.unfold' },
       { key: 'ctrl+k ctrl+0', command: 'editor.foldAll' },
       { key: 'ctrl+k ctrl+j', command: 'editor.unfoldAll' },
+
+      // LSP
+      { key: 'ctrl+k', command: 'lsp.showHover' },
+      { key: 'ctrl+shift+k', command: 'lsp.goToDefinition' },
+      { key: 'ctrl+space', command: 'lsp.triggerCompletion' },
+      { key: 'ctrl+shift+space', command: 'lsp.triggerSignatureHelp' },
     ];
   }
 

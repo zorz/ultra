@@ -336,6 +336,65 @@ export const settingsSchema: SettingsSchema = {
       default: true,
       description: 'Save unsaved content in session',
     },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // LSP Settings
+    // ─────────────────────────────────────────────────────────────────────────
+    'lsp.enabled': {
+      type: 'boolean',
+      default: true,
+      description: 'Enable/disable LSP features globally',
+    },
+    'lsp.completionDebounceMs': {
+      type: 'number',
+      default: 250,
+      minimum: 50,
+      maximum: 1000,
+      description: 'Debounce delay for completion requests in milliseconds',
+    },
+    'lsp.triggerCharacters': {
+      type: 'string',
+      default: '.:/<@(',
+      description: 'Characters that trigger completion immediately',
+    },
+    'lsp.signatureHelp.enabled': {
+      type: 'boolean',
+      default: true,
+      description: 'Enable signature help',
+    },
+    'lsp.signatureHelp.display': {
+      type: 'string',
+      default: 'popup',
+      enum: ['inline', 'statusBar', 'popup'],
+      description: 'Where to display signature help',
+    },
+    'lsp.diagnostics.enabled': {
+      type: 'boolean',
+      default: true,
+      description: 'Enable diagnostics',
+    },
+    'lsp.diagnostics.showInGutter': {
+      type: 'boolean',
+      default: true,
+      description: 'Show diagnostic icons in gutter',
+    },
+    'lsp.diagnostics.underlineErrors': {
+      type: 'boolean',
+      default: true,
+      description: 'Underline diagnostic errors in editor',
+    },
+    'lsp.diagnostics.delay': {
+      type: 'number',
+      default: 500,
+      minimum: 100,
+      maximum: 2000,
+      description: 'Delay before showing diagnostics after typing (ms)',
+    },
+    'lsp.hover.enabled': {
+      type: 'boolean',
+      default: true,
+      description: 'Enable hover information',
+    },
   },
 };
 

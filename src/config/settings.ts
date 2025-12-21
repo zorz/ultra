@@ -60,6 +60,27 @@ export interface EditorSettings {
   'session.save.foldState': boolean;
   'session.save.uiLayout': boolean;
   'session.save.unsavedContent': boolean;
+  // LSP settings
+  /** Enable/disable LSP features globally */
+  'lsp.enabled': boolean;
+  /** Debounce delay for completion requests in milliseconds */
+  'lsp.completionDebounceMs': number;
+  /** Characters that trigger completion immediately */
+  'lsp.triggerCharacters': string;
+  /** Enable signature help */
+  'lsp.signatureHelp.enabled': boolean;
+  /** Where to display signature help */
+  'lsp.signatureHelp.display': 'inline' | 'statusBar' | 'popup';
+  /** Enable diagnostics */
+  'lsp.diagnostics.enabled': boolean;
+  /** Show diagnostic icons in gutter */
+  'lsp.diagnostics.showInGutter': boolean;
+  /** Underline diagnostic errors in editor */
+  'lsp.diagnostics.underlineErrors': boolean;
+  /** Delay before showing diagnostics after typing (ms) */
+  'lsp.diagnostics.delay': number;
+  /** Enable hover information */
+  'lsp.hover.enabled': boolean;
 }
 
 const defaultSettings: EditorSettings = {
@@ -117,7 +138,18 @@ const defaultSettings: EditorSettings = {
   'session.save.scrollPositions': true,
   'session.save.foldState': true,
   'session.save.uiLayout': true,
-  'session.save.unsavedContent': true
+  'session.save.unsavedContent': true,
+  // LSP settings
+  'lsp.enabled': true,
+  'lsp.completionDebounceMs': 250,
+  'lsp.triggerCharacters': '.:/<@(',
+  'lsp.signatureHelp.enabled': true,
+  'lsp.signatureHelp.display': 'popup',
+  'lsp.diagnostics.enabled': true,
+  'lsp.diagnostics.showInGutter': true,
+  'lsp.diagnostics.underlineErrors': true,
+  'lsp.diagnostics.delay': 500,
+  'lsp.hover.enabled': true
 };
 
 export class Settings {
