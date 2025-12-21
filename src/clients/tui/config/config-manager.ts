@@ -1,0 +1,419 @@
+/**
+ * TUI Config Manager
+ *
+ * Manages configuration for the new TUI client.
+ * Uses a separate subfolder (~/.ultra/new-tui/) to avoid conflicts with the current version.
+ */
+
+import { mkdir } from 'fs/promises';
+import { debugLog } from '../../../debug.ts';
+import type { EditorSettings } from '../../../config/settings.ts';
+import type { KeyBinding } from '../../../input/keymap.ts';
+
+// ============================================
+// Types
+// ============================================
+
+/**
+ * TUI-specific settings (extends EditorSettings).
+ */
+export interface TUISettings extends Partial<EditorSettings> {
+  // TUI-specific settings can be added here
+  'tui.sidebar.width'?: number;
+  'tui.sidebar.visible'?: boolean;
+  'tui.terminal.height'?: number;
+}
+
+/**
+ * Config paths for different locations.
+ */
+export interface ConfigPaths {
+  /** User config directory (~/.ultra/new-tui/) */
+  userDir: string;
+  /** User settings file */
+  userSettings: string;
+  /** User keybindings file */
+  userKeybindings: string;
+  /** Workspace settings directory */
+  workspaceDir: string | null;
+  /** Workspace settings file */
+  workspaceSettings: string | null;
+}
+
+// ============================================
+// Config Manager
+// ============================================
+
+export class TUIConfigManager {
+  /** Current settings */
+  private settings: TUISettings = {};
+
+  /** Current keybindings */
+  private keybindings: KeyBinding[] = [];
+
+  /** Config paths */
+  private paths: ConfigPaths;
+
+  /** Settings change listeners */
+  private listeners: Map<string, Set<(value: unknown) => void>> = new Map();
+
+  /** Whether config has been loaded */
+  private loaded = false;
+
+  constructor(workingDirectory?: string) {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    const userDir = `${home}/.ultra/new-tui`;
+
+    this.paths = {
+      userDir,
+      userSettings: `${userDir}/settings.json`,
+      userKeybindings: `${userDir}/keybindings.json`,
+      workspaceDir: workingDirectory ? `${workingDirectory}/.ultra-new` : null,
+      workspaceSettings: workingDirectory ? `${workingDirectory}/.ultra-new/settings.json` : null,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Loading
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Load all configuration.
+   */
+  async load(): Promise<void> {
+    if (this.loaded) return;
+
+    await this.ensureConfigDirs();
+    await this.loadSettings();
+    await this.loadKeybindings();
+
+    this.loaded = true;
+    debugLog('[TUIConfigManager] Configuration loaded');
+  }
+
+  /**
+   * Ensure config directories exist.
+   */
+  private async ensureConfigDirs(): Promise<void> {
+    try {
+      await mkdir(this.paths.userDir, { recursive: true });
+
+      if (this.paths.workspaceDir) {
+        await mkdir(this.paths.workspaceDir, { recursive: true });
+      }
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Error creating config dirs: ${error}`);
+    }
+  }
+
+  /**
+   * Load settings from files.
+   */
+  private async loadSettings(): Promise<void> {
+    // Start with defaults
+    this.settings = this.getDefaultSettings();
+
+    // Load user settings
+    const userSettings = await this.loadJsonFile<TUISettings>(this.paths.userSettings);
+    if (userSettings) {
+      this.settings = { ...this.settings, ...userSettings };
+    }
+
+    // Load workspace settings (override user)
+    if (this.paths.workspaceSettings) {
+      const workspaceSettings = await this.loadJsonFile<TUISettings>(this.paths.workspaceSettings);
+      if (workspaceSettings) {
+        this.settings = { ...this.settings, ...workspaceSettings };
+      }
+    }
+  }
+
+  /**
+   * Load keybindings from files.
+   */
+  private async loadKeybindings(): Promise<void> {
+    // Start with defaults
+    this.keybindings = this.getDefaultKeybindings();
+
+    // Load user keybindings
+    const userKeybindings = await this.loadJsonFile<KeyBinding[]>(this.paths.userKeybindings);
+    if (userKeybindings && Array.isArray(userKeybindings)) {
+      // Merge: user bindings override defaults for same command
+      const commandMap = new Map<string, KeyBinding>();
+
+      for (const binding of this.keybindings) {
+        commandMap.set(binding.command, binding);
+      }
+
+      for (const binding of userKeybindings) {
+        commandMap.set(binding.command, binding);
+      }
+
+      this.keybindings = Array.from(commandMap.values());
+    }
+  }
+
+  /**
+   * Load a JSON file with comment support.
+   */
+  private async loadJsonFile<T>(path: string): Promise<T | null> {
+    try {
+      const file = Bun.file(path);
+      const exists = await file.exists();
+      if (!exists) return null;
+
+      const content = await file.text();
+
+      // Remove comments (JSON with comments support)
+      const cleanContent = content
+        .replace(/\/\/.*$/gm, '') // Single line comments
+        .replace(/\/\*[\s\S]*?\*\//g, ''); // Multi-line comments
+
+      return JSON.parse(cleanContent) as T;
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Error loading ${path}: ${error}`);
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Settings Access
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get a setting value.
+   */
+  get<K extends keyof TUISettings>(key: K): TUISettings[K] {
+    return this.settings[key];
+  }
+
+  /**
+   * Get a setting with a default fallback.
+   */
+  getWithDefault<K extends keyof TUISettings>(key: K, defaultValue: NonNullable<TUISettings[K]>): NonNullable<TUISettings[K]> {
+    return (this.settings[key] ?? defaultValue) as NonNullable<TUISettings[K]>;
+  }
+
+  /**
+   * Set a setting value.
+   */
+  set<K extends keyof TUISettings>(key: K, value: TUISettings[K]): void {
+    const oldValue = this.settings[key];
+    this.settings[key] = value;
+
+    if (oldValue !== value) {
+      this.notifyListeners(key, value);
+    }
+  }
+
+  /**
+   * Get all settings.
+   */
+  getAllSettings(): TUISettings {
+    return { ...this.settings };
+  }
+
+  /**
+   * Listen for setting changes.
+   */
+  onChange(key: string, callback: (value: unknown) => void): () => void {
+    if (!this.listeners.has(key)) {
+      this.listeners.set(key, new Set());
+    }
+    this.listeners.get(key)!.add(callback);
+
+    return () => {
+      this.listeners.get(key)?.delete(callback);
+    };
+  }
+
+  private notifyListeners(key: string, value: unknown): void {
+    const keyListeners = this.listeners.get(key);
+    if (keyListeners) {
+      for (const listener of keyListeners) {
+        listener(value);
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Keybindings Access
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get all keybindings.
+   */
+  getKeybindings(): KeyBinding[] {
+    return [...this.keybindings];
+  }
+
+  /**
+   * Get keybinding for a command.
+   */
+  getKeybindingForCommand(command: string): KeyBinding | undefined {
+    return this.keybindings.find((b) => b.command === command);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Saving
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Save user settings to file.
+   */
+  async saveSettings(): Promise<void> {
+    try {
+      const content = JSON.stringify(this.settings, null, 2);
+      await Bun.write(this.paths.userSettings, content);
+      debugLog('[TUIConfigManager] Settings saved');
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Error saving settings: ${error}`);
+    }
+  }
+
+  /**
+   * Save user keybindings to file.
+   */
+  async saveKeybindings(): Promise<void> {
+    try {
+      const content = JSON.stringify(this.keybindings, null, 2);
+      await Bun.write(this.paths.userKeybindings, content);
+      debugLog('[TUIConfigManager] Keybindings saved');
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Error saving keybindings: ${error}`);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Defaults
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get default settings.
+   */
+  private getDefaultSettings(): TUISettings {
+    return {
+      // Editor settings
+      'editor.fontSize': 14,
+      'editor.tabSize': 2,
+      'editor.insertSpaces': true,
+      'editor.wordWrap': 'off',
+      'editor.lineNumbers': 'on',
+      'editor.minimap.enabled': false, // Disabled by default in TUI
+      'editor.renderWhitespace': 'selection',
+
+      // Files
+      'files.autoSave': 'off',
+      'files.exclude': {
+        '**/node_modules': true,
+        '**/.git': true,
+        '**/.DS_Store': true,
+      },
+
+      // Theme
+      'workbench.colorTheme': 'Dark+',
+
+      // Sidebar
+      'workbench.sideBar.visible': true,
+      'workbench.sideBar.location': 'left',
+
+      // TUI-specific
+      'tui.sidebar.width': 30,
+      'tui.sidebar.visible': true,
+      'tui.terminal.height': 10,
+
+      // Terminal
+      'terminal.integrated.shell': process.env.SHELL || '/bin/zsh',
+      'terminal.integrated.position': 'bottom',
+
+      // Git
+      'git.statusInterval': 5000,
+      'git.panel.openOnStartup': true,
+    };
+  }
+
+  /**
+   * Get default keybindings.
+   */
+  private getDefaultKeybindings(): KeyBinding[] {
+    return [
+      // File operations
+      { key: 'ctrl+s', command: 'file.save' },
+      { key: 'ctrl+shift+s', command: 'file.saveAs' },
+      { key: 'ctrl+o', command: 'file.open' },
+      { key: 'ctrl+n', command: 'file.new' },
+      { key: 'ctrl+w', command: 'file.close' },
+
+      // Edit operations
+      { key: 'ctrl+z', command: 'edit.undo' },
+      { key: 'ctrl+shift+z', command: 'edit.redo' },
+      { key: 'ctrl+y', command: 'edit.redo' },
+      { key: 'ctrl+c', command: 'edit.copy' },
+      { key: 'ctrl+x', command: 'edit.cut' },
+      { key: 'ctrl+v', command: 'edit.paste' },
+      { key: 'ctrl+a', command: 'edit.selectAll' },
+      { key: 'ctrl+d', command: 'edit.selectNextMatch' },
+
+      // Search
+      { key: 'ctrl+f', command: 'search.find' },
+      { key: 'ctrl+h', command: 'search.replace' },
+      { key: 'ctrl+shift+f', command: 'search.findInFiles' },
+      { key: 'f3', command: 'search.findNext' },
+      { key: 'shift+f3', command: 'search.findPrevious' },
+
+      // Navigation
+      { key: 'ctrl+g', command: 'editor.gotoLine' },
+      { key: 'ctrl+p', command: 'workbench.quickOpen' },
+      { key: 'ctrl+shift+p', command: 'workbench.commandPalette' },
+      { key: 'ctrl+shift+o', command: 'editor.gotoSymbol' },
+      { key: 'ctrl+tab', command: 'workbench.focusNextPane' },
+      { key: 'ctrl+shift+tab', command: 'workbench.focusPreviousPane' },
+
+      // View
+      { key: 'ctrl+b', command: 'workbench.toggleSidebar' },
+      { key: 'ctrl+`', command: 'workbench.toggleTerminal' },
+      { key: 'ctrl+\\', command: 'workbench.splitEditor' },
+      { key: 'ctrl+1', command: 'workbench.focusEditor1' },
+      { key: 'ctrl+2', command: 'workbench.focusEditor2' },
+      { key: 'ctrl+3', command: 'workbench.focusEditor3' },
+
+      // Terminal
+      { key: 'ctrl+shift+`', command: 'terminal.new' },
+
+      // Git
+      { key: 'ctrl+shift+g', command: 'git.focusPanel' },
+
+      // App
+      { key: 'ctrl+q', command: 'workbench.quit' },
+      { key: 'ctrl+,', command: 'workbench.openSettings' },
+
+      // Folding
+      { key: 'ctrl+shift+[', command: 'editor.fold' },
+      { key: 'ctrl+shift+]', command: 'editor.unfold' },
+      { key: 'ctrl+k ctrl+0', command: 'editor.foldAll' },
+      { key: 'ctrl+k ctrl+j', command: 'editor.unfoldAll' },
+    ];
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Paths
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Get config paths.
+   */
+  getPaths(): ConfigPaths {
+    return { ...this.paths };
+  }
+}
+
+// ============================================
+// Factory Function
+// ============================================
+
+/**
+ * Create a new TUI config manager.
+ */
+export function createTUIConfigManager(workingDirectory?: string): TUIConfigManager {
+  return new TUIConfigManager(workingDirectory);
+}
