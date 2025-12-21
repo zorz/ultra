@@ -23,6 +23,11 @@ Issues and improvements to address in future sessions.
   - Timeout after a reasonable delay if no second key is pressed
   - Support arbitrary chord lengths (2+ keys)
 
+- [ ] **Shift+click selection not working** - Shift+click to extend selection in the DocumentEditor is not functioning. The code exists in `handleMouse()` but the shift modifier may not be reaching the handler correctly. Investigate:
+  - Whether the input handler is correctly parsing the shift modifier for mouse events
+  - Whether the mouse event is being intercepted before reaching the editor
+  - The `setCursorPosition(clickPos, true)` call with extend=true
+
 ## Services
 
 ## ECP

@@ -4,6 +4,7 @@
  * Overlay management for dialogs, command palette, and notifications.
  */
 
+// Overlay manager and base dialog
 export {
   OverlayManager,
   BaseDialog,
@@ -14,20 +15,56 @@ export {
   type Notification,
 } from './overlay-manager.ts';
 
+// Promise-based dialog base classes
 export {
-  CommandPalette,
-  createCommandPalette,
+  PromiseDialog,
+  type DialogResult,
+  type DialogCloseReason,
+  type DialogConfig,
+} from './promise-dialog.ts';
+
+export {
+  SearchableDialog,
+  type ScoredItem,
+  type ItemDisplay,
+  type SearchableDialogConfig,
+} from './searchable-dialog.ts';
+
+// Dialog manager
+export {
+  DialogManager,
+  createDialogManager,
+  type CommandPaletteOptions,
+  type FilePickerOptions,
+} from './dialog-manager.ts';
+
+// Concrete dialogs
+export {
+  InputDialog,
+  type InputDialogOptions,
+} from './input-dialog.ts';
+
+export {
+  ConfirmDialog,
+  type ConfirmDialogOptions,
+} from './confirm-dialog.ts';
+
+export {
+  GotoLineDialog as GotoLineDialogNew,
+  type GotoLineResult,
+} from './goto-line-dialog.ts';
+
+export {
+  CommandPaletteDialog,
   type Command,
-  type CommandPaletteCallbacks,
 } from './command-palette.ts';
 
 export {
-  FilePicker,
-  createFilePicker,
+  FilePickerDialog,
   type FileEntry,
-  type FilePickerCallbacks,
 } from './file-picker.ts';
 
+// Other overlays
 export {
   SearchReplaceDialog,
   createSearchReplaceDialog,

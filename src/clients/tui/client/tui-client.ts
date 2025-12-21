@@ -24,6 +24,14 @@ import {
 } from '../elements/index.ts';
 import type { Pane } from '../layout/pane.ts';
 
+// Dialog system
+import {
+  DialogManager,
+  createDialogManager,
+  type Command,
+  type FileEntry,
+} from '../overlays/index.ts';
+
 // Debug utilities
 import { debugLog, isDebugEnabled } from '../../../debug.ts';
 
@@ -108,6 +116,9 @@ export class TUIClient {
   /** Config manager */
   private configManager: TUIConfigManager;
 
+  /** Dialog manager */
+  private dialogManager: DialogManager | null = null;
+
   /** Command handlers */
   private commandHandlers: Map<string, () => boolean | Promise<boolean>> = new Map();
 
@@ -166,6 +177,13 @@ export class TUIClient {
       },
     };
     this.window = createWindow(windowConfig);
+
+    // Create dialog manager
+    this.dialogManager = createDialogManager(this.window.getOverlayManager(), {
+      onDirty: () => this.scheduleRender(),
+      getThemeColor: (key, fallback) => this.getThemeColor(key, fallback),
+      getScreenSize: () => this.getTerminalSize(),
+    });
 
     // Create input handler
     this.inputHandler = createInputHandler();
@@ -783,6 +801,12 @@ export class TUIClient {
   private setupInputHandling(): void {
     // Route key events to window
     this.inputHandler.onKey((event) => {
+      // Show shortcut in status bar (only for modifier keys or special keys, not regular typing)
+      const shortcutDisplay = this.formatKeyEvent(event);
+      if (shortcutDisplay) {
+        this.window.showStatusCommand(shortcutDisplay);
+      }
+
       this.window.handleInput(event);
     });
 
@@ -795,6 +819,47 @@ export class TUIClient {
     this.inputHandler.onResize((width, height) => {
       this.handleResize({ width, height });
     });
+  }
+
+  /**
+   * Format a key event for display in the status bar.
+   * Returns null for regular typing (single chars without modifiers).
+   */
+  private formatKeyEvent(event: import('../types.ts').KeyEvent): string | null {
+    const parts: string[] = [];
+
+    // Add modifiers
+    if (event.ctrl) parts.push('ctrl');
+    if (event.alt) parts.push('alt');
+    if (event.shift) parts.push('shift');
+    if (event.meta) parts.push('meta');
+
+    // Special keys that should always be shown
+    const specialKeys = [
+      'Escape', 'Enter', 'Tab', 'Backspace', 'Delete',
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+      'Home', 'End', 'PageUp', 'PageDown',
+      'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+    ];
+
+    const isSpecialKey = specialKeys.includes(event.key);
+    const hasModifiers = event.ctrl || event.alt || event.meta;
+
+    // Only show if there are modifiers or it's a special key
+    if (!hasModifiers && !isSpecialKey) {
+      return null;
+    }
+
+    // Format the key name
+    let keyName = event.key;
+    if (keyName.startsWith('Arrow')) {
+      keyName = keyName.replace('Arrow', '').toLowerCase();
+    } else if (keyName.length === 1) {
+      keyName = keyName.toLowerCase();
+    }
+
+    parts.push(keyName);
+    return parts.join('+');
   }
 
   /**
@@ -855,18 +920,18 @@ export class TUIClient {
     });
 
     // Navigation commands
-    this.commandHandlers.set('workbench.quickOpen', () => {
-      this.window.showNotification('Quick open not yet implemented', 'info');
+    this.commandHandlers.set('workbench.quickOpen', async () => {
+      await this.showFilePicker();
       return true;
     });
 
-    this.commandHandlers.set('workbench.commandPalette', () => {
-      this.window.showNotification('Command palette not yet implemented', 'info');
+    this.commandHandlers.set('workbench.commandPalette', async () => {
+      await this.showCommandPalette();
       return true;
     });
 
-    this.commandHandlers.set('editor.gotoLine', () => {
-      this.window.showNotification('Go to line not yet implemented', 'info');
+    this.commandHandlers.set('editor.gotoLine', async () => {
+      await this.showGotoLine();
       return true;
     });
 
@@ -1401,6 +1466,128 @@ export class TUIClient {
       this.applySyntaxTokens(editor, doc.syntaxSessionId);
     } catch (error) {
       this.log(`Failed to update syntax highlighting: ${error}`);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Dialogs
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the command palette.
+   */
+  private async showCommandPalette(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    // Force immediate render so dialog appears
+    this.render();
+
+    // Build command list from handlers
+    const commands: Command[] = [];
+    const keybindings = this.configManager.getKeybindings();
+
+    for (const [commandId, _handler] of this.commandHandlers) {
+      const keybinding = keybindings.find((kb) => kb.command === commandId);
+      const parts = commandId.split('.');
+      const category = parts[0] ?? '';
+      const nameParts = parts.slice(1);
+      const label = nameParts.join('.').replace(/([A-Z])/g, ' $1').trim();
+
+      commands.push({
+        id: commandId,
+        label: label.charAt(0).toUpperCase() + label.slice(1),
+        category: category.charAt(0).toUpperCase() + category.slice(1),
+        keybinding: keybinding?.key,
+      });
+    }
+
+    const result = await this.dialogManager.showCommandPalette({
+      commands,
+      placeholder: 'Type a command...',
+    });
+
+    if (result.confirmed && result.value) {
+      const handler = this.commandHandlers.get(result.value.id);
+      if (handler) {
+        handler();
+      }
+    }
+  }
+
+  /**
+   * Show the file picker (quick open).
+   */
+  private async showFilePicker(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    // Build file list from file service using glob
+    try {
+      const filePaths = await this.fileService.glob('**/*', {
+        baseUri: `file://${this.workingDirectory}`,
+        excludePatterns: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
+      });
+
+      const fileEntries: FileEntry[] = filePaths.map((filePath) => {
+        const name = filePath.split('/').pop() ?? filePath;
+        const directory = filePath.replace('/' + name, '').replace(name, '');
+        return {
+          path: filePath,
+          name,
+          directory,
+          extension: name.includes('.') ? name.slice(name.lastIndexOf('.')) : undefined,
+        };
+      });
+
+      // Get current file path for highlighting
+      const focusedElement = this.window.getFocusedElement();
+      let currentPath: string | undefined;
+      if (focusedElement instanceof DocumentEditor) {
+        const uri = focusedElement.getUri();
+        if (uri) {
+          currentPath = uri.replace(this.workingDirectory + '/', '');
+        }
+      }
+
+      const result = await this.dialogManager.showFilePicker({
+        files: fileEntries,
+        currentPath,
+        placeholder: 'Search files...',
+      });
+
+      if (result.confirmed && result.value) {
+        const fullPath = `${this.workingDirectory}/${result.value.path}`;
+        await this.openFile(fullPath);
+      }
+    } catch (error) {
+      this.log(`Failed to list files: ${error}`);
+      this.window.showNotification('Failed to list files', 'error');
+    }
+  }
+
+  /**
+   * Show goto line dialog.
+   */
+  private async showGotoLine(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    const focusedElement = this.window.getFocusedElement();
+    if (!(focusedElement instanceof DocumentEditor)) {
+      this.window.showNotification('No active editor', 'warning');
+      return;
+    }
+
+    // Get current line
+    const currentLine = focusedElement.getCursor().line + 1;
+
+    const result = await this.dialogManager.showGotoLine(currentLine);
+
+    if (result.confirmed && result.value) {
+      // Use setCursorPosition to go to the specified line
+      focusedElement.setCursorPosition(
+        { line: result.value.line - 1, column: result.value.column ? result.value.column - 1 : 0 },
+        false
+      );
+      this.scheduleRender();
     }
   }
 
