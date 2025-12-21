@@ -10,6 +10,7 @@ import { Window, createWindow, type WindowConfig } from '../window.ts';
 import { Renderer, createRenderer } from '../rendering/renderer.ts';
 import { TUIInputHandler, createInputHandler } from '../input/input-handler.ts';
 import {
+  BaseElement,
   DocumentEditor,
   FileTree,
   GitPanel,
@@ -146,6 +147,7 @@ export class TUIClient {
       size,
       getThemeColor: (key, fallback) => this.getThemeColor(key, fallback),
       onDirty: () => this.scheduleRender(),
+      onElementClose: (elementId, element) => this.handleElementClose(elementId, element),
     };
     this.window = createWindow(windowConfig);
 
@@ -406,10 +408,20 @@ export class TUIClient {
       const pane = this.getEditorPane();
       if (pane) {
         const editor = pane.getElement(existing.editorId) as DocumentEditor | null;
-        if (editor && options.focus !== false) {
-          this.window.focusElement(editor);
+        if (editor) {
+          // Editor still exists, just focus it
+          if (options.focus !== false) {
+            this.window.focusElement(editor);
+          }
+          return editor;
         }
-        return editor;
+      }
+      // Editor was removed (e.g., tab closed) - clean up stale entry
+      this.openDocuments.delete(uri);
+      try {
+        await this.documentService.close(existing.documentId);
+      } catch {
+        // Ignore close errors for stale documents
       }
     }
 
@@ -513,6 +525,25 @@ export class TUIClient {
     }
 
     return true;
+  }
+
+  /**
+   * Handle element close from tab X click.
+   * Called before the element is removed from the pane.
+   */
+  private handleElementClose(_elementId: string, element: BaseElement): void {
+    if (element instanceof DocumentEditor) {
+      const uri = element.getUri();
+      if (uri) {
+        const doc = this.openDocuments.get(uri);
+        if (doc) {
+          this.documentService.close(doc.documentId).catch((err) => {
+            this.log(`Failed to close document: ${err}`);
+          });
+          this.openDocuments.delete(uri);
+        }
+      }
+    }
   }
 
   /**

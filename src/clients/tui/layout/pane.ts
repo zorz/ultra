@@ -31,6 +31,8 @@ export interface PaneCallbacks {
   onFocusRequest: (elementId: string) => void;
   /** Get a theme color */
   getThemeColor: (key: string, fallback?: string) => string;
+  /** Called when an element is closed via tab X (optional) */
+  onElementClose?: (elementId: string, element: BaseElement) => void;
 }
 
 /**
@@ -676,7 +678,8 @@ export class Pane {
         // Check if click is on the close button (last 2 characters: "× ")
         const closeButtonStart = x + tabWidth - 2;
         if (event.x >= closeButtonStart) {
-          // Close this tab
+          // Close this tab - notify callback first for cleanup
+          this.callbacks.onElementClose?.(element.id, element);
           this.removeElement(element.id);
         } else {
           // Switch to this tab

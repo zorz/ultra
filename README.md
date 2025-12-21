@@ -34,8 +34,6 @@ A terminal-native code editor with Sublime Text ergonomics, VS Code configuratio
 - **Custom Keybindings** - Full keybinding customization via JSON
 - **Per-Language Settings** - Language-specific editor configurations
 
-
-
 ## Requirements
 
 - [Bun](https://bun.sh) v1.0 or later

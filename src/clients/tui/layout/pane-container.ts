@@ -47,6 +47,8 @@ export interface PaneContainerCallbacks {
   onDirty: () => void;
   /** Get a theme color */
   getThemeColor: (key: string, fallback?: string) => string;
+  /** Called when an element is closed via tab X */
+  onElementClose?: (elementId: string, element: BaseElement) => void;
 }
 
 // ============================================
@@ -171,6 +173,9 @@ export class PaneContainer implements FocusResolver {
         this.focusManager?.focusElement(elementId);
       },
       getThemeColor: (key, fallback) => this.callbacks.getThemeColor(key, fallback),
+      onElementClose: (elementId, element) => {
+        this.callbacks.onElementClose?.(elementId, element);
+      },
     };
   }
 

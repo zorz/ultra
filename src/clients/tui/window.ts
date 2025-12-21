@@ -36,6 +36,8 @@ export interface WindowConfig {
   onDirty?: () => void;
   /** Called when focus changes */
   onFocusChange?: FocusChangeCallback;
+  /** Called when an element is closed via tab X */
+  onElementClose?: (elementId: string, element: BaseElement) => void;
   /** Whether status bar starts expanded */
   statusBarExpanded?: boolean;
 }
@@ -113,6 +115,7 @@ export class Window {
     const paneContainerCallbacks: PaneContainerCallbacks = {
       onDirty: () => this.markDirty(),
       getThemeColor: this.getThemeColor,
+      onElementClose: config.onElementClose,
     };
     this.paneContainer = createPaneContainer(paneContainerCallbacks);
     this.focusManager.setResolver(this.paneContainer);
