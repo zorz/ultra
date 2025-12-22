@@ -133,6 +133,16 @@ export class FileTree extends BaseElement {
     this.callbacks = callbacks;
   }
 
+  /**
+   * Cancel any open dialog when focus is lost.
+   */
+  override onBlur(): void {
+    super.onBlur();
+    if (this.dialogMode !== 'none') {
+      this.cancelDialog();
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Callback Configuration
   // ─────────────────────────────────────────────────────────────────────────
