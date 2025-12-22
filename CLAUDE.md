@@ -240,24 +240,41 @@ await $`git commit -m ${message}`.quiet();
 
 ```
 src/
-├── app.ts              # Main application orchestrator
+├── index.ts            # Entry point
 ├── constants.ts        # Centralized configuration constants
 ├── debug.ts            # Debug logging utility
-├── core/               # Core data structures (buffer, cursor, document)
-├── ui/
-│   ├── colors.ts       # Color utilities (hexToRgb, etc.)
-│   ├── renderer.ts     # Terminal rendering
-│   ├── render-scheduler.ts  # Priority-based render batching
-│   └── components/     # UI components (dialogs, panels, etc.)
-│       ├── base-dialog.ts      # Base class for dialogs
-│       └── searchable-dialog.ts # Filterable dialog base
-├── features/
-│   ├── git/            # Git integration
-│   ├── lsp/            # Language Server Protocol
+├── clients/
+│   └── tui/            # Terminal UI client
+│       ├── client/
+│       │   ├── tui-client.ts      # Main TUI orchestrator
+│       │   └── lsp-integration.ts # LSP overlay management
+│       ├── elements/              # UI elements (tabs in panes)
+│       │   ├── document-editor.ts # Code editor
+│       │   ├── terminal-session.ts # Terminal emulator
+│       │   ├── ai-terminal-chat.ts # AI chat (Claude, Codex)
+│       │   └── base-element.ts    # Element base class
+│       ├── overlays/              # Modal overlays
+│       │   ├── autocomplete-popup.ts  # LSP completions
+│       │   ├── hover-tooltip.ts       # LSP hover info
+│       │   ├── signature-help.ts      # LSP signatures
+│       │   ├── command-palette.ts     # Command palette
+│       │   └── file-picker.ts         # File browser
+│       ├── config/                # TUI configuration
+│       │   └── config-manager.ts  # Settings + keybindings
+│       └── window.ts              # Window/pane management
+├── services/           # ECP services
+│   ├── document/       # Buffer, cursor, undo
+│   ├── file/           # File system abstraction
+│   ├── git/            # Version control
+│   ├── lsp/            # Language server protocol
+│   ├── session/        # Settings, state persistence
 │   └── syntax/         # Syntax highlighting
-├── input/              # Keyboard/mouse handling
-├── config/             # Settings and configuration
-└── terminal/           # Terminal I/O
+├── terminal/           # PTY backends
+│   ├── pty-factory.ts  # PTY creation (bun-pty/node-pty)
+│   └── backends/       # Backend implementations
+└── config/             # Global configuration
+    ├── themes/         # Color themes
+    └── defaults.ts     # Default settings
 ```
 
 ## Testing
@@ -587,3 +604,82 @@ function setValue(value: number): void {
   this.value = value; // No need to re-validate
 }
 ```
+
+### 8. Theme Color Inheritance
+
+UI components MUST use theme colors via `ctx.getThemeColor()`, never hardcode colors:
+
+```typescript
+// GOOD - Use theme colors in render methods
+render(buffer: ScreenBuffer): void {
+  const bg = this.ctx.getThemeColor('terminal.background', '#1e1e1e');
+  const fg = this.ctx.getThemeColor('terminal.foreground', '#cccccc');
+  const cursorBg = this.ctx.getThemeColor('terminalCursor.foreground', '#ffffff');
+
+  buffer.set(x, y, { char: ' ', fg, bg });
+}
+
+// BAD - Hardcoded colors
+private currentBg = '#1e1e1e';  // Don't hardcode as instance defaults
+buffer.set(x, y, { char: ' ', fg: '#cccccc', bg: '#1e1e1e' });
+```
+
+Common theme color keys:
+- `terminal.background`, `terminal.foreground` - Terminal colors
+- `editor.background`, `editor.foreground` - Editor colors
+- `terminalCursor.foreground` - Cursor color
+- `scrollbarSlider.background` - Scrollbar thumb
+- `descriptionForeground` - Secondary/muted text
+
+### 9. LSP Integration Pattern
+
+LSP features use the `LSPIntegration` class which manages overlays and callbacks:
+
+```typescript
+// LSP overlays are in src/clients/tui/overlays/
+// - autocomplete-popup.ts - Completion suggestions
+// - hover-tooltip.ts - Type info on hover
+// - signature-help.ts - Function signatures
+
+// Trigger completion with prefix tracking for accurate replacement
+this.lspIntegration.triggerCompletion(uri, position, screenX, screenY, prefix, startColumn);
+
+// Handle completion acceptance via callback
+onCompletionAccepted: (item, prefix, startColumn) => {
+  // Delete prefix, insert completion text
+  this.applyCompletion(item, prefix, startColumn);
+}
+```
+
+LSP keybindings (defined in `src/clients/tui/config/config-manager.ts`):
+- `Ctrl+K` - Show hover info
+- `Ctrl+Shift+K` - Go to definition
+- `Ctrl+Space` - Trigger completion
+- `Ctrl+Shift+Space` - Trigger signature help
+
+### 10. Session Persistence
+
+Session state is saved automatically and includes documents, terminals, AI chats, and UI state:
+
+```typescript
+// Session state types in src/services/session/types.ts
+interface SessionState {
+  documents: SessionDocumentState[];    // Open files with cursor/scroll
+  terminals?: SessionTerminalState[];   // Terminal tabs in panes
+  aiChats?: SessionAIChatState[];       // AI chat tabs with session IDs
+  layout: SessionLayoutNode;            // Pane arrangement
+  ui: SessionUIState;                   // Sidebar, panels visibility
+}
+
+// AI chats preserve Claude session IDs for --resume
+interface SessionAIChatState {
+  elementId: string;
+  paneId: string;
+  provider: 'claude-code' | 'codex' | 'custom';
+  sessionId: string | null;  // Claude session ID for resume
+  cwd: string;
+  title: string;
+}
+```
+
+Session files are stored in `~/.ultra/new-tui/sessions/`.
