@@ -862,11 +862,13 @@ export class TUIClient {
     if (editor instanceof DocumentEditor) {
       const uri = editor.getUri();
       if (uri) {
+        // Convert URI to file path if needed
+        const filePath = this.fileService.uriToPath(uri) || uri;
         // Use current file's directory and name
-        const lastSlash = uri.lastIndexOf('/');
+        const lastSlash = filePath.lastIndexOf('/');
         if (lastSlash >= 0) {
-          defaultPath = uri.substring(0, lastSlash);
-          defaultFilename = uri.substring(lastSlash + 1);
+          defaultPath = filePath.substring(0, lastSlash);
+          defaultFilename = filePath.substring(lastSlash + 1);
         }
       }
     }
@@ -896,11 +898,13 @@ export class TUIClient {
 
     try {
       const content = editor.getContent();
-      const result = await this.fileService.write(newPath, content);
+      // Convert file path to URI for the file service
+      const newUri = this.fileService.pathToUri(newPath);
+      const result = await this.fileService.write(newUri, content);
 
       // Update editor URI and title
       const oldUri = editor.getUri();
-      editor.setUri(newPath);
+      editor.setUri(newUri);
 
       // Update tab title to new filename
       const filename = newPath.split('/').pop() || 'untitled';
@@ -912,7 +916,7 @@ export class TUIClient {
         if (docInfo) {
           this.openDocuments.delete(oldUri);
           docInfo.lastModified = result.modTime;
-          this.openDocuments.set(newPath, docInfo);
+          this.openDocuments.set(newUri, docInfo);
         }
       }
 
@@ -920,10 +924,10 @@ export class TUIClient {
       if (oldUri) {
         await this.lspDocumentClosed(oldUri);
       }
-      await this.lspDocumentOpened(newPath, content);
+      await this.lspDocumentOpened(newUri, content);
 
       // Update syntax highlighting for new language
-      const docInfo = this.openDocuments.get(newPath);
+      const docInfo = this.openDocuments.get(newUri);
       if (docInfo) {
         // End old syntax session
         if (docInfo.syntaxSessionId) {

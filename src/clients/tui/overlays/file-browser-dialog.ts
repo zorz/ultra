@@ -32,7 +32,7 @@ interface BrowserEntry {
 export interface FileBrowserConfig extends DialogConfig {
   /** Starting directory path */
   startPath: string;
-  /** Whether to show hidden files */
+  /** Whether to show hidden files (default true) */
   showHidden?: boolean;
 }
 
@@ -60,8 +60,8 @@ export class FileBrowserDialog extends PromiseDialog<string> {
   /** Scroll offset */
   private scrollOffset: number = 0;
 
-  /** Whether to show hidden files */
-  private showHidden: boolean = false;
+  /** Whether to show hidden files (default true - show dimmed) */
+  private showHidden: boolean = true;
 
   constructor(id: string, callbacks: OverlayManagerCallbacks) {
     super(id, callbacks);
@@ -83,7 +83,7 @@ export class FileBrowserDialog extends PromiseDialog<string> {
    * Show dialog starting at a directory.
    */
   async showBrowser(config: FileBrowserConfig): Promise<DialogResult<string>> {
-    this.showHidden = config.showHidden ?? false;
+    this.showHidden = config.showHidden ?? true;  // Show hidden by default
     this.currentPath = config.startPath;
     this.selectedIndex = 0;
     this.scrollOffset = 0;
@@ -110,7 +110,9 @@ export class FileBrowserDialog extends PromiseDialog<string> {
     if (!this.fileService) return;
 
     try {
-      const entries = await this.fileService.readDir(this.currentPath);
+      // Convert path to URI for the file service
+      const uri = this.fileService.pathToUri(this.currentPath);
+      const entries = await this.fileService.readDir(uri);
 
       const dirs: BrowserEntry[] = [];
       const files: BrowserEntry[] = [];
@@ -302,7 +304,7 @@ export class FileBrowserDialog extends PromiseDialog<string> {
       return true;
     }
 
-    // Toggle hidden
+    // Toggle hidden files
     if (event.key === '.' && !event.ctrl) {
       this.toggleHidden();
       return true;

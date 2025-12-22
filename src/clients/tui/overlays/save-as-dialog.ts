@@ -67,8 +67,8 @@ export class SaveAsDialog extends PromiseDialog<string> {
   /** Scroll offset */
   private scrollOffset: number = 0;
 
-  /** Whether to show hidden files */
-  private showHidden: boolean = false;
+  /** Whether to show hidden files (default true - show dimmed) */
+  private showHidden: boolean = true;
 
   /** Current filename */
   private filename: string = '';
@@ -102,7 +102,7 @@ export class SaveAsDialog extends PromiseDialog<string> {
    * Show dialog for saving.
    */
   async showSaveAs(config: SaveAsConfig): Promise<DialogResult<string>> {
-    this.showHidden = config.showHidden ?? false;
+    this.showHidden = config.showHidden ?? true;  // Show hidden by default
     this.currentPath = config.startPath;
     this.filename = config.suggestedFilename;
     this.selectedIndex = 0;
@@ -133,7 +133,9 @@ export class SaveAsDialog extends PromiseDialog<string> {
     if (!this.fileService) return;
 
     try {
-      const entries = await this.fileService.readDir(this.currentPath);
+      // Convert path to URI for the file service
+      const uri = this.fileService.pathToUri(this.currentPath);
+      const entries = await this.fileService.readDir(uri);
 
       const dirs: BrowserEntry[] = [];
       const files: BrowserEntry[] = [];
@@ -243,7 +245,9 @@ export class SaveAsDialog extends PromiseDialog<string> {
     if (!this.fileService) return false;
 
     try {
-      const stats = await this.fileService.stat(this.getFullPath());
+      // Convert path to URI for the file service
+      const uri = this.fileService.pathToUri(this.getFullPath());
+      const stats = await this.fileService.stat(uri);
       return stats.exists && stats.isFile;
     } catch {
       return false;
