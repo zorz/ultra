@@ -688,6 +688,9 @@ export class ClaudeTerminalChat extends AITerminalChat {
 
 /**
  * OpenAI Codex terminal chat.
+ *
+ * Codex uses ink (React terminal library) which queries for cursor position
+ * on startup. In embedded PTYs, we need to auto-respond to these queries.
  */
 export class CodexTerminalChat extends AITerminalChat {
   constructor(
@@ -716,15 +719,36 @@ export class CodexTerminalChat extends AITerminalChat {
   }
 
   getEnv(): Record<string, string> {
-    // Codex CLI has issues with cursor position detection in embedded PTYs
-    // Setting CI=true and TERM=dumb helps bypass terminal capability checks
-    return {
-      CI: 'true',
-    };
+    // Use xterm-256color for proper color support
+    // The cursor position query is handled in startInteractive()
+    return {};
   }
 
   getProviderName(): string {
     return 'Codex';
+  }
+
+  /**
+   * Override to add cursor position query response handler.
+   * Codex/ink sends CSI 6n (cursor position query) and expects a response.
+   * We auto-respond with a safe default position.
+   */
+  protected override async startInteractive(): Promise<void> {
+    await super.startInteractive();
+
+    // Add handler to auto-respond to cursor position queries (CSI 6n = \x1b[6n)
+    // Response format: CSI <row>;<col>R = \x1b[<row>;<col>R
+    if (this.pty) {
+      const cursorQueryHandler = this.pty.onData((data) => {
+        // Check for cursor position query: ESC [ 6 n
+        if (data.includes('\x1b[6n')) {
+          this.debugLog('Detected cursor position query, responding with default position');
+          // Respond with cursor at position (1, 1) - a safe default
+          this.pty?.write('\x1b[1;1R');
+        }
+      });
+      this.ptyUnsubscribes.push(cursorQueryHandler);
+    }
   }
 }
 
