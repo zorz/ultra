@@ -1261,6 +1261,66 @@ export class TUIClient {
       return true;
     });
 
+    this.commandHandlers.set('git.pull', async () => {
+      await this.gitPull();
+      return true;
+    });
+
+    this.commandHandlers.set('git.fetch', async () => {
+      await this.gitFetch();
+      return true;
+    });
+
+    this.commandHandlers.set('git.createBranch', async () => {
+      await this.gitCreateBranch();
+      return true;
+    });
+
+    this.commandHandlers.set('git.switchBranch', async () => {
+      await this.gitSwitchBranch();
+      return true;
+    });
+
+    this.commandHandlers.set('git.deleteBranch', async () => {
+      await this.gitDeleteBranch();
+      return true;
+    });
+
+    this.commandHandlers.set('git.renameBranch', async () => {
+      await this.gitRenameBranch();
+      return true;
+    });
+
+    this.commandHandlers.set('git.merge', async () => {
+      await this.gitMerge();
+      return true;
+    });
+
+    this.commandHandlers.set('git.abortMerge', async () => {
+      await this.gitAbortMerge();
+      return true;
+    });
+
+    this.commandHandlers.set('git.stash', async () => {
+      await this.gitStash();
+      return true;
+    });
+
+    this.commandHandlers.set('git.stashPop', async () => {
+      await this.gitStashPop();
+      return true;
+    });
+
+    this.commandHandlers.set('git.stashApply', async () => {
+      await this.gitStashApply();
+      return true;
+    });
+
+    this.commandHandlers.set('git.stashDrop', async () => {
+      await this.gitStashDrop();
+      return true;
+    });
+
     // Ultra namespace commands for keybindings
     this.commandHandlers.set('view.splitVertical', () => {
       this.splitEditorPane('vertical');
@@ -2204,7 +2264,22 @@ export class TUIClient {
     // Git
     'git.commit': { label: 'Git: Commit...', category: 'Git' },
     'git.push': { label: 'Git: Push', category: 'Git' },
+    'git.pull': { label: 'Git: Pull', category: 'Git' },
+    'git.fetch': { label: 'Git: Fetch', category: 'Git' },
     'git.focusPanel': { label: 'Git: Focus Panel', category: 'Git' },
+    // Git branches
+    'git.createBranch': { label: 'Git: Create Branch...', category: 'Git' },
+    'git.switchBranch': { label: 'Git: Switch Branch...', category: 'Git' },
+    'git.deleteBranch': { label: 'Git: Delete Branch...', category: 'Git' },
+    'git.renameBranch': { label: 'Git: Rename Branch...', category: 'Git' },
+    // Git merge
+    'git.merge': { label: 'Git: Merge Branch...', category: 'Git' },
+    'git.abortMerge': { label: 'Git: Abort Merge', category: 'Git' },
+    // Git stash
+    'git.stash': { label: 'Git: Stash Changes...', category: 'Git' },
+    'git.stashPop': { label: 'Git: Pop Stash', category: 'Git' },
+    'git.stashApply': { label: 'Git: Apply Stash...', category: 'Git' },
+    'git.stashDrop': { label: 'Git: Drop Stash...', category: 'Git' },
     // Session
     'session.save': { label: 'Save Session', category: 'Session' },
     'session.saveAs': { label: 'Save Session As...', category: 'Session' },
@@ -2436,6 +2511,394 @@ export class TUIClient {
       await this.refreshGitStatus();
     } catch (error) {
       this.window.showNotification(`Push failed: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Pull changes from remote.
+   */
+  private async gitPull(): Promise<void> {
+    this.window.showNotification('Pulling...', 'info');
+
+    try {
+      const result = await gitCliService.pull(this.workingDirectory);
+      if (result.success) {
+        this.window.showNotification('Pulled successfully', 'success');
+      } else {
+        this.window.showNotification(`Pull failed: ${result.error}`, 'error');
+      }
+      await this.refreshGitStatus();
+    } catch (error) {
+      this.window.showNotification(`Pull failed: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Fetch from remote.
+   */
+  private async gitFetch(): Promise<void> {
+    this.window.showNotification('Fetching...', 'info');
+
+    try {
+      await gitCliService.fetch(this.workingDirectory);
+      this.window.showNotification('Fetched successfully', 'success');
+      await this.refreshGitStatus();
+    } catch (error) {
+      this.window.showNotification(`Fetch failed: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Create a new branch.
+   */
+  private async gitCreateBranch(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    const result = await this.dialogManager.showInput({
+      title: 'Create Branch',
+      prompt: 'Enter the new branch name:',
+      placeholder: 'feature/my-branch',
+    });
+
+    if (result.confirmed && result.value) {
+      try {
+        await gitCliService.createBranch(this.workingDirectory, result.value, true);
+        this.window.showNotification(`Created and switched to branch: ${result.value}`, 'success');
+        await this.refreshGitStatus();
+      } catch (error) {
+        this.window.showNotification(`Failed to create branch: ${error}`, 'error');
+      }
+    }
+  }
+
+  /**
+   * Switch to an existing branch.
+   */
+  private async gitSwitchBranch(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const { branches, current } = await gitCliService.branches(this.workingDirectory);
+
+      if (branches.length === 0) {
+        this.window.showNotification('No branches found', 'info');
+        return;
+      }
+
+      // Build file entries for picker (reusing file picker dialog)
+      const branchEntries = branches
+        .filter(b => b.name !== current) // Exclude current branch
+        .map((b) => ({
+          path: b.name,
+          name: b.name,
+          directory: b.tracking ? 'Tracking' : 'Local',
+          extension: b.current ? '(current)' : undefined,
+        }));
+
+      if (branchEntries.length === 0) {
+        this.window.showNotification('No other branches to switch to', 'info');
+        return;
+      }
+
+      const result = await this.dialogManager.showFilePicker({
+        files: branchEntries,
+        placeholder: 'Search branches...',
+        title: 'Switch Branch',
+      });
+
+      if (result.confirmed && result.value) {
+        await gitCliService.switchBranch(this.workingDirectory, result.value.path);
+        this.window.showNotification(`Switched to branch: ${result.value.path}`, 'success');
+        await this.refreshGitStatus();
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to switch branch: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Delete a branch.
+   */
+  private async gitDeleteBranch(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const { branches, current } = await gitCliService.branches(this.workingDirectory);
+
+      // Filter to local branches that aren't current
+      const deletableBranches = branches.filter(b => !b.tracking && b.name !== current);
+
+      if (deletableBranches.length === 0) {
+        this.window.showNotification('No branches available to delete', 'info');
+        return;
+      }
+
+      const branchEntries = deletableBranches.map((b) => ({
+        path: b.name,
+        name: b.name,
+        directory: 'Local',
+        extension: undefined,
+      }));
+
+      const pickResult = await this.dialogManager.showFilePicker({
+        files: branchEntries,
+        placeholder: 'Search branches to delete...',
+        title: 'Delete Branch',
+      });
+
+      if (pickResult.confirmed && pickResult.value) {
+        const branchName = pickResult.value.path;
+        const confirmResult = await this.dialogManager.showConfirm({
+          title: 'Delete Branch',
+          message: `Are you sure you want to delete branch "${branchName}"?`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          destructive: true,
+        });
+
+        if (confirmResult.confirmed) {
+          try {
+            await gitCliService.deleteBranch(this.workingDirectory, branchName);
+            this.window.showNotification(`Deleted branch: ${branchName}`, 'success');
+            await this.refreshGitStatus();
+          } catch {
+            // Try force delete if regular delete fails
+            const forceResult = await this.dialogManager.showConfirm({
+              title: 'Force Delete?',
+              message: `Branch "${branchName}" is not fully merged. Force delete?`,
+              confirmText: 'Force Delete',
+              cancelText: 'Cancel',
+              destructive: true,
+            });
+
+            if (forceResult.confirmed) {
+              await gitCliService.deleteBranch(this.workingDirectory, branchName, true);
+              this.window.showNotification(`Force deleted branch: ${branchName}`, 'success');
+              await this.refreshGitStatus();
+            }
+          }
+        }
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to delete branch: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Rename the current branch.
+   */
+  private async gitRenameBranch(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const { current } = await gitCliService.branches(this.workingDirectory);
+
+      const result = await this.dialogManager.showInput({
+        title: 'Rename Branch',
+        prompt: `Rename branch "${current}" to:`,
+        placeholder: 'new-branch-name',
+        initialValue: current,
+      });
+
+      if (result.confirmed && result.value && result.value !== current) {
+        await gitCliService.renameBranch(this.workingDirectory, result.value);
+        this.window.showNotification(`Renamed branch to: ${result.value}`, 'success');
+        await this.refreshGitStatus();
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to rename branch: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Merge a branch into current.
+   */
+  private async gitMerge(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const { branches, current } = await gitCliService.branches(this.workingDirectory);
+
+      // Filter out current branch
+      const mergeableBranches = branches.filter(b => b.name !== current);
+
+      if (mergeableBranches.length === 0) {
+        this.window.showNotification('No branches available to merge', 'info');
+        return;
+      }
+
+      const branchEntries = mergeableBranches.map((b) => ({
+        path: b.name,
+        name: b.name,
+        directory: b.tracking ? 'Tracking' : 'Local',
+        extension: undefined,
+      }));
+
+      const pickResult = await this.dialogManager.showFilePicker({
+        files: branchEntries,
+        placeholder: 'Search branches to merge...',
+        title: `Merge into ${current}`,
+      });
+
+      if (pickResult.confirmed && pickResult.value) {
+        const branchName = pickResult.value.path;
+        this.window.showNotification(`Merging ${branchName}...`, 'info');
+
+        const mergeResult = await gitCliService.merge(this.workingDirectory, branchName);
+        if (mergeResult.success) {
+          this.window.showNotification(`Merged ${branchName} successfully`, 'success');
+        } else if (mergeResult.conflicts && mergeResult.conflicts.length > 0) {
+          this.window.showNotification(
+            `Merge conflicts in ${mergeResult.conflicts.length} file(s)`,
+            'warning'
+          );
+        } else {
+          this.window.showNotification(`Merge failed: ${mergeResult.message}`, 'error');
+        }
+        await this.refreshGitStatus();
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to merge: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Abort an in-progress merge.
+   */
+  private async gitAbortMerge(): Promise<void> {
+    try {
+      const isMerging = await gitCliService.isMerging(this.workingDirectory);
+      if (!isMerging) {
+        this.window.showNotification('No merge in progress', 'info');
+        return;
+      }
+
+      await gitCliService.abortMerge(this.workingDirectory);
+      this.window.showNotification('Merge aborted', 'success');
+      await this.refreshGitStatus();
+    } catch (error) {
+      this.window.showNotification(`Failed to abort merge: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Stash current changes.
+   */
+  private async gitStash(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    const result = await this.dialogManager.showInput({
+      title: 'Stash Changes',
+      prompt: 'Enter a message for this stash (optional):',
+      placeholder: 'WIP: my changes',
+    });
+
+    if (result.confirmed) {
+      try {
+        const stashId = await gitCliService.stash(this.workingDirectory, result.value || undefined);
+        this.window.showNotification(`Changes stashed: ${stashId}`, 'success');
+        await this.refreshGitStatus();
+      } catch (error) {
+        this.window.showNotification(`Failed to stash: ${error}`, 'error');
+      }
+    }
+  }
+
+  /**
+   * Pop the latest stash.
+   */
+  private async gitStashPop(): Promise<void> {
+    try {
+      await gitCliService.stashPop(this.workingDirectory);
+      this.window.showNotification('Stash popped successfully', 'success');
+      await this.refreshGitStatus();
+    } catch (error) {
+      this.window.showNotification(`Failed to pop stash: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Apply a stash without removing it.
+   */
+  private async gitStashApply(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const stashes = await gitCliService.stashList(this.workingDirectory);
+
+      if (stashes.length === 0) {
+        this.window.showNotification('No stashes found', 'info');
+        return;
+      }
+
+      const stashEntries = stashes.map((s) => ({
+        path: s.id,
+        name: s.message || `(stash@{${s.index}})`,
+        directory: s.branch || 'unknown',
+        extension: undefined,
+      }));
+
+      const pickResult = await this.dialogManager.showFilePicker({
+        files: stashEntries,
+        placeholder: 'Search stashes...',
+        title: 'Apply Stash',
+      });
+
+      if (pickResult.confirmed && pickResult.value) {
+        await gitCliService.stashApply(this.workingDirectory, pickResult.value.path);
+        this.window.showNotification('Stash applied successfully', 'success');
+        await this.refreshGitStatus();
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to apply stash: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Drop a stash.
+   */
+  private async gitStashDrop(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      const stashes = await gitCliService.stashList(this.workingDirectory);
+
+      if (stashes.length === 0) {
+        this.window.showNotification('No stashes found', 'info');
+        return;
+      }
+
+      const stashEntries = stashes.map((s) => ({
+        path: s.id,
+        name: s.message || `(stash@{${s.index}})`,
+        directory: s.branch || 'unknown',
+        extension: undefined,
+      }));
+
+      const pickResult = await this.dialogManager.showFilePicker({
+        files: stashEntries,
+        placeholder: 'Search stashes to drop...',
+        title: 'Drop Stash',
+      });
+
+      if (pickResult.confirmed && pickResult.value) {
+        const stashId = pickResult.value.path;
+        const confirmResult = await this.dialogManager.showConfirm({
+          title: 'Drop Stash',
+          message: `Are you sure you want to drop "${stashId}"?`,
+          confirmText: 'Drop',
+          cancelText: 'Cancel',
+          destructive: true,
+        });
+
+        if (confirmResult.confirmed) {
+          await gitCliService.stashDrop(this.workingDirectory, stashId);
+          this.window.showNotification('Stash dropped successfully', 'success');
+          await this.refreshGitStatus();
+        }
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to drop stash: ${error}`, 'error');
     }
   }
 
