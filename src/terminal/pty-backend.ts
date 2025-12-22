@@ -115,6 +115,12 @@ export interface PTYBackend {
   getCursor(): CursorPosition;
 
   /**
+   * Check if cursor is visible (DECTCEM state).
+   * Returns true if cursor should be displayed.
+   */
+  isCursorVisible(): boolean;
+
+  /**
    * Get the current view offset (for scrollback).
    * 0 means viewing the current screen, positive values mean scrolled back.
    */

@@ -108,6 +108,10 @@ export class BunPtyBackend implements PTYBackend {
     return this.pty.getCursor();
   }
 
+  isCursorVisible(): boolean {
+    return this.pty.isCursorVisible();
+  }
+
   getViewOffset(): number {
     return this.pty.getViewOffset();
   }

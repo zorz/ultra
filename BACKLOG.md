@@ -68,6 +68,12 @@ Issues and improvements to address in future sessions.
 
 - [ ] **Terminal and editor scroll-up boundary jitter** - When scrolling up in the terminal or editor and the viewport reaches the top line (no more scrollback), continued mouse scroll-up causes a weird up/down jitter movement. Instead, scrolling should lock in place when no further scrolling is possible. This only happens with scroll-up, not scroll-down.
 
+- [ ] **AI terminal chat cursor position incorrect** - The cursor highlight in AI terminal chats (Claude Code, Codex) appears at the wrong position (often at the bottom of the buffer where status messages are written). The issue is that TUI applications like Claude Code use cursor positioning to render their UI, and the final PTY cursor position may not reflect the actual input location. Current implementation tracks DECTCEM cursor visibility (`CSI ?25h/l`) but this doesn't fully solve the problem. Possible approaches:
+  - Let the TUI app render its own cursor character and don't overlay ours
+  - Parse application-specific cursor position hints
+  - Track cursor save/restore sequences more carefully
+  - Research how other terminal emulators handle embedded TUI applications
+
 - [ ] **Hover on mouse position** - Add automatic hover tooltip when mouse hovers over a symbol for a configurable duration. Requires:
   - Mouse position tracking in DocumentEditor
   - Debounced hover request (e.g., 500ms delay)

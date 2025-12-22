@@ -87,7 +87,8 @@ export class ScreenBuffer {
   private cursorY: number = 0;
   private savedCursorX: number = 0;
   private savedCursorY: number = 0;
-  
+  private cursorVisible: boolean = true;  // DECTCEM cursor visibility
+
   // Current text attributes
   private currentFg: string | null = null;
   private currentBg: string | null = null;
@@ -430,7 +431,21 @@ export class ScreenBuffer {
   getCursor(): { x: number; y: number } {
     return { x: this.cursorX, y: this.cursorY };
   }
-  
+
+  /**
+   * Get cursor visibility state (DECTCEM)
+   */
+  isCursorVisible(): boolean {
+    return this.cursorVisible;
+  }
+
+  /**
+   * Set cursor visibility (DECTCEM)
+   */
+  setCursorVisible(visible: boolean): void {
+    this.cursorVisible = visible;
+  }
+
   /**
    * Get scrollback buffer
    */
@@ -621,9 +636,17 @@ export class AnsiParser {
       case 'd': // Cursor Vertical Absolute
         this.screen.setCursor(params[0] || 1, this.screen.getCursor().x + 1);
         break;
-      case 'h': // Set mode (often for cursor visibility, etc)
+      case 'h': // Set mode
       case 'l': // Reset mode
-        // Ignore most mode changes for now
+        // Handle private modes (CSI ? Ps h/l)
+        if (this.csiParams.startsWith('?')) {
+          const mode = parseInt(this.csiParams.slice(1), 10);
+          if (mode === 25) {
+            // DECTCEM - Cursor visibility
+            this.screen.setCursorVisible(command === 'h');
+          }
+          // Other private modes (1049 for alternate screen, etc.) ignored for now
+        }
         break;
       case 'r': // Set scroll region
         // Ignore for now
@@ -852,6 +875,13 @@ export class PTY {
    */
   getCursor(): { x: number; y: number } {
     return this.screen.getCursor();
+  }
+
+  /**
+   * Check if cursor is visible (DECTCEM state)
+   */
+  isCursorVisible(): boolean {
+    return this.screen.isCursorVisible();
   }
 
   /**

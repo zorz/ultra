@@ -146,6 +146,10 @@ export class NodePtyBackend implements PTYBackend {
     return this.screenBuffer.getCursor();
   }
 
+  isCursorVisible(): boolean {
+    return this.screenBuffer.isCursorVisible();
+  }
+
   getViewOffset(): number {
     return this.screenBuffer.getViewOffset();
   }

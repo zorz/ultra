@@ -354,10 +354,14 @@ export abstract class AITerminalChat extends BaseElement {
     // Get theme colors for terminal
     const defaultBg = this.ctx.getThemeColor('terminal.background', '#1e1e1e');
     const defaultFg = this.ctx.getThemeColor('terminal.foreground', '#cccccc');
+    const cursorBg = this.ctx.getThemeColor('terminalCursor.foreground', '#ffffff');
 
     // Use PTY buffer if available
     if (this.pty) {
       const ptyBuffer = this.pty.getBuffer();
+      const cursor = this.pty.getCursor();
+      const viewOffset = this.pty.getViewOffset();
+      const cursorVisible = this.pty.isCursorVisible();
 
       for (let row = 0; row < height && row < ptyBuffer.length; row++) {
         const line = ptyBuffer[row];
@@ -381,11 +385,22 @@ export abstract class AITerminalChat extends BaseElement {
         }
       }
 
-      // Note: We don't draw our own cursor for AI terminal chats.
-      // These are full TUI applications (like Claude Code) that render their
-      // own cursor as part of their screen buffer. The PTY cursor position
-      // may not reflect the actual input location since these apps use cursor
-      // positioning for layout (status bars, output areas, etc.).
+      // Draw cursor if:
+      // - Element is focused
+      // - Not scrolled back (viewOffset === 0)
+      // - Cursor visibility is enabled (DECTCEM)
+      // - Cursor position is within visible bounds
+      if (this.focused && viewOffset === 0 && cursorVisible &&
+          cursor.y < height && cursor.x < width - AITerminalChat.SCROLLBAR_WIDTH) {
+        const cursorCell = buffer.get(x + cursor.x, y + cursor.y);
+        if (cursorCell) {
+          buffer.set(x + cursor.x, y + cursor.y, {
+            ...cursorCell,
+            bg: cursorBg,
+            fg: defaultBg,
+          });
+        }
+      }
     } else {
       // Fill with background when no PTY
       for (let row = 0; row < height; row++) {
