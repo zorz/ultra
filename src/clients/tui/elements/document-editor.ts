@@ -6,7 +6,7 @@
  */
 
 import { BaseElement, type ElementContext } from './base.ts';
-import type { KeyEvent, MouseEvent, Position } from '../types.ts';
+import type { KeyEvent, MouseEvent, Position, UnderlineStyle } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../ui/colors.ts';
 import { FoldManager } from '../../../core/fold.ts';
@@ -1843,6 +1843,10 @@ export class DocumentEditor extends BaseElement {
     const lineDiagnostics = this.getDiagnosticsForLine(bufferLine);
     if (lineDiagnostics.length === 0) return;
 
+    // Check if curly underlines are enabled (for terminals that support them)
+    const useCurlyUnderline = this.ctx.getSetting('editor.diagnostics.curlyUnderline', true);
+    const underlineStyle: UnderlineStyle | undefined = useCurlyUnderline ? 'curly' : undefined;
+
     for (const diag of lineDiagnostics) {
       // Determine the color based on severity
       const underlineColor = this.getDiagnosticUnderlineColor(diag.severity);
@@ -1874,14 +1878,13 @@ export class DocumentEditor extends BaseElement {
         const cellX = contentX + col;
         const cell = buffer.get(cellX, screenY);
         if (cell) {
-          // Keep the original character but change the foreground to show underline
-          // Since terminal can't do true underlines easily, we use the underline color as fg
-          // and rely on a styled character or attribute
+          // Keep the original character but add underline with style and color
           buffer.set(cellX, screenY, {
             char: cell.char,
             fg: cell.fg,
             bg: cell.bg,
             underline: true,
+            underlineStyle,
             underlineColor,
           });
         }

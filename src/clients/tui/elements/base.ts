@@ -38,6 +38,8 @@ export interface ElementContext {
   updateStatus: (status: string) => void;
   /** Get a color from the current theme */
   getThemeColor: (key: string, fallback?: string) => string;
+  /** Get a setting value */
+  getSetting: <T>(key: string, defaultValue: T) => T;
   /** Check if the containing pane is focused */
   isPaneFocused: () => boolean;
   /** Get background color for focus state */
@@ -58,6 +60,7 @@ export function createTestContext(overrides: Partial<ElementContext> = {}): Elem
     updateTitle: () => {},
     updateStatus: () => {},
     getThemeColor: (_key: string, fallback = '#ffffff') => fallback,
+    getSetting: <T>(_key: string, defaultValue: T) => defaultValue,
     isPaneFocused: () => true,
     getBackgroundForFocus: (_type, _focused) => '#1e1e1e',
     getForegroundForFocus: (_type, _focused) => '#d4d4d4',

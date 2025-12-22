@@ -245,6 +245,7 @@ export class TUIClient {
     const windowConfig: WindowConfig = {
       size,
       getThemeColor: (key, fallback) => this.getThemeColor(key, fallback),
+      getSetting: (key, defaultValue) => this.configManager.getWithDefault(key as any, defaultValue),
       onDirty: () => this.scheduleRender(),
       onElementCloseRequest: (elementId, element) => this.handleElementCloseRequest(elementId, element),
       onFocusChange: (_prevElemId, _nextElemId, _prevPaneId, nextPaneId) => {

@@ -81,6 +81,13 @@ export interface LayoutConfig {
 // Rendering
 // ============================================
 
+/**
+ * Underline style for terminal text.
+ * Note: Not all terminals support all styles. 'curly' is supported by Kitty, WezTerm, iTerm2, etc.
+ * Terminals that don't support a style will typically fall back to single underline.
+ */
+export type UnderlineStyle = 'single' | 'double' | 'curly' | 'dotted' | 'dashed';
+
 export interface Cell {
   char: string;
   fg: string; // Foreground color (hex or name)
@@ -88,6 +95,7 @@ export interface Cell {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  underlineStyle?: UnderlineStyle; // Style of underline (default: 'single')
   underlineColor?: string; // Color for underline (used for diagnostics)
   strikethrough?: boolean;
   dim?: boolean;
@@ -234,6 +242,8 @@ export function cellsEqual(a: Cell, b: Cell): boolean {
     a.bold === b.bold &&
     a.italic === b.italic &&
     a.underline === b.underline &&
+    a.underlineStyle === b.underlineStyle &&
+    a.underlineColor === b.underlineColor &&
     a.strikethrough === b.strikethrough &&
     a.dim === b.dim
   );

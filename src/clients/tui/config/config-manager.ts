@@ -61,6 +61,10 @@ export interface TUISettings extends Partial<EditorSettings> {
 
   // AI settings
   'ai.defaultProvider'?: 'claude-code' | 'codex' | 'gemini';
+
+  // Diagnostic display settings
+  // Use curly/squiggly underlines for diagnostics (requires terminal support: Kitty, WezTerm, iTerm2, etc.)
+  'editor.diagnostics.curlyUnderline'?: boolean;
 }
 
 /**
@@ -439,6 +443,9 @@ export class TUIConfigManager {
       'tui.sidebar.width': 36,
       'tui.sidebar.visible': true,
       'tui.terminal.height': 10,
+
+      // Diagnostics
+      'editor.diagnostics.curlyUnderline': true, // Enabled by default, falls back gracefully in unsupported terminals
 
       // Terminal
       'terminal.integrated.shell': process.env.SHELL || '/bin/zsh',

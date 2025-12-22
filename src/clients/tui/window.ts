@@ -33,6 +33,8 @@ export interface WindowConfig {
   size: Size;
   /** Theme color provider */
   getThemeColor: ThemeColorProvider;
+  /** Setting value provider */
+  getSetting: <T>(key: string, defaultValue: T) => T;
   /** Called when window needs re-render */
   onDirty?: () => void;
   /** Called when focus changes */
@@ -81,6 +83,9 @@ export class Window {
   /** Theme color provider */
   private getThemeColor: ThemeColorProvider;
 
+  /** Setting value provider */
+  private getSetting: <T>(key: string, defaultValue: T) => T;
+
   /** Dirty callback */
   private onDirtyCallback?: () => void;
 
@@ -99,6 +104,7 @@ export class Window {
   constructor(config: WindowConfig) {
     this.size = { ...config.size };
     this.getThemeColor = config.getThemeColor;
+    this.getSetting = config.getSetting;
     this.onDirtyCallback = config.onDirty;
     this.onFocusChangeCallback = config.onFocusChange;
 
@@ -116,6 +122,7 @@ export class Window {
     const paneContainerCallbacks: PaneContainerCallbacks = {
       onDirty: () => this.markDirty(),
       getThemeColor: this.getThemeColor,
+      getSetting: this.getSetting,
       onElementCloseRequest: config.onElementCloseRequest,
       getBackgroundForFocus: (type, focused) => this.getBackgroundForFocus(type, focused),
       getForegroundForFocus: (type, focused) => this.getForegroundForFocus(type, focused),

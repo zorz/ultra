@@ -5,8 +5,8 @@
  */
 
 import { CSI } from './sequences.ts';
-import { fgColor, bgColor, resetColor } from './colors.ts';
-import type { Cell } from '../types.ts';
+import { fgColor, bgColor, resetColor, parseColor } from './colors.ts';
+import type { Cell, UnderlineStyle } from '../types.ts';
 
 // ============================================
 // Individual Style Codes
@@ -42,9 +42,65 @@ export function italicOff(): string {
   return `${CSI}23m`;
 }
 
-/** Enable underline */
+/** Enable underline (single style) */
 export function underline(): string {
   return `${CSI}4m`;
+}
+
+/**
+ * Enable underline with specific style.
+ * Uses extended SGR codes (CSI 4:<style>m) for different underline styles.
+ * Supported by: Kitty, WezTerm, iTerm2, foot, Alacritty (0.13+), etc.
+ * Terminals that don't support will typically fall back to single underline.
+ *
+ * Style codes:
+ * - 0 = no underline (same as CSI 24m)
+ * - 1 = single underline (default)
+ * - 2 = double underline
+ * - 3 = curly/wavy underline (squiggly)
+ * - 4 = dotted underline
+ * - 5 = dashed underline
+ */
+export function underlineStyled(style: UnderlineStyle): string {
+  const styleCode: Record<UnderlineStyle, number> = {
+    single: 1,
+    double: 2,
+    curly: 3,
+    dotted: 4,
+    dashed: 5,
+  };
+  return `${CSI}4:${styleCode[style]}m`;
+}
+
+/**
+ * Set underline color using 24-bit RGB.
+ * Uses extended SGR code (CSI 58:2::r:g:bm).
+ * Supported by: Kitty, WezTerm, iTerm2, foot, Alacritty (0.13+), etc.
+ */
+export function underlineColor24bit(r: number, g: number, b: number): string {
+  return `${CSI}58:2::${r}:${g}:${b}m`;
+}
+
+/**
+ * Set underline color from color string.
+ * Returns empty string if color is 'default' or invalid.
+ */
+export function underlineColorFromString(color: string): string {
+  if (color === 'default') {
+    return '';
+  }
+  const rgb = parseColor(color);
+  if (!rgb) {
+    return '';
+  }
+  return underlineColor24bit(rgb.r, rgb.g, rgb.b);
+}
+
+/**
+ * Reset underline color to default.
+ */
+export function underlineColorDefault(): string {
+  return `${CSI}59m`;
 }
 
 /** Disable underline */
@@ -103,6 +159,8 @@ export interface StyleOptions {
   dim?: boolean;
   italic?: boolean;
   underline?: boolean;
+  underlineStyle?: UnderlineStyle;
+  underlineColor?: string;
   blink?: boolean;
   inverse?: boolean;
   hidden?: boolean;
@@ -140,7 +198,16 @@ export function buildStyle(options: StyleOptions): string {
   }
 
   if (options.underline) {
-    parts.push(underline());
+    // Use styled underline if a style is specified, otherwise use simple underline
+    if (options.underlineStyle) {
+      parts.push(underlineStyled(options.underlineStyle));
+    } else {
+      parts.push(underline());
+    }
+    // Apply underline color if specified
+    if (options.underlineColor) {
+      parts.push(underlineColorFromString(options.underlineColor));
+    }
   }
 
   if (options.blink) {
@@ -173,6 +240,8 @@ export function cellStyle(cell: Cell): string {
     dim: cell.dim,
     italic: cell.italic,
     underline: cell.underline,
+    underlineStyle: cell.underlineStyle,
+    underlineColor: cell.underlineColor,
     strikethrough: cell.strikethrough,
   });
 }
@@ -198,6 +267,8 @@ export interface StyleDiff {
   dimChanged: boolean;
   italicChanged: boolean;
   underlineChanged: boolean;
+  underlineStyleChanged: boolean;
+  underlineColorChanged: boolean;
   strikethroughChanged: boolean;
 }
 
@@ -213,6 +284,8 @@ export function diffCells(prev: Cell | null, next: Cell): StyleDiff {
       dimChanged: !!next.dim,
       italicChanged: !!next.italic,
       underlineChanged: !!next.underline,
+      underlineStyleChanged: !!next.underlineStyle,
+      underlineColorChanged: !!next.underlineColor,
       strikethroughChanged: !!next.strikethrough,
     };
   }
@@ -224,6 +297,8 @@ export function diffCells(prev: Cell | null, next: Cell): StyleDiff {
     dimChanged: prev.dim !== next.dim,
     italicChanged: prev.italic !== next.italic,
     underlineChanged: prev.underline !== next.underline,
+    underlineStyleChanged: prev.underlineStyle !== next.underlineStyle,
+    underlineColorChanged: prev.underlineColor !== next.underlineColor,
     strikethroughChanged: prev.strikethrough !== next.strikethrough,
   };
 }
@@ -264,8 +339,28 @@ export function transitionStyle(prev: Cell | null, next: Cell): string {
     parts.push(next.italic ? italic() : italicOff());
   }
 
-  if (diff.underlineChanged) {
-    parts.push(next.underline ? underline() : underlineOff());
+  // Handle underline changes (including style and color)
+  if (diff.underlineChanged || diff.underlineStyleChanged) {
+    if (next.underline) {
+      // Apply underline with style
+      if (next.underlineStyle) {
+        parts.push(underlineStyled(next.underlineStyle));
+      } else {
+        parts.push(underline());
+      }
+    } else {
+      parts.push(underlineOff());
+    }
+  }
+
+  // Handle underline color changes (only if underline is on)
+  if (next.underline && (diff.underlineColorChanged || diff.underlineChanged)) {
+    if (next.underlineColor) {
+      parts.push(underlineColorFromString(next.underlineColor));
+    } else if (prev?.underlineColor) {
+      // Reset underline color if it was previously set
+      parts.push(underlineColorDefault());
+    }
   }
 
   if (diff.strikethroughChanged) {
@@ -286,6 +381,8 @@ export function stylesMatch(a: Cell, b: Cell): boolean {
     a.dim === b.dim &&
     a.italic === b.italic &&
     a.underline === b.underline &&
+    a.underlineStyle === b.underlineStyle &&
+    a.underlineColor === b.underlineColor &&
     a.strikethrough === b.strikethrough
   );
 }

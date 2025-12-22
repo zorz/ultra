@@ -37,6 +37,8 @@ export interface PaneCallbacks {
   onFocusRequest: (elementId: string) => void;
   /** Get a theme color */
   getThemeColor: (key: string, fallback?: string) => string;
+  /** Get a setting value */
+  getSetting: <T>(key: string, defaultValue: T) => T;
   /**
    * Called when user requests to close an element via tab X.
    * Return true to proceed with close, false to cancel.
@@ -902,6 +904,7 @@ export class Pane {
       updateTitle: () => this.markDirty(),
       updateStatus: () => this.markDirty(),
       getThemeColor: (key, fallback) => this.callbacks.getThemeColor(key, fallback),
+      getSetting: (key, defaultValue) => this.callbacks.getSetting(key, defaultValue),
       isPaneFocused: () => this.callbacks.isPaneFocused(),
       getBackgroundForFocus: (type, focused) => this.callbacks.getBackgroundForFocus(type, focused),
       getForegroundForFocus: (type, focused) => this.callbacks.getForegroundForFocus(type, focused),
