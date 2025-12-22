@@ -8,5 +8,8 @@ export {
   InlineDiffExpander,
   createInlineDiffExpander,
   type InlineDiffRegion,
-  type GetDiffHunkCallback,
+  type InlineDiffCallbacks,
+  type InlineDiffAction,
+  type TokenProvider,
+  type SyntaxToken,
 } from './inline-diff-expander.ts';

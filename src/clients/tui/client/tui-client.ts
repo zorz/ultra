@@ -741,6 +741,49 @@ export class TUIClient {
           return null;
         }
       },
+      onStageHunk: async (_bufferLine, _hunk) => {
+        // Stage the file (staging individual hunks requires git add -p which is interactive)
+        if (!uri) return;
+        try {
+          const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+          await gitCliService.stage(this.workingDirectory, [filePath]);
+          // Refresh git status and line changes
+          await this.refreshGitStatus();
+          await this.updateGitLineChanges(editor, uri);
+          this.window.showNotification('Changes staged', 'success');
+        } catch (err) {
+          this.window.showNotification(`Failed to stage: ${err}`, 'error');
+        }
+      },
+      onRevertHunk: async (_bufferLine, _hunk) => {
+        // Discard all changes to the file (discarding individual hunks is complex)
+        if (!uri) return;
+        try {
+          const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+          await gitCliService.discard(this.workingDirectory, [filePath]);
+          // Reload the file content
+          const fileContent = await this.fileService.read(uri);
+          editor.setContent(fileContent.content);
+          editor.markSaved();
+          // Refresh git status
+          await this.refreshGitStatus();
+          await this.updateGitLineChanges(editor, uri);
+          this.window.showNotification('Changes discarded', 'success');
+        } catch (err) {
+          this.window.showNotification(`Failed to discard: ${err}`, 'error');
+        }
+      },
+      onConfirmRevert: async (message: string) => {
+        if (!this.dialogManager) return false;
+        const result = await this.dialogManager.showConfirm({
+          title: 'Discard Changes',
+          message,
+          confirmText: 'Discard',
+          cancelText: 'Cancel',
+          destructive: true,
+        });
+        return result.confirmed;
+      },
     };
     editor.setCallbacks(callbacks);
     if (uri) {
@@ -937,8 +980,10 @@ export class TUIClient {
       // Notify LSP of document save
       await this.lspDocumentSaved(uri, content);
 
-      // Update git line changes (saved content is now committed baseline)
-      this.updateGitLineChanges(editor, uri);
+      // Invalidate git cache for this file and update line changes
+      const repoUri = `file://${this.workingDirectory}`;
+      gitCliService.invalidateCache(repoUri);
+      await this.updateGitLineChanges(editor, uri);
 
       // Clear modified flag
       editor.markSaved();

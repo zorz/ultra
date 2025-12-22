@@ -11,7 +11,7 @@ import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../core/colors.ts';
 import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
-import { InlineDiffExpander } from '../components/inline-diff-expander.ts';
+import { InlineDiffExpander, type InlineDiffCallbacks } from '../components/inline-diff-expander.ts';
 import type { GitDiffHunk } from '../../../services/git/types.ts';
 
 // ============================================
@@ -116,6 +116,12 @@ export interface DocumentEditorCallbacks {
   onFocus?: () => void;
   /** Called to get diff hunk for a line (for inline diff expansion) */
   onGetDiffHunk?: (bufferLine: number) => Promise<GitDiffHunk | null>;
+  /** Called to stage a hunk from inline diff */
+  onStageHunk?: (bufferLine: number, hunk: GitDiffHunk) => void | Promise<void>;
+  /** Called to revert/discard a hunk from inline diff */
+  onRevertHunk?: (bufferLine: number, hunk: GitDiffHunk) => void | Promise<void>;
+  /** Called to confirm revert action (returns true if confirmed) */
+  onConfirmRevert?: (message: string) => Promise<boolean>;
 }
 
 // ============================================
@@ -214,6 +220,9 @@ export class DocumentEditor extends BaseElement {
 
   /** Inline diff expander for showing diffs within the editor */
   private inlineDiffExpander: InlineDiffExpander | null = null;
+
+  /** Screen positions of rendered inline diff regions (for mouse hit testing) */
+  private inlineDiffScreenPositions: Map<number, { startY: number; height: number }> = new Map();
 
   /** Undo/redo manager */
   private undoManager: UndoManager = new UndoManager();
@@ -665,6 +674,23 @@ export class DocumentEditor extends BaseElement {
   enableInlineDiff(): void {
     if (!this.inlineDiffExpander) {
       this.inlineDiffExpander = new InlineDiffExpander(this.ctx);
+
+      // Set up callbacks for inline diff actions
+      const callbacks: InlineDiffCallbacks = {
+        onStage: async (bufferLine, hunk) => {
+          await this.callbacks.onStageHunk?.(bufferLine, hunk);
+        },
+        onRevert: async (bufferLine, hunk) => {
+          await this.callbacks.onRevertHunk?.(bufferLine, hunk);
+        },
+        onConfirmRevert: async (message) => {
+          return (await this.callbacks.onConfirmRevert?.(message)) ?? false;
+        },
+        onClose: () => {
+          this.ctx.markDirty();
+        },
+      };
+      this.inlineDiffExpander.setCallbacks(callbacks);
     }
   }
 
@@ -721,6 +747,97 @@ export class DocumentEditor extends BaseElement {
    */
   getInlineDiffExpander(): InlineDiffExpander | null {
     return this.inlineDiffExpander;
+  }
+
+  /**
+   * Handle keyboard input for the focused inline diff region.
+   * Returns true if the event was handled.
+   */
+  private handleInlineDiffKey(event: KeyEvent): boolean {
+    if (!this.inlineDiffExpander) return false;
+
+    const region = this.inlineDiffExpander.getFocusedRegion();
+    if (!region) return false;
+
+    const { key, ctrl, shift } = event;
+
+    // Scrolling with arrow keys (up/down scroll content)
+    if (key === 'ArrowUp' || key === 'Up') {
+      if (this.inlineDiffExpander.scrollUp()) {
+        this.ctx.markDirty();
+        return true;
+      }
+      // If can't scroll, unfocus and let editor handle
+      this.inlineDiffExpander.unfocusAll();
+      return false;
+    }
+
+    if (key === 'ArrowDown' || key === 'Down') {
+      if (this.inlineDiffExpander.scrollDown()) {
+        this.ctx.markDirty();
+        return true;
+      }
+      // If can't scroll, unfocus and let editor handle
+      this.inlineDiffExpander.unfocusAll();
+      return false;
+    }
+
+    // Page up/down for faster scrolling
+    if (key === 'PageUp') {
+      this.inlineDiffExpander.scrollUp(10);
+      this.ctx.markDirty();
+      return true;
+    }
+
+    if (key === 'PageDown') {
+      this.inlineDiffExpander.scrollDown(10);
+      this.ctx.markDirty();
+      return true;
+    }
+
+    // Button navigation with left/right
+    if (key === 'ArrowLeft' || key === 'Left') {
+      if (this.inlineDiffExpander.focusPreviousButton()) {
+        this.ctx.markDirty();
+        return true;
+      }
+    }
+
+    if (key === 'ArrowRight' || key === 'Right') {
+      if (this.inlineDiffExpander.focusNextButton()) {
+        this.ctx.markDirty();
+        return true;
+      }
+    }
+
+    // Enter to activate focused button (async, fire-and-forget)
+    if (key === 'Enter' || key === 'Return') {
+      void this.inlineDiffExpander.activateFocusedButton();
+      this.ctx.markDirty();
+      return true;
+    }
+
+    // Escape to close
+    if (key === 'Escape') {
+      this.inlineDiffExpander.collapse(region.bufferLine);
+      this.ctx.markDirty();
+      return true;
+    }
+
+    // Shortcut keys (async, fire-and-forget)
+    if (key === 's' && !ctrl && !shift) {
+      void this.inlineDiffExpander.executeAction(region.bufferLine, 'stage');
+      this.ctx.markDirty();
+      return true;
+    }
+
+    if (key === 'd' && !ctrl && !shift) {
+      void this.inlineDiffExpander.executeAction(region.bufferLine, 'revert');
+      this.ctx.markDirty();
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -2066,6 +2183,10 @@ export class DocumentEditor extends BaseElement {
 
   render(buffer: ScreenBuffer): void {
     const { x, y, width, height } = this.bounds;
+
+    // Clear inline diff screen positions for this render pass
+    this.inlineDiffScreenPositions.clear();
+
     // Use centralized focus colors for consistent focus indication
     const bg = this.ctx.getBackgroundForFocus('editor', this.focused);
     const fg = this.ctx.getForegroundForFocus('editor', this.focused);
@@ -2224,14 +2345,23 @@ export class DocumentEditor extends BaseElement {
       if (wrapOffset >= wrappedRowCount) {
         // Render inline diff after this buffer line if expanded
         if (this.inlineDiffExpander?.isExpanded(bufferLine) && row < height) {
+          const diffStartY = y + row;
+          // Provide token provider for syntax highlighting in diff
+          const tokenProvider = (line: number) => this.lines[line]?.tokens;
           const extraRows = this.inlineDiffExpander.render(
             buffer,
             bufferLine,
-            y + row,
+            diffStartY,
             x,
             width - rightMargin,
-            this.gutterWidth
+            this.gutterWidth,
+            tokenProvider
           );
+          // Track screen position for mouse hit testing
+          this.inlineDiffScreenPositions.set(bufferLine, {
+            startY: diffStartY,
+            height: extraRows,
+          });
           row += extraRows;
         }
 
@@ -2720,6 +2850,14 @@ export class DocumentEditor extends BaseElement {
   // ─────────────────────────────────────────────────────────────────────────
 
   override handleKey(event: KeyEvent): boolean {
+    // Check if inline diff has focus - forward events to it
+    if (this.inlineDiffExpander?.getFocusedRegion()) {
+      // Handle synchronous navigation/scrolling immediately
+      // Dispatch async actions (stage, revert) without blocking
+      const handled = this.handleInlineDiffKey(event);
+      if (handled) return true;
+    }
+
     // Navigation
     if (event.key === 'ArrowUp') {
       this.moveCursor('up', event.shift);
@@ -2824,6 +2962,43 @@ export class DocumentEditor extends BaseElement {
       ? x + width - DocumentEditor.SCROLLBAR_WIDTH - DocumentEditor.MINIMAP_WIDTH
       : scrollbarX;
     const contentWidth = width - this.gutterWidth - rightMargin;
+
+    // Handle mouse events on inline diff regions
+    if (this.inlineDiffExpander && this.inlineDiffScreenPositions.size > 0) {
+      // Check if mouse is within any inline diff region
+      for (const [bufferLine, pos] of this.inlineDiffScreenPositions) {
+        if (event.y >= pos.startY && event.y < pos.startY + pos.height) {
+          // Mouse is within this inline diff region
+          // Forward the event to the expander (fire-and-forget for async)
+          void this.inlineDiffExpander.handleMouseEvent(
+            event,
+            bufferLine,
+            pos.startY,
+            x,
+            width - rightMargin,
+            this.gutterWidth
+          );
+          return true;
+        }
+      }
+    }
+
+    // Handle mouse wheel on focused inline diff (when not directly over region)
+    if (this.inlineDiffExpander?.getFocusedRegion() && event.type === 'scroll') {
+      if (event.scrollDirection === -1) {
+        // Scroll up
+        if (this.inlineDiffExpander.scrollUp(3)) {
+          this.ctx.markDirty();
+          return true;
+        }
+      } else if (event.scrollDirection === 1) {
+        // Scroll down
+        if (this.inlineDiffExpander.scrollDown(3)) {
+          this.ctx.markDirty();
+          return true;
+        }
+      }
+    }
 
     // Check if click is on scrollbar
     if (event.x >= scrollbarX && event.x < x + width) {

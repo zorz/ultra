@@ -257,6 +257,20 @@ export const settingsSchema: SettingsSchema = {
       maximum: 20,
       description: 'Number of context lines in diffs',
     },
+    'git.inlineDiff.maxHeight': {
+      type: 'number',
+      default: 15,
+      minimum: 5,
+      maximum: 50,
+      description: 'Maximum height (rows) for inline diff expander before scrolling',
+    },
+    'git.inlineDiff.contextLines': {
+      type: 'number',
+      default: 3,
+      minimum: 0,
+      maximum: 10,
+      description: 'Number of unchanged context lines to show before/after changes',
+    },
 
     // ─────────────────────────────────────────────────────────────────────────
     // AI Panel Settings
