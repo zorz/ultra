@@ -517,12 +517,15 @@ export abstract class AITerminalChat extends BaseElement {
     // Handle scroll
     if (event.type === 'scroll' && event.scrollDirection) {
       if (this.pty) {
+        let scrolled = false;
         if (event.scrollDirection === -1) {
-          this.pty.scrollViewUp(3);
+          scrolled = this.pty.scrollViewUp(3);
         } else {
-          this.pty.scrollViewDown(3);
+          scrolled = this.pty.scrollViewDown(3);
         }
-        this.ctx.markDirty();
+        if (scrolled) {
+          this.ctx.markDirty();
+        }
         return true;
       }
     }

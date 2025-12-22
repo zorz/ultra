@@ -158,12 +158,12 @@ export class NodePtyBackend implements PTYBackend {
     return this.screenBuffer.getTotalLines();
   }
 
-  scrollViewUp(lines: number): void {
-    this.screenBuffer.scrollViewUp(lines);
+  scrollViewUp(lines: number): boolean {
+    return this.screenBuffer.scrollViewUp(lines);
   }
 
-  scrollViewDown(lines: number): void {
-    this.screenBuffer.scrollViewDown(lines);
+  scrollViewDown(lines: number): boolean {
+    return this.screenBuffer.scrollViewDown(lines);
   }
 
   resetViewOffset(): void {

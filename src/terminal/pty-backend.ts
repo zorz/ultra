@@ -135,14 +135,16 @@ export interface PTYBackend {
   /**
    * Scroll the view up (into history).
    * @param lines - Number of lines to scroll
+   * @returns true if scroll position changed
    */
-  scrollViewUp(lines: number): void;
+  scrollViewUp(lines: number): boolean;
 
   /**
    * Scroll the view down (toward current).
    * @param lines - Number of lines to scroll
+   * @returns true if scroll position changed
    */
-  scrollViewDown(lines: number): void;
+  scrollViewDown(lines: number): boolean;
 
   /**
    * Reset view offset to show current screen.

@@ -1098,22 +1098,29 @@ export class TerminalSession extends BaseElement {
       // Scroll direction: -1 = up, 1 = down
       const direction = event.scrollDirection ?? 1;
       const lines = 3;
+      let scrolled = false;
 
       if (this.pty) {
         if (direction < 0) {
           // Scroll up (view earlier content)
-          this.pty.scrollViewUp(lines);
+          scrolled = this.pty.scrollViewUp(lines);
         } else {
           // Scroll down (view later content)
-          this.pty.scrollViewDown(lines);
+          scrolled = this.pty.scrollViewDown(lines);
         }
       } else {
         // For internal buffer: scrollTop increases when scrolling up (viewing earlier content)
         const delta = direction < 0 ? lines : -lines;
         const maxScroll = Math.max(0, this.lines.length - this.visibleRows);
-        this.scrollTop = Math.max(0, Math.min(this.scrollTop + delta, maxScroll));
+        const newScrollTop = Math.max(0, Math.min(this.scrollTop + delta, maxScroll));
+        if (newScrollTop !== this.scrollTop) {
+          this.scrollTop = newScrollTop;
+          scrolled = true;
+        }
       }
-      this.ctx.markDirty();
+      if (scrolled) {
+        this.ctx.markDirty();
+      }
       return true;
     }
 

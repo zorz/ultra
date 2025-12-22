@@ -1758,18 +1758,30 @@ export class DocumentEditor extends BaseElement {
 
   /**
    * Scroll by lines.
+   * @returns true if scroll position changed
    */
-  scroll(lines: number): void {
-    this.scrollTop = Math.max(0, Math.min(this.scrollTop + lines, this.lines.length - 1));
-    this.ctx.markDirty();
+  scroll(lines: number): boolean {
+    const newScrollTop = Math.max(0, Math.min(this.scrollTop + lines, this.lines.length - 1));
+    if (newScrollTop !== this.scrollTop) {
+      this.scrollTop = newScrollTop;
+      this.ctx.markDirty();
+      return true;
+    }
+    return false;
   }
 
   /**
    * Scroll to line.
+   * @returns true if scroll position changed
    */
-  scrollToLine(line: number): void {
-    this.scrollTop = Math.max(0, Math.min(line, this.lines.length - 1));
-    this.ctx.markDirty();
+  scrollToLine(line: number): boolean {
+    const newScrollTop = Math.max(0, Math.min(line, this.lines.length - 1));
+    if (newScrollTop !== this.scrollTop) {
+      this.scrollTop = newScrollTop;
+      this.ctx.markDirty();
+      return true;
+    }
+    return false;
   }
 
   /**

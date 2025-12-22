@@ -120,12 +120,12 @@ export class BunPtyBackend implements PTYBackend {
     return this.pty.getTotalLines();
   }
 
-  scrollViewUp(lines: number): void {
-    this.pty.scrollViewUp(lines);
+  scrollViewUp(lines: number): boolean {
+    return this.pty.scrollViewUp(lines);
   }
 
-  scrollViewDown(lines: number): void {
-    this.pty.scrollViewDown(lines);
+  scrollViewDown(lines: number): boolean {
+    return this.pty.scrollViewDown(lines);
   }
 
   resetViewOffset(): void {

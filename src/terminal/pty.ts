@@ -455,17 +455,29 @@ export class ScreenBuffer {
   
   /**
    * Scroll view up (into scrollback history)
+   * @returns true if scroll position changed
    */
-  scrollViewUp(lines: number): void {
+  scrollViewUp(lines: number): boolean {
     const maxOffset = this.scrollback.length;
-    this.viewOffset = Math.min(this.viewOffset + lines, maxOffset);
+    const newOffset = Math.min(this.viewOffset + lines, maxOffset);
+    if (newOffset !== this.viewOffset) {
+      this.viewOffset = newOffset;
+      return true;
+    }
+    return false;
   }
-  
+
   /**
    * Scroll view down (towards current)
+   * @returns true if scroll position changed
    */
-  scrollViewDown(lines: number): void {
-    this.viewOffset = Math.max(this.viewOffset - lines, 0);
+  scrollViewDown(lines: number): boolean {
+    const newOffset = Math.max(this.viewOffset - lines, 0);
+    if (newOffset !== this.viewOffset) {
+      this.viewOffset = newOffset;
+      return true;
+    }
+    return false;
   }
   
   /**
@@ -886,16 +898,18 @@ export class PTY {
 
   /**
    * Scroll view up (into scrollback history)
+   * @returns true if scroll position changed
    */
-  scrollViewUp(lines: number): void {
-    this.screen.scrollViewUp(lines);
+  scrollViewUp(lines: number): boolean {
+    return this.screen.scrollViewUp(lines);
   }
 
   /**
    * Scroll view down (towards current)
+   * @returns true if scroll position changed
    */
-  scrollViewDown(lines: number): void {
-    this.screen.scrollViewDown(lines);
+  scrollViewDown(lines: number): boolean {
+    return this.screen.scrollViewDown(lines);
   }
 
   /**
