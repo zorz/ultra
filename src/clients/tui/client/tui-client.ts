@@ -714,6 +714,33 @@ export class TUIClient {
           this.checkExternalFileChanges(uri, editor);
         }
       },
+      onGetDiffHunk: async (bufferLine: number) => {
+        // Only works for saved files with git changes
+        if (!uri) return null;
+
+        try {
+          // Convert URI to file path for git service
+          const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+          const repoUri = `file://${this.workingDirectory}`;
+
+          // Get diff hunks for this file (unstaged changes)
+          const hunks = await gitCliService.diff(repoUri, filePath, false);
+
+          // Find the hunk that contains this line (1-based line number in new file)
+          const lineNumber = bufferLine + 1; // Convert 0-based to 1-based
+          for (const hunk of hunks) {
+            // Check if line is within the hunk's range in the new file
+            const hunkEnd = hunk.newStart + hunk.newCount - 1;
+            if (lineNumber >= hunk.newStart && lineNumber <= hunkEnd) {
+              return hunk;
+            }
+          }
+
+          return null;
+        } catch {
+          return null;
+        }
+      },
     };
     editor.setCallbacks(callbacks);
     if (uri) {

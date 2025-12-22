@@ -11,6 +11,8 @@ import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../core/colors.ts';
 import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
+import { InlineDiffExpander } from '../components/inline-diff-expander.ts';
+import type { GitDiffHunk } from '../../../services/git/types.ts';
 
 // ============================================
 // Types
@@ -112,6 +114,8 @@ export interface DocumentEditorCallbacks {
   onCharTyped?: (char: string, position: CursorPosition) => void;
   /** Called when editor receives focus (for checking external file changes) */
   onFocus?: () => void;
+  /** Called to get diff hunk for a line (for inline diff expansion) */
+  onGetDiffHunk?: (bufferLine: number) => Promise<GitDiffHunk | null>;
 }
 
 // ============================================
@@ -207,6 +211,9 @@ export class DocumentEditor extends BaseElement {
 
   /** Git line changes for gutter indicators */
   private gitLineChanges: Map<number, 'added' | 'modified' | 'deleted'> = new Map();
+
+  /** Inline diff expander for showing diffs within the editor */
+  private inlineDiffExpander: InlineDiffExpander | null = null;
 
   /** Undo/redo manager */
   private undoManager: UndoManager = new UndoManager();
@@ -649,6 +656,71 @@ export class DocumentEditor extends BaseElement {
   clearGitLineChanges(): void {
     this.gitLineChanges.clear();
     this.ctx.markDirty();
+  }
+
+  /**
+   * Enable inline diff expansion.
+   * Creates the InlineDiffExpander instance if not already created.
+   */
+  enableInlineDiff(): void {
+    if (!this.inlineDiffExpander) {
+      this.inlineDiffExpander = new InlineDiffExpander(this.ctx);
+    }
+  }
+
+  /**
+   * Disable inline diff expansion.
+   */
+  disableInlineDiff(): void {
+    this.inlineDiffExpander?.clear();
+    this.inlineDiffExpander = null;
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Check if inline diff is enabled.
+   */
+  isInlineDiffEnabled(): boolean {
+    return this.inlineDiffExpander !== null;
+  }
+
+  /**
+   * Toggle inline diff at a buffer line.
+   * Only works for lines with git changes.
+   */
+  async toggleInlineDiffAt(bufferLine: number): Promise<void> {
+    if (!this.inlineDiffExpander) {
+      this.enableInlineDiff();
+    }
+
+    // Check if already expanded - if so, collapse
+    if (this.inlineDiffExpander!.isExpanded(bufferLine)) {
+      this.inlineDiffExpander!.collapse(bufferLine);
+      this.ctx.markDirty();
+      return;
+    }
+
+    // Get the hunk for this line
+    const hunk = await this.callbacks.onGetDiffHunk?.(bufferLine);
+    if (hunk) {
+      this.inlineDiffExpander!.toggle(bufferLine, hunk);
+      this.ctx.markDirty();
+    }
+  }
+
+  /**
+   * Collapse all inline diffs.
+   */
+  collapseAllInlineDiffs(): void {
+    this.inlineDiffExpander?.clear();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Get the inline diff expander (for external access if needed).
+   */
+  getInlineDiffExpander(): InlineDiffExpander | null {
+    return this.inlineDiffExpander;
   }
 
   /**
@@ -2147,11 +2219,25 @@ export class DocumentEditor extends BaseElement {
 
       // Move to next wrapped row or next buffer line
       wrapOffset++;
+      row++;
+
       if (wrapOffset >= wrappedRowCount) {
+        // Render inline diff after this buffer line if expanded
+        if (this.inlineDiffExpander?.isExpanded(bufferLine) && row < height) {
+          const extraRows = this.inlineDiffExpander.render(
+            buffer,
+            bufferLine,
+            y + row,
+            x,
+            width - rightMargin,
+            this.gutterWidth
+          );
+          row += extraRows;
+        }
+
         bufferLine++;
         wrapOffset = 0;
       }
-      row++;
     }
 
     // Fill remaining rows with empty lines
@@ -2823,6 +2909,16 @@ export class DocumentEditor extends BaseElement {
             this.toggleFoldAt(bufferLine);
             return true;
           }
+        }
+
+        // Check if click is on a git-status line number (toggle inline diff)
+        // Git status uses 1-based line numbers
+        const gitStatus = this.gitLineChanges.get(bufferLine + 1);
+        if (gitStatus && relX < lineNumWidth && this.callbacks.onGetDiffHunk) {
+          // Toggle inline diff for this line
+          this.toggleInlineDiffAt(bufferLine);
+          this.ctx.requestFocus();
+          return true;
         }
 
         // Click in gutter - select entire line
