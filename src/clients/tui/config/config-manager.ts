@@ -475,6 +475,8 @@ export class TUIConfigManager {
       { key: 'ctrl+shift+o', command: 'editor.gotoSymbol' },
       { key: 'ctrl+tab', command: 'workbench.focusNextPane' },
       { key: 'ctrl+shift+tab', command: 'workbench.focusPreviousPane' },
+      { key: 'ctrl+]', command: 'editor.nextTab' },
+      { key: 'ctrl+[', command: 'editor.previousTab' },
 
       // View
       { key: 'ctrl+b', command: 'workbench.toggleSidebar' },
