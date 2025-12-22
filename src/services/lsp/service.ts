@@ -6,7 +6,7 @@
  */
 
 import { debugLog as globalDebugLog } from '../../debug.ts';
-import { LSPClient } from '../../features/lsp/client.ts';
+import { LSPClient } from './client.ts';
 import type { LSPService } from './interface.ts';
 import { LSPError, LSPErrorCode } from './errors.ts';
 import {

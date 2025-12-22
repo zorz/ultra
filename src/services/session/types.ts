@@ -265,8 +265,8 @@ export interface ThemeColors {
  * Complete theme definition.
  */
 export interface Theme {
-  /** Theme identifier */
-  id: string;
+  /** Theme identifier (optional, defaults to name) */
+  id?: string;
   /** Display name */
   name: string;
   /** Theme type */
@@ -281,6 +281,8 @@ export interface Theme {
  * Token color for syntax highlighting.
  */
 export interface TokenColor {
+  /** Optional name for the token color rule */
+  name?: string;
   /** Token scope */
   scope: string | string[];
   /** Color settings */

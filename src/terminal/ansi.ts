@@ -148,11 +148,11 @@ export const PASTE = {
 };
 
 // Import shared color utilities
-import { hexToRgbTuple } from '../ui/colors.ts';
+import { hexToRgbTuple } from '../core/colors.ts';
 
 /**
  * Convert hex color to RGB tuple
- * @deprecated Use hexToRgbTuple from '../ui/colors.ts' directly
+ * @deprecated Use hexToRgbTuple from '../core/colors.ts' directly
  */
 export function hexToRgb(hex: string): [number, number, number] {
   return hexToRgbTuple(hex);

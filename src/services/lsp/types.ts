@@ -22,9 +22,9 @@ export type {
   LSPVersionedTextDocumentIdentifier,
   LSPTextDocumentItem,
   NotificationHandler,
-} from '../../features/lsp/client.ts';
+} from './client.ts';
 
-export { SymbolKind } from '../../features/lsp/client.ts';
+export { SymbolKind } from './client.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Server Configuration
@@ -240,7 +240,7 @@ export const DEFAULT_SERVERS: Record<string, ServerConfig> = {
 /**
  * Diagnostics callback for receiving diagnostic updates.
  */
-export type DiagnosticsCallback = (uri: string, diagnostics: import('../../features/lsp/client.ts').LSPDiagnostic[]) => void;
+export type DiagnosticsCallback = (uri: string, diagnostics: import('./client.ts').LSPDiagnostic[]) => void;
 
 /**
  * Server status change callback.

@@ -8,7 +8,7 @@
 import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent, Position, UnderlineStyle } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
-import { darken, lighten } from '../../../ui/colors.ts';
+import { darken, lighten } from '../../../core/colors.ts';
 import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
 

@@ -9,7 +9,7 @@ import { mkdir } from 'fs/promises';
 import * as fs from 'fs';
 import { debugLog } from '../../../debug.ts';
 import type { EditorSettings } from '../../../config/settings.ts';
-import type { KeyBinding } from '../../../input/keymap.ts';
+import type { KeyBinding } from '../../../services/session/types.ts';
 
 // ============================================
 // Hot-Reload Types

@@ -5,7 +5,7 @@
  */
 
 import { debugLog as globalDebugLog } from '../../debug.ts';
-import { Highlighter } from '../../features/syntax/shiki-highlighter.ts';
+import { Highlighter } from './highlighter.ts';
 import type { SyntaxService } from './interface.ts';
 import { SyntaxError } from './errors.ts';
 import {
