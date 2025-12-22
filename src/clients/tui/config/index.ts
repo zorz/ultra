@@ -9,4 +9,6 @@ export {
   createTUIConfigManager,
   type TUISettings,
   type ConfigPaths,
+  type ConfigReloadType,
+  type ConfigReloadCallback,
 } from './config-manager.ts';

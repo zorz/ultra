@@ -271,6 +271,11 @@ export class TUIClient {
     await this.configManager.load();
     this.log('Configuration loaded');
 
+    // Start watching config files for hot-reload
+    this.configManager.startWatching();
+    this.configManager.onReload((type) => this.handleConfigReload(type));
+    this.log('Config hot-reload enabled');
+
     // Apply terminal panel height from config
     this.terminalPanelHeight = this.configManager.getWithDefault('tui.terminal.height', 10);
     this.log(`Terminal panel height: ${this.terminalPanelHeight}`);
@@ -346,6 +351,9 @@ export class TUIClient {
     } catch (error) {
       this.log(`Failed to save session: ${error}`);
     }
+
+    // Cleanup config manager (stop file watching)
+    this.configManager.destroy();
 
     // Stop input handler
     this.inputHandler.stop();
@@ -2081,6 +2089,46 @@ export class TUIClient {
       yaml: 'yaml',
     };
     return languageMap[ext] ?? 'plaintext';
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Hot-Reload Handler
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Handle config file reload.
+   * Applies new settings/keybindings and re-renders.
+   */
+  private handleConfigReload(type: 'settings' | 'keybindings' | 'theme'): void {
+    this.log(`Config reloaded: ${type}`);
+
+    if (type === 'settings') {
+      // Apply terminal panel height from updated config
+      this.terminalPanelHeight = this.configManager.getWithDefault('tui.terminal.height', 10);
+
+      // Apply theme from updated config
+      const themeName = this.configManager.get('workbench.colorTheme') ?? 'catppuccin-frappe';
+      const newTheme = this.loadThemeColors(themeName);
+
+      // Only update if theme actually changed
+      if (JSON.stringify(this.theme) !== JSON.stringify(newTheme)) {
+        this.theme = newTheme;
+
+        // Update syntax highlighting theme
+        this.syntaxService.setTheme(themeName);
+
+        this.log(`Theme updated to: ${themeName}`);
+      }
+    }
+
+    if (type === 'keybindings') {
+      // Re-setup keybindings with new config
+      this.setupKeybindings();
+      this.log('Keybindings updated');
+    }
+
+    // Re-render to apply changes
+    this.scheduleRender();
   }
 
   /**

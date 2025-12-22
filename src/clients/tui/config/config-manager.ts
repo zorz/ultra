@@ -6,9 +6,24 @@
  */
 
 import { mkdir } from 'fs/promises';
+import * as fs from 'fs';
 import { debugLog } from '../../../debug.ts';
 import type { EditorSettings } from '../../../config/settings.ts';
 import type { KeyBinding } from '../../../input/keymap.ts';
+
+// ============================================
+// Hot-Reload Types
+// ============================================
+
+/**
+ * Type of config that was reloaded.
+ */
+export type ConfigReloadType = 'settings' | 'keybindings' | 'theme';
+
+/**
+ * Callback for when config is reloaded.
+ */
+export type ConfigReloadCallback = (type: ConfigReloadType) => void;
 
 // ============================================
 // Configuration
@@ -77,6 +92,18 @@ export class TUIConfigManager {
 
   /** Whether config has been loaded */
   private loaded = false;
+
+  /** File watchers for hot-reload */
+  private watchers: Map<string, fs.FSWatcher> = new Map();
+
+  /** Debounce timers for file change events */
+  private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  /** Reload callbacks for hot-reload notifications */
+  private reloadCallbacks: Set<ConfigReloadCallback> = new Set();
+
+  /** Debounce delay in ms */
+  private static readonly DEBOUNCE_DELAY = 100;
 
   constructor(workingDirectory?: string) {
     const home = process.env.HOME || process.env.USERPROFILE || '';
@@ -497,6 +524,145 @@ export class TUIConfigManager {
    */
   getPaths(): ConfigPaths {
     return { ...this.paths };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Hot-Reload
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Start watching config files for changes.
+   * Automatically reloads settings and keybindings when files change.
+   */
+  startWatching(): void {
+    this.watchFile(this.paths.userSettings, 'settings');
+    this.watchFile(this.paths.userKeybindings, 'keybindings');
+    debugLog('[TUIConfigManager] Started watching config files');
+  }
+
+  /**
+   * Stop watching config files.
+   */
+  stopWatching(): void {
+    for (const watcher of this.watchers.values()) {
+      watcher.close();
+    }
+    this.watchers.clear();
+
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
+    debugLog('[TUIConfigManager] Stopped watching config files');
+  }
+
+  /**
+   * Watch a single file for changes.
+   */
+  private watchFile(filePath: string, type: ConfigReloadType): void {
+    try {
+      const watcher = fs.watch(filePath, { persistent: false }, (eventType) => {
+        // Handle both 'change' and 'rename' events (some editors replace files)
+        if (eventType === 'change' || eventType === 'rename') {
+          this.handleFileChange(filePath, type);
+        }
+      });
+
+      this.watchers.set(type, watcher);
+      debugLog(`[TUIConfigManager] Watching ${type}: ${filePath}`);
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Failed to watch ${filePath}: ${error}`);
+    }
+  }
+
+  /**
+   * Handle a file change event with debouncing.
+   */
+  private handleFileChange(filePath: string, type: ConfigReloadType): void {
+    // Clear existing timer for this type
+    const existingTimer = this.debounceTimers.get(type);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Set new debounced timer
+    const timer = setTimeout(async () => {
+      this.debounceTimers.delete(type);
+
+      // Re-setup watcher in case file was replaced
+      const watcher = this.watchers.get(type);
+      if (watcher) {
+        watcher.close();
+        this.watchers.delete(type);
+      }
+
+      // Check if file still exists before reloading
+      try {
+        const file = Bun.file(filePath);
+        if (await file.exists()) {
+          this.watchFile(filePath, type);
+          await this.reloadConfig(type);
+        }
+      } catch (error) {
+        debugLog(`[TUIConfigManager] Error handling file change: ${error}`);
+      }
+    }, TUIConfigManager.DEBOUNCE_DELAY);
+
+    this.debounceTimers.set(type, timer);
+  }
+
+  /**
+   * Reload a specific config type.
+   */
+  private async reloadConfig(type: ConfigReloadType): Promise<void> {
+    try {
+      if (type === 'settings') {
+        await this.loadSettings();
+        debugLog('[TUIConfigManager] Settings reloaded');
+      } else if (type === 'keybindings') {
+        await this.loadKeybindings();
+        debugLog('[TUIConfigManager] Keybindings reloaded');
+      }
+
+      // Notify listeners
+      this.notifyReload(type);
+    } catch (error) {
+      debugLog(`[TUIConfigManager] Failed to reload ${type}: ${error}`);
+    }
+  }
+
+  /**
+   * Register a callback for config reload events.
+   * @returns Unsubscribe function
+   */
+  onReload(callback: ConfigReloadCallback): () => void {
+    this.reloadCallbacks.add(callback);
+    return () => {
+      this.reloadCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all reload listeners.
+   */
+  private notifyReload(type: ConfigReloadType): void {
+    for (const callback of this.reloadCallbacks) {
+      try {
+        callback(type);
+      } catch (error) {
+        debugLog(`[TUIConfigManager] Reload callback error: ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Cleanup all resources.
+   */
+  destroy(): void {
+    this.stopWatching();
+    this.listeners.clear();
+    this.reloadCallbacks.clear();
   }
 }
 
