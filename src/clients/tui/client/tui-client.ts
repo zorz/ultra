@@ -854,6 +854,9 @@ export class TUIClient {
       // Update git line changes (saved content is now committed baseline)
       this.updateGitLineChanges(editor, uri);
 
+      // Clear modified flag
+      editor.markSaved();
+
       this.window.showNotification('File saved', 'success');
       return true;
     } catch (error) {
@@ -1056,6 +1059,9 @@ export class TUIClient {
           await this.applySyntaxTokens(editor, docInfo.syntaxSessionId);
         }
       }
+
+      // Clear modified flag
+      editor.markSaved();
 
       this.window.showNotification(`Saved as ${filename}`, 'success');
       this.scheduleRender();

@@ -680,6 +680,14 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
+   * Mark document as saved (clear modified flag).
+   */
+  markSaved(): void {
+    this.modified = false;
+    this.ctx.markDirty();
+  }
+
+  /**
    * Set syntax tokens for a line.
    */
   setLineTokens(lineNum: number, tokens: SyntaxToken[]): void {
