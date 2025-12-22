@@ -89,6 +89,18 @@ Issues and improvements to address in future sessions.
   - Can be opened via command palette
   - Updates in real-time as diagnostics change
 
+- [ ] **PTY loading fails in bundled binary from different directory** - When running the Ultra bundled binary from a directory other than the installation directory, terminal panes fail to open with "No PTY backend available" error. The issue is that Bun's bundled binary uses a virtual filesystem (`/$bunfs`) and module resolution doesn't find `node_modules` from the real filesystem. Attempted solutions:
+  - Using `import.meta.dir` - returns `/$bunfs/root` in bundled context
+  - Using `process.execPath` to find real binary location - works
+  - Using `createRequire` from `node:module` anchored at project root - still fails to resolve packages
+  - Tried anchoring at `package.json`, `index.js`, and `src/index.js` - all fail with "Cannot find package"
+  - The issue appears to be that Bun's bundled binary intercepts all module resolution, even when using Node's `createRequire`
+  - Possible solutions to investigate:
+    - Bun-specific APIs for loading native modules from real filesystem
+    - Embedding node-pty in the bundle differently
+    - Using `dlopen` or FFI to load the native module directly
+    - Bundling a pre-built node-pty binary alongside the Ultra executable
+
 ## Services
 
 ## ECP
