@@ -65,6 +65,10 @@ export interface TUISettings extends Partial<EditorSettings> {
   // Diagnostic display settings
   // Use curly/squiggly underlines for diagnostics (requires terminal support: Kitty, WezTerm, iTerm2, etc.)
   'editor.diagnostics.curlyUnderline'?: boolean;
+
+  // Undo/redo settings
+  // Maximum number of undo actions to keep per document (default: 1000)
+  'editor.undoHistoryLimit'?: number;
 }
 
 /**

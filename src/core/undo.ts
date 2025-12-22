@@ -1,8 +1,9 @@
 /**
  * Undo/Redo System
- * 
+ *
  * Operation-based undo system that tracks individual edit operations
- * rather than full document snapshots.
+ * rather than full document snapshots. Supports serialization for
+ * session persistence.
  */
 
 import type { Position } from './buffer.ts';
@@ -21,12 +22,50 @@ export interface UndoAction {
   timestamp?: number;
 }
 
+/**
+ * Serialized undo state for session persistence.
+ */
+export interface SerializedUndoState {
+  undoStack: UndoAction[];
+  redoStack: UndoAction[];
+}
+
 export class UndoManager {
   private undoStack: UndoAction[] = [];
   private redoStack: UndoAction[] = [];
-  private maxStackSize: number = 1000;
+  private _maxStackSize: number = 1000;
   private groupTimeout: number = 300; // ms to group operations
   private lastActionTime: number = 0;
+
+  constructor(maxStackSize?: number) {
+    if (maxStackSize !== undefined && maxStackSize > 0) {
+      this._maxStackSize = maxStackSize;
+    }
+  }
+
+  /**
+   * Get the maximum stack size.
+   */
+  get maxStackSize(): number {
+    return this._maxStackSize;
+  }
+
+  /**
+   * Set the maximum stack size.
+   * If the current stacks exceed the new size, they will be trimmed.
+   */
+  setMaxStackSize(size: number): void {
+    if (size > 0) {
+      this._maxStackSize = size;
+      // Trim stacks if needed
+      while (this.undoStack.length > this._maxStackSize) {
+        this.undoStack.shift();
+      }
+      while (this.redoStack.length > this._maxStackSize) {
+        this.redoStack.shift();
+      }
+    }
+  }
 
   /**
    * Push a new action onto the undo stack
@@ -53,7 +92,7 @@ export class UndoManager {
     this.redoStack = [];
 
     // Trim stack if too large
-    if (this.undoStack.length > this.maxStackSize) {
+    if (this.undoStack.length > this._maxStackSize) {
       this.undoStack.shift();
     }
   }
@@ -185,6 +224,84 @@ export class UndoManager {
    */
   get redoCount(): number {
     return this.redoStack.length;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Serialization
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Serialize undo state for session persistence.
+   * Optionally limits the number of actions to save.
+   */
+  serialize(maxActions?: number): SerializedUndoState {
+    const limit = maxActions ?? this._maxStackSize;
+
+    // Take the most recent actions (from the end of the stack)
+    const undoStack =
+      this.undoStack.length > limit ? this.undoStack.slice(-limit) : [...this.undoStack];
+    const redoStack =
+      this.redoStack.length > limit ? this.redoStack.slice(-limit) : [...this.redoStack];
+
+    // Deep clone to avoid mutations affecting the saved state
+    return {
+      undoStack: undoStack.map((action) => this.cloneAction(action)),
+      redoStack: redoStack.map((action) => this.cloneAction(action)),
+    };
+  }
+
+  /**
+   * Restore undo state from serialized data.
+   */
+  deserialize(state: SerializedUndoState): void {
+    // Validate and restore with deep cloning
+    this.undoStack = (state.undoStack || []).map((action) => this.cloneAction(action));
+    this.redoStack = (state.redoStack || []).map((action) => this.cloneAction(action));
+
+    // Trim if exceeds max size
+    while (this.undoStack.length > this._maxStackSize) {
+      this.undoStack.shift();
+    }
+    while (this.redoStack.length > this._maxStackSize) {
+      this.redoStack.shift();
+    }
+
+    // Reset grouping state
+    this.lastActionTime = 0;
+  }
+
+  /**
+   * Deep clone an undo action.
+   */
+  private cloneAction(action: UndoAction): UndoAction {
+    return {
+      operations: action.operations.map((op) => ({
+        type: op.type,
+        position: { line: op.position.line, column: op.position.column },
+        text: op.text,
+      })),
+      cursorsBefore: action.cursorsBefore.map((c) => ({
+        position: { line: c.position.line, column: c.position.column },
+        selection: c.selection
+          ? {
+              anchor: { line: c.selection.anchor.line, column: c.selection.anchor.column },
+              head: { line: c.selection.head.line, column: c.selection.head.column },
+            }
+          : null,
+        desiredColumn: c.desiredColumn,
+      })),
+      cursorsAfter: action.cursorsAfter.map((c) => ({
+        position: { line: c.position.line, column: c.position.column },
+        selection: c.selection
+          ? {
+              anchor: { line: c.selection.anchor.line, column: c.selection.anchor.column },
+              head: { line: c.selection.head.line, column: c.selection.head.column },
+            }
+          : null,
+        desiredColumn: c.desiredColumn,
+      })),
+      timestamp: action.timestamp,
+    };
   }
 }
 

@@ -72,7 +72,7 @@ Issues and improvements to address in future sessions.
   - Setting to enable/disable auto-hover
   - Setting for hover delay duration
 
-- [ ] **Squiggly underlines for diagnostics** - Instead of simple underlines, implement VS Code-style squiggly/wavy underlines for errors and warnings. This is more visually distinct but technically challenging in terminal.
+- [x] **Squiggly underlines for diagnostics** - Instead of simple underlines, implement VS Code-style squiggly/wavy underlines for errors and warnings. This is more visually distinct but technically challenging in terminal.
 
 - [ ] **Diagnostics panel** - A panel that lists all diagnostics (errors, warnings) for the current file or entire workspace:
   - Filterable by severity (errors, warnings, info, hints)

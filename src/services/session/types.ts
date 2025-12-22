@@ -55,6 +55,12 @@ export interface SessionAIChatState {
 }
 
 /**
+ * Re-export SerializedUndoState from core undo module for session persistence.
+ */
+import type { SerializedUndoState } from '../../core/undo.ts';
+export type { SerializedUndoState } from '../../core/undo.ts';
+
+/**
  * Session state for a single document.
  */
 export interface SessionDocumentState {
@@ -81,6 +87,8 @@ export interface SessionDocumentState {
   isActiveInPane: boolean;
   /** Unsaved content (if file was modified) */
   unsavedContent?: string;
+  /** Undo/redo history for session persistence */
+  undoHistory?: SerializedUndoState;
 }
 
 /**

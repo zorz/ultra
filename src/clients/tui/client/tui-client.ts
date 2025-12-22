@@ -1643,12 +1643,28 @@ export class TUIClient {
 
     // Edit commands
     this.commandHandlers.set('edit.undo', () => {
-      this.window.showNotification('Undo not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        if (element.canUndo()) {
+          element.undo();
+          this.scheduleRender();
+        } else {
+          this.window.showNotification('Nothing to undo', 'info');
+        }
+      }
       return true;
     });
 
     this.commandHandlers.set('edit.redo', () => {
-      this.window.showNotification('Redo not yet implemented', 'info');
+      const element = this.window.getFocusedElement();
+      if (element instanceof DocumentEditor) {
+        if (element.canRedo()) {
+          element.redo();
+          this.scheduleRender();
+        } else {
+          this.window.showNotification('Nothing to redo', 'info');
+        }
+      }
       return true;
     });
 
@@ -3895,6 +3911,7 @@ export class TUIClient {
         tabOrder: tabOrder++,
         isActiveInPane: pane?.getActiveElement() === editor,
         unsavedContent,
+        undoHistory: state.undoHistory,
       });
       debugLog(`[TUIClient]   Document serialized: ${uri.replace(/^file:\/\//, '')}`);
     }
@@ -4114,6 +4131,11 @@ export class TUIClient {
           for (const line of doc.foldedRegions) {
             editor.foldLine(line);
           }
+        }
+
+        // Restore undo history
+        if (doc.undoHistory) {
+          editor.setState({ undoHistory: doc.undoHistory });
         }
       } catch (error) {
         this.log(`Failed to restore document ${doc.filePath}: ${error}`);

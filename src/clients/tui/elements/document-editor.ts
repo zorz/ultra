@@ -10,6 +10,7 @@ import type { KeyEvent, MouseEvent, Position, UnderlineStyle } from '../types.ts
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../ui/colors.ts';
 import { FoldManager } from '../../../core/fold.ts';
+import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
 
 // ============================================
 // Types
@@ -91,6 +92,8 @@ export interface DocumentEditorState {
   scrollTop: number;
   cursors: Cursor[];
   foldedRegions?: number[];
+  /** Serialized undo/redo history for session persistence */
+  undoHistory?: SerializedUndoState;
 }
 
 /**
@@ -205,9 +208,16 @@ export class DocumentEditor extends BaseElement {
   /** Git line changes for gutter indicators */
   private gitLineChanges: Map<number, 'added' | 'modified' | 'deleted'> = new Map();
 
+  /** Undo/redo manager */
+  private undoManager: UndoManager = new UndoManager();
+
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
     this.callbacks = callbacks;
+
+    // Get undo history limit from settings
+    const maxUndoHistory = this.ctx.getSetting('editor.undoHistoryLimit', 1000);
+    this.undoManager.setMaxStackSize(maxUndoHistory);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1194,6 +1204,181 @@ export class DocumentEditor extends BaseElement {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Undo/Redo
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Create a snapshot of cursor states for undo.
+   */
+  private createCursorSnapshot(): Cursor[] {
+    return this.cursors.map((c) => ({
+      position: { line: c.position.line, column: c.position.column },
+      selection: c.selection
+        ? {
+            anchor: { line: c.selection.anchor.line, column: c.selection.anchor.column },
+            head: { line: c.selection.head.line, column: c.selection.head.column },
+          }
+        : null,
+      desiredColumn: c.desiredColumn,
+    }));
+  }
+
+  /**
+   * Restore cursor states from a snapshot.
+   */
+  private restoreCursors(snapshot: Cursor[]): void {
+    this.cursors = snapshot.map((c) => ({
+      position: { line: c.position.line, column: c.position.column },
+      selection: c.selection
+        ? {
+            anchor: { line: c.selection.anchor.line, column: c.selection.anchor.column },
+            head: { line: c.selection.head.line, column: c.selection.head.column },
+          }
+        : null,
+      desiredColumn: c.desiredColumn,
+    }));
+    this.primaryCursorIndex = Math.min(this.primaryCursorIndex, this.cursors.length - 1);
+  }
+
+  /**
+   * Push an undo action.
+   */
+  private pushUndoAction(operations: EditOperation[], cursorsBefore: Cursor[], cursorsAfter: Cursor[]): void {
+    if (operations.length > 0) {
+      this.undoManager.push({
+        operations,
+        cursorsBefore,
+        cursorsAfter,
+      });
+    }
+  }
+
+  /**
+   * Undo the last edit operation.
+   */
+  undo(): boolean {
+    const action = this.undoManager.undo();
+    if (!action) return false;
+
+    // Apply operations in reverse
+    for (let i = action.operations.length - 1; i >= 0; i--) {
+      const op = action.operations[i]!;
+      if (op.type === 'insert') {
+        // Undo insert = delete
+        this.deleteTextRange(op.position, op.text);
+      } else {
+        // Undo delete = insert
+        this.insertTextRaw(op.position, op.text);
+      }
+    }
+
+    // Restore cursor state
+    this.restoreCursors(action.cursorsBefore);
+
+    this.contentVersion++;
+    this.updateGutterWidth();
+    this.updateFoldRegions();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onContentChange?.(this.getContent());
+    this.ctx.markDirty();
+    return true;
+  }
+
+  /**
+   * Redo the last undone operation.
+   */
+  redo(): boolean {
+    const action = this.undoManager.redo();
+    if (!action) return false;
+
+    // Apply operations forward
+    for (const op of action.operations) {
+      if (op.type === 'insert') {
+        this.insertTextRaw(op.position, op.text);
+      } else {
+        this.deleteTextRange(op.position, op.text);
+      }
+    }
+
+    // Restore cursor state
+    this.restoreCursors(action.cursorsAfter);
+
+    this.contentVersion++;
+    this.updateGutterWidth();
+    this.updateFoldRegions();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onContentChange?.(this.getContent());
+    this.ctx.markDirty();
+    return true;
+  }
+
+  /**
+   * Check if undo is available.
+   */
+  canUndo(): boolean {
+    return this.undoManager.canUndo();
+  }
+
+  /**
+   * Check if redo is available.
+   */
+  canRedo(): boolean {
+    return this.undoManager.canRedo();
+  }
+
+  /**
+   * Insert text at a position without tracking undo (used by undo/redo).
+   */
+  private insertTextRaw(position: CursorPosition, text: string): void {
+    const line = this.lines[position.line];
+    if (!line) return;
+
+    const before = line.text.slice(0, position.column);
+    const after = line.text.slice(position.column);
+
+    const insertLines = text.split('\n');
+    if (insertLines.length === 1) {
+      line.text = before + text + after;
+    } else {
+      line.text = before + insertLines[0]!;
+      const newLines: DocumentLine[] = [];
+      for (let i = 1; i < insertLines.length - 1; i++) {
+        newLines.push({ text: insertLines[i]! });
+      }
+      newLines.push({ text: insertLines[insertLines.length - 1]! + after });
+      this.lines.splice(position.line + 1, 0, ...newLines);
+    }
+  }
+
+  /**
+   * Delete text starting at position for the length of text (used by undo/redo).
+   */
+  private deleteTextRange(position: CursorPosition, text: string): void {
+    const deleteLines = text.split('\n');
+    const line = this.lines[position.line];
+    if (!line) return;
+
+    if (deleteLines.length === 1) {
+      // Single line delete
+      line.text = line.text.slice(0, position.column) + line.text.slice(position.column + text.length);
+    } else {
+      // Multi-line delete
+      const endLine = position.line + deleteLines.length - 1;
+      const endColumn = deleteLines[deleteLines.length - 1]!.length;
+      const afterEnd = this.lines[endLine]?.text.slice(endColumn) ?? '';
+      line.text = line.text.slice(0, position.column) + afterEnd;
+      this.lines.splice(position.line + 1, deleteLines.length - 1);
+    }
+  }
+
+  /**
+   * Break the current undo group (prevents merging with next operation).
+   */
+  breakUndoGroup(): void {
+    this.undoManager.breakUndoGroup();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Editing
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1202,15 +1387,29 @@ export class DocumentEditor extends BaseElement {
    * For multi-cursor, processes from bottom to top to avoid index shifting.
    */
   insertText(text: string): void {
-    // Delete selections first
-    this.deleteAllSelections();
+    const cursorsBefore = this.createCursorSnapshot();
+    const operations: EditOperation[] = [];
+
+    // Delete selections first (this will add delete operations)
+    const selectionOps = this.deleteAllSelectionsWithOps();
+    operations.push(...selectionOps);
 
     // Process cursors from bottom to top
     const sortedCursors = [...this.cursors].sort((a, b) => this.comparePositions(b.position, a.position));
 
     for (const cursor of sortedCursors) {
+      // Track the insert operation
+      operations.push({
+        type: 'insert',
+        position: { line: cursor.position.line, column: cursor.position.column },
+        text,
+      });
       this.insertTextAtPosition(cursor, text);
     }
+
+    // Push undo action
+    const cursorsAfter = this.createCursorSnapshot();
+    this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
 
     this.modified = true;
     this.contentVersion++;
@@ -1253,9 +1452,17 @@ export class DocumentEditor extends BaseElement {
    * Delete character before all cursors (backspace).
    */
   deleteBackward(): void {
+    const cursorsBefore = this.createCursorSnapshot();
+    const operations: EditOperation[] = [];
+
     // If any cursor has a selection, delete selections instead
     if (this.cursors.some((c) => this.hasSelectionContent(c.selection))) {
-      this.deleteAllSelections();
+      const selectionOps = this.deleteAllSelectionsWithOps();
+      operations.push(...selectionOps);
+
+      const cursorsAfter = this.createCursorSnapshot();
+      this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
+
       this.modified = true;
       this.contentVersion++;
       this.updateFoldRegions();
@@ -1271,14 +1478,31 @@ export class DocumentEditor extends BaseElement {
     for (const cursor of sortedCursors) {
       if (cursor.position.column > 0) {
         const line = this.lines[cursor.position.line]!;
+        const deletedChar = line.text[cursor.position.column - 1]!;
+
+        // Track delete operation (position is where the deleted char was)
+        operations.push({
+          type: 'delete',
+          position: { line: cursor.position.line, column: cursor.position.column - 1 },
+          text: deletedChar,
+        });
+
         line.text = line.text.slice(0, cursor.position.column - 1) + line.text.slice(cursor.position.column);
         cursor.position.column--;
         cursor.desiredColumn = cursor.position.column;
       } else if (cursor.position.line > 0) {
-        // Join with previous line
+        // Join with previous line - delete the newline
         const prevLine = this.lines[cursor.position.line - 1]!;
         const currLine = this.lines[cursor.position.line]!;
         const newColumn = prevLine.text.length;
+
+        // Track delete operation for newline
+        operations.push({
+          type: 'delete',
+          position: { line: cursor.position.line - 1, column: newColumn },
+          text: '\n',
+        });
+
         prevLine.text += currLine.text;
         this.lines.splice(cursor.position.line, 1);
         cursor.position.line--;
@@ -1294,6 +1518,9 @@ export class DocumentEditor extends BaseElement {
       }
     }
 
+    const cursorsAfter = this.createCursorSnapshot();
+    this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
+
     this.mergeOverlappingCursors();
     this.updateGutterWidth();
     this.modified = true;
@@ -1308,9 +1535,17 @@ export class DocumentEditor extends BaseElement {
    * Delete character at all cursors (delete key).
    */
   deleteForward(): void {
+    const cursorsBefore = this.createCursorSnapshot();
+    const operations: EditOperation[] = [];
+
     // If any cursor has a selection, delete selections instead
     if (this.cursors.some((c) => this.hasSelectionContent(c.selection))) {
-      this.deleteAllSelections();
+      const selectionOps = this.deleteAllSelectionsWithOps();
+      operations.push(...selectionOps);
+
+      const cursorsAfter = this.createCursorSnapshot();
+      this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
+
       this.modified = true;
       this.contentVersion++;
       this.updateFoldRegions();
@@ -1326,10 +1561,27 @@ export class DocumentEditor extends BaseElement {
     for (const cursor of sortedCursors) {
       const line = this.lines[cursor.position.line]!;
       if (cursor.position.column < line.text.length) {
+        const deletedChar = line.text[cursor.position.column]!;
+
+        // Track delete operation
+        operations.push({
+          type: 'delete',
+          position: { line: cursor.position.line, column: cursor.position.column },
+          text: deletedChar,
+        });
+
         line.text = line.text.slice(0, cursor.position.column) + line.text.slice(cursor.position.column + 1);
       } else if (cursor.position.line < this.lines.length - 1) {
-        // Join with next line
+        // Join with next line - delete the newline
         const nextLine = this.lines[cursor.position.line + 1]!;
+
+        // Track delete operation for newline
+        operations.push({
+          type: 'delete',
+          position: { line: cursor.position.line, column: line.text.length },
+          text: '\n',
+        });
+
         line.text += nextLine.text;
         this.lines.splice(cursor.position.line + 1, 1);
 
@@ -1341,6 +1593,9 @@ export class DocumentEditor extends BaseElement {
         }
       }
     }
+
+    const cursorsAfter = this.createCursorSnapshot();
+    this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
 
     this.mergeOverlappingCursors();
     this.updateGutterWidth();
@@ -1396,6 +1651,81 @@ export class DocumentEditor extends BaseElement {
 
     this.mergeOverlappingCursors();
     this.updateGutterWidth();
+  }
+
+  /**
+   * Delete all selections and return the delete operations (for undo tracking).
+   */
+  private deleteAllSelectionsWithOps(): EditOperation[] {
+    const operations: EditOperation[] = [];
+
+    // Process cursors with selections from bottom to top
+    const cursorsWithSelections = this.cursors
+      .filter((c) => this.hasSelectionContent(c.selection))
+      .sort((a, b) => {
+        const aRange = this.getSelectionRange(a.selection!);
+        const bRange = this.getSelectionRange(b.selection!);
+        return this.comparePositions(bRange.start, aRange.start);
+      });
+
+    for (const cursor of cursorsWithSelections) {
+      if (!cursor.selection) continue;
+
+      const { start, end } = this.getSelectionRange(cursor.selection);
+
+      // Get the text being deleted for undo
+      const deletedText = this.getTextInRange(start, end);
+      operations.push({
+        type: 'delete',
+        position: { line: start.line, column: start.column },
+        text: deletedText,
+      });
+
+      if (start.line === end.line) {
+        // Single line deletion
+        const line = this.lines[start.line]!;
+        line.text = line.text.slice(0, start.column) + line.text.slice(end.column);
+      } else {
+        // Multi-line deletion
+        const startLine = this.lines[start.line]!;
+        const endLine = this.lines[end.line]!;
+        startLine.text = startLine.text.slice(0, start.column) + endLine.text.slice(end.column);
+        const linesRemoved = end.line - start.line;
+        this.lines.splice(start.line + 1, linesRemoved);
+
+        // Adjust other cursors that were on lines below
+        for (const other of this.cursors) {
+          if (other !== cursor && other.position.line > start.line) {
+            other.position.line -= linesRemoved;
+          }
+        }
+      }
+
+      cursor.position = this.clonePosition(start);
+      cursor.desiredColumn = start.column;
+      cursor.selection = null;
+    }
+
+    this.mergeOverlappingCursors();
+    this.updateGutterWidth();
+    return operations;
+  }
+
+  /**
+   * Get text in a range (for undo tracking).
+   */
+  private getTextInRange(start: CursorPosition, end: CursorPosition): string {
+    if (start.line === end.line) {
+      return this.lines[start.line]?.text.slice(start.column, end.column) ?? '';
+    }
+
+    const parts: string[] = [];
+    parts.push(this.lines[start.line]?.text.slice(start.column) ?? '');
+    for (let i = start.line + 1; i < end.line; i++) {
+      parts.push(this.lines[i]?.text ?? '');
+    }
+    parts.push(this.lines[end.line]?.text.slice(0, end.column) ?? '');
+    return parts.join('\n');
   }
 
   /**
@@ -2364,6 +2694,18 @@ export class DocumentEditor extends BaseElement {
       return true;
     }
 
+    // Undo (Ctrl+Z)
+    if (event.ctrl && !event.shift && event.key === 'z') {
+      this.undo();
+      return true;
+    }
+
+    // Redo (Ctrl+Shift+Z or Ctrl+Y)
+    if ((event.ctrl && event.shift && event.key === 'Z') || (event.ctrl && event.key === 'y')) {
+      this.redo();
+      return true;
+    }
+
     // Regular character input
     if (event.key.length === 1 && !event.ctrl && !event.alt && !event.meta) {
       this.insertText(event.key);
@@ -2935,6 +3277,7 @@ export class DocumentEditor extends BaseElement {
       scrollTop: this.scrollTop,
       cursors: this.cursors.map((c) => this.cloneCursor(c)),
       foldedRegions: this.foldManager.getFoldedLines(),
+      undoHistory: this.undoManager.serialize(),
     };
   }
 
@@ -2952,6 +3295,10 @@ export class DocumentEditor extends BaseElement {
       for (const line of s.foldedRegions) {
         this.foldManager.fold(line);
       }
+    }
+    // Restore undo history
+    if (s.undoHistory) {
+      this.undoManager.deserialize(s.undoHistory);
     }
     this.ctx.markDirty();
   }
