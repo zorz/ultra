@@ -755,6 +755,9 @@ export class TUIClient {
       // Update status bar with file info
       this.updateStatusBarFile(editor);
 
+      // Update git line changes for gutter indicators
+      this.updateGitLineChanges(editor, uri);
+
       // Mark session dirty
       this.markSessionDirty();
 
@@ -795,11 +798,40 @@ export class TUIClient {
       // Notify LSP of document save
       await this.lspDocumentSaved(uri, content);
 
+      // Update git line changes (saved content is now committed baseline)
+      this.updateGitLineChanges(editor, uri);
+
       this.window.showNotification('File saved', 'success');
       return true;
     } catch (error) {
       this.window.showNotification(`Failed to save: ${error}`, 'error');
       return false;
+    }
+  }
+
+  /**
+   * Update git line changes for an editor.
+   * Shows added/modified/deleted lines in the gutter.
+   */
+  private async updateGitLineChanges(editor: DocumentEditor, uri: string): Promise<void> {
+    try {
+      // Convert URI to file path for git service
+      const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+      const repoUri = `file://${this.workingDirectory}`;
+
+      // Get line-level changes from git
+      const lineChanges = await gitCliService.diffLines(repoUri, filePath);
+
+      // Convert to map for editor
+      const changeMap = new Map<number, 'added' | 'modified' | 'deleted'>();
+      for (const change of lineChanges) {
+        changeMap.set(change.line, change.type);
+      }
+
+      editor.setGitLineChanges(changeMap);
+    } catch {
+      // Not a git repo or other error - clear git indicators
+      editor.clearGitLineChanges();
     }
   }
 

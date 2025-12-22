@@ -202,6 +202,9 @@ export class DocumentEditor extends BaseElement {
   /** Diagnostics for this document (errors, warnings, etc.) */
   private diagnostics: DiagnosticInfo[] = [];
 
+  /** Git line changes for gutter indicators */
+  private gitLineChanges: Map<number, 'added' | 'modified' | 'deleted'> = new Map();
+
   constructor(id: string, title: string, ctx: ElementContext, callbacks: DocumentEditorCallbacks = {}) {
     super('DocumentEditor', id, title, ctx);
     this.callbacks = callbacks;
@@ -614,6 +617,41 @@ export class DocumentEditor extends BaseElement {
           icon: '○',
           color: this.ctx.getThemeColor('editorHint.foreground', '#75beff'),
         };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Git Line Changes
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set git line changes for gutter indicators.
+   * @param changes Map of line number (1-based) to change type
+   */
+  setGitLineChanges(changes: Map<number, 'added' | 'modified' | 'deleted'>): void {
+    this.gitLineChanges = changes;
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Clear git line changes.
+   */
+  clearGitLineChanges(): void {
+    this.gitLineChanges.clear();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Get the color for a git line change type.
+   */
+  private getGitLineColor(type: 'added' | 'modified' | 'deleted'): string {
+    switch (type) {
+      case 'added':
+        return this.ctx.getThemeColor('editorGutter.addedBackground', '#a6e3a1');
+      case 'modified':
+        return this.ctx.getThemeColor('editorGutter.modifiedBackground', '#f9e2af');
+      case 'deleted':
+        return this.ctx.getThemeColor('editorGutter.deletedBackground', '#f38ba8');
     }
   }
 
@@ -1660,7 +1698,11 @@ export class DocumentEditor extends BaseElement {
         const lineNumStr = String(bufferLine + 1).padStart(lineNumWidth, ' ');
         const foldIndicator = this.foldingEnabled ? this.getFoldIndicator(bufferLine) : '';
         const gutterStr = lineNumStr + foldIndicator + ' ';
-        buffer.writeString(x, screenY, gutterStr, gutterFg, currentGutterBg);
+
+        // Use git status color for line number if available (1-based line)
+        const gitStatus = this.gitLineChanges.get(bufferLine + 1);
+        const lineNumFg = gitStatus ? this.getGitLineColor(gitStatus) : gutterFg;
+        buffer.writeString(x, screenY, gutterStr, lineNumFg, currentGutterBg);
 
         // Overlay diagnostic icon in first column if there's a diagnostic
         const severity = this.getHighestSeverityForLine(bufferLine);
