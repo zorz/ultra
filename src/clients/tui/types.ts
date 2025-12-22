@@ -34,10 +34,13 @@ export type ElementType =
   | 'FileTree'
   | 'GitPanel'
   | 'GitDiffView'
+  | 'GitDiffBrowser'
   | 'AgentChat'
   | 'TerminalSession'
   | 'TerminalPanel'
   | 'SearchResults'
+  | 'SearchResultBrowser'
+  | 'ContentBrowser'
   | 'ProjectSearch'
   | 'DiagnosticsView';
 

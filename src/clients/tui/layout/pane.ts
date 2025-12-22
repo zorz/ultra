@@ -922,10 +922,13 @@ export class Pane {
       FileTree: 'Files',
       GitPanel: 'Git',
       GitDiffView: 'Diff',
+      GitDiffBrowser: 'Diff',
       AgentChat: 'Agent',
       TerminalSession: 'Terminal',
       TerminalPanel: 'Terminal',
       SearchResults: 'Search',
+      SearchResultBrowser: 'Search',
+      ContentBrowser: 'Browser',
       ProjectSearch: 'Find',
       DiagnosticsView: 'Problems',
     };

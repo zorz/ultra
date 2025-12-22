@@ -81,6 +81,22 @@ export {
   type AITerminalChatCallbacks,
 } from './ai-terminal-chat.ts';
 
+export {
+  ContentBrowser,
+} from './content-browser.ts';
+
+export {
+  GitDiffBrowser,
+  createGitDiffBrowser,
+  type GitDiffBrowserCallbacks,
+} from './git-diff-browser.ts';
+
+export {
+  SearchResultBrowser,
+  createSearchResultBrowser,
+  type SearchResultBrowserCallbacks,
+} from './search-result-browser.ts';
+
 // ============================================
 // Element Registration
 // ============================================
@@ -92,6 +108,8 @@ import { TerminalSession } from './terminal-session.ts';
 import { GitPanel } from './git-panel.ts';
 import { TerminalPanel } from './terminal-panel.ts';
 import { createAITerminalChat } from './ai-terminal-chat.ts';
+import { GitDiffBrowser } from './git-diff-browser.ts';
+import { SearchResultBrowser } from './search-result-browser.ts';
 
 /**
  * Register all built-in elements with the factory.
@@ -134,5 +152,13 @@ export function registerBuiltinElements(): void {
       cwd: aiState?.cwd,
     });
     return chat;
+  });
+
+  registerElement('GitDiffBrowser', (id, title, ctx) => {
+    return new GitDiffBrowser(id, title, ctx);
+  });
+
+  registerElement('SearchResultBrowser', (id, title, ctx) => {
+    return new SearchResultBrowser(id, title, ctx);
   });
 }
