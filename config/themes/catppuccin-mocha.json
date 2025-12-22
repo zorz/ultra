@@ -35,7 +35,7 @@
     "input.foreground": "#cdd6f4",
     "input.border": "#313244",
     "focusBorder": "#89b4fa",
-    "editorWidget.background": "#181825",
+    "editorWidget.background": "#11111b",
     "editorWidget.foreground": "#cdd6f4",
     "editorWidget.border": "#45475a"
   },

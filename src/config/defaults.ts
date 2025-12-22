@@ -522,7 +522,7 @@ export const defaultThemes: Record<string, Theme> = {
       "input.foreground": "#cdd6f4",
       "input.border": "#313244",
       "focusBorder": "#89b4fa",
-      "editorWidget.background": "#181825",
+      "editorWidget.background": "#11111b",
       "editorWidget.foreground": "#cdd6f4",
       "editorWidget.border": "#45475a"
     },
@@ -860,7 +860,7 @@ export const defaultThemes: Record<string, Theme> = {
       "input.foreground": "#cad3f5",
       "input.border": "#363a4f",
       "focusBorder": "#8aadf4",
-      "editorWidget.background": "#1e2030",
+      "editorWidget.background": "#181926",
       "editorWidget.foreground": "#cad3f5",
       "editorWidget.border": "#494d64"
     },
@@ -1198,7 +1198,7 @@ export const defaultThemes: Record<string, Theme> = {
       "input.foreground": "#c6d0f5",
       "input.border": "#414559",
       "focusBorder": "#8caaee",
-      "editorWidget.background": "#292c3c",
+      "editorWidget.background": "#232634",
       "editorWidget.foreground": "#c6d0f5",
       "editorWidget.border": "#51576d"
     },
@@ -1536,7 +1536,7 @@ export const defaultThemes: Record<string, Theme> = {
       "input.foreground": "#4c4f69",
       "input.border": "#e6e9ef",
       "focusBorder": "#1e66f5",
-      "editorWidget.background": "#ccd0da",
+      "editorWidget.background": "#e6e9ef",
       "editorWidget.foreground": "#4c4f69",
       "editorWidget.border": "#bcc0cc"
     },
@@ -1877,7 +1877,7 @@ export const defaultThemes: Record<string, Theme> = {
       "scrollbar.shadow": "#00000000",
       "scrollbarSlider.background": "#4e566680",
       "scrollbarSlider.hoverBackground": "#5a637580",
-      "editorWidget.background": "#1e2127",
+      "editorWidget.background": "#181a1f",
       "editorWidget.foreground": "#abb2bf",
       "editorWidget.border": "#3e4451"
     },
