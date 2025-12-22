@@ -30,7 +30,7 @@ export interface SessionTerminalState {
 /**
  * AI provider type for AI chat sessions.
  */
-export type AIProvider = 'claude-code' | 'codex' | 'custom';
+export type AIProvider = 'claude-code' | 'codex' | 'gemini' | 'custom';
 
 /**
  * Session state for an AI chat in a pane.

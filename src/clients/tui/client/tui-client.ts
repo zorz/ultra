@@ -27,6 +27,7 @@ import {
   type GitPanelCallbacks,
   type TerminalSessionCallbacks,
   type AITerminalChatState,
+  type AIProvider,
 } from '../elements/index.ts';
 import type { Pane } from '../layout/pane.ts';
 
@@ -1201,6 +1202,25 @@ export class TUIClient {
       }
       return true;
     } else if (element instanceof AITerminalChat) {
+      // Show confirmation dialog if the AI chat is running
+      if (element.isRunning()) {
+        if (!this.dialogManager) {
+          return false;
+        }
+        const providerName = element.getProviderName();
+        const result = await this.dialogManager.showConfirm({
+          title: 'Close AI Chat',
+          message: `Are you sure you want to close this ${providerName} chat?\n\nThe session will be ended.`,
+          confirmText: 'Close',
+          declineText: 'Cancel',
+          destructive: true,
+        });
+
+        if (!result.confirmed) {
+          return false;
+        }
+      }
+
       // Clean up AI chat tracking
       if (this.paneAIChats.has(elementId)) {
         debugLog(`[TUIClient] Removing AI chat from tracking: ${elementId}`);
@@ -1785,6 +1805,21 @@ export class TUIClient {
       return true;
     });
 
+    this.commandHandlers.set('ai.newClaudeChat', async () => {
+      await this.createNewAIChat(undefined, { provider: 'claude-code' });
+      return true;
+    });
+
+    this.commandHandlers.set('ai.newCodexChat', async () => {
+      await this.createNewAIChat(undefined, { provider: 'codex' });
+      return true;
+    });
+
+    this.commandHandlers.set('ai.newGeminiChat', async () => {
+      await this.createNewAIChat(undefined, { provider: 'gemini' });
+      return true;
+    });
+
     this.commandHandlers.set('ai.toggleChat', () => {
       this.toggleAIChat();
       return true;
@@ -2347,7 +2382,7 @@ export class TUIClient {
   private async createNewAIChat(pane?: Pane, options?: {
     sessionId?: string;
     cwd?: string;
-    provider?: 'claude-code' | 'codex' | 'custom';
+    provider?: AIProvider;
   }): Promise<AITerminalChat | null> {
     const targetPane = pane ?? this.window.getFocusedPane();
     if (!targetPane) {
@@ -2361,16 +2396,28 @@ export class TUIClient {
       return null;
     }
 
-    debugLog(`[TUIClient] Creating AI chat in pane: ${targetPane.id}`);
+    // Get default provider from settings if not specified
+    const provider = options?.provider ?? this.configManager.getWithDefault('ai.defaultProvider', 'claude-code') as AIProvider;
+
+    debugLog(`[TUIClient] Creating AI chat in pane: ${targetPane.id}, provider: ${provider}`);
+
+    // Get tab title based on provider
+    const titleMap: Record<AIProvider, string> = {
+      'claude-code': 'Claude',
+      'codex': 'Codex',
+      'gemini': 'Gemini',
+      'custom': 'AI Chat',
+    };
+    const tabTitle = titleMap[provider] || 'AI Chat';
 
     // Create AI chat element via pane factory with optional state
-    const state: AITerminalChatState | undefined = options ? {
-      provider: options.provider ?? 'claude-code',
-      sessionId: options.sessionId ?? null,
-      cwd: options.cwd ?? this.workingDirectory,
-    } : undefined;
+    const state: AITerminalChatState = {
+      provider,
+      sessionId: options?.sessionId ?? null,
+      cwd: options?.cwd ?? this.workingDirectory,
+    };
 
-    const chatId = targetPane.addElement('AgentChat', 'Claude', state);
+    const chatId = targetPane.addElement('AgentChat', tabTitle, state);
     const chat = targetPane.getElement(chatId);
 
     if (!chat || !(chat instanceof AITerminalChat)) {
@@ -2897,7 +2944,10 @@ export class TUIClient {
     'terminal.nextTab': { label: 'Next Terminal Tab', category: 'Term' },
     'terminal.previousTab': { label: 'Previous Terminal Tab', category: 'Term' },
     // AI Chat
-    'ai.newChat': { label: 'New AI Chat', category: 'AI' },
+    'ai.newChat': { label: 'New AI Chat (Default)', category: 'AI' },
+    'ai.newClaudeChat': { label: 'New Claude Chat', category: 'AI' },
+    'ai.newCodexChat': { label: 'New Codex Chat', category: 'AI' },
+    'ai.newGeminiChat': { label: 'New Gemini Chat', category: 'AI' },
     'ai.toggleChat': { label: 'Toggle AI Chat', category: 'AI' },
     // Git
     'git.commit': { label: 'Git: Commit...', category: 'Git' },

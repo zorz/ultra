@@ -16,15 +16,14 @@ import type { PTYBackend, Unsubscribe } from '../../../terminal/pty-backend.ts';
 import { createPtyBackend } from '../../../terminal/pty-factory.ts';
 import { debugLog, isDebugEnabled } from '../../../debug.ts';
 import { settings } from '../../../config/settings.ts';
+import type { AIProvider } from '../../../services/session/types.ts';
+
+// Re-export AIProvider for convenience
+export type { AIProvider };
 
 // ============================================
 // Types
 // ============================================
-
-/**
- * Supported AI providers.
- */
-export type AIProvider = 'claude-code' | 'codex' | 'gemini' | 'custom';
 
 /**
  * Terminal line with styled cells.
@@ -717,11 +716,57 @@ export class CodexTerminalChat extends AITerminalChat {
   }
 
   getEnv(): Record<string, string> {
-    return {};
+    // Codex CLI has issues with cursor position detection in embedded PTYs
+    // Setting CI=true and TERM=dumb helps bypass terminal capability checks
+    return {
+      CI: 'true',
+    };
   }
 
   getProviderName(): string {
     return 'Codex';
+  }
+}
+
+// ============================================
+// Gemini Terminal Chat
+// ============================================
+
+/**
+ * Google Gemini terminal chat.
+ */
+export class GeminiTerminalChat extends AITerminalChat {
+  constructor(
+    id: string,
+    title: string,
+    ctx: ElementContext,
+    options: {
+      sessionId?: string | null;
+      cwd?: string;
+      callbacks?: AITerminalChatCallbacks;
+    } = {}
+  ) {
+    super(id, title || 'Gemini', ctx, options);
+  }
+
+  getProvider(): AIProvider {
+    return 'gemini';
+  }
+
+  getCommand(): string {
+    return 'gemini';
+  }
+
+  getArgs(): string[] {
+    return [];
+  }
+
+  getEnv(): Record<string, string> {
+    return {};
+  }
+
+  getProviderName(): string {
+    return 'Gemini';
   }
 }
 
@@ -751,6 +796,8 @@ export function createAITerminalChat(
       return new ClaudeTerminalChat(id, title, ctx, options);
     case 'codex':
       return new CodexTerminalChat(id, title, ctx, options);
+    case 'gemini':
+      return new GeminiTerminalChat(id, title, ctx, options);
     default:
       // Default to Claude
       return new ClaudeTerminalChat(id, title, ctx, options);
@@ -788,4 +835,20 @@ export function createCodexTerminalChat(
   } = {}
 ): CodexTerminalChat {
   return new CodexTerminalChat(id, title, ctx, options);
+}
+
+/**
+ * Create a Gemini terminal chat element.
+ */
+export function createGeminiTerminalChat(
+  id: string,
+  title: string,
+  ctx: ElementContext,
+  options: {
+    sessionId?: string | null;
+    cwd?: string;
+    callbacks?: AITerminalChatCallbacks;
+  } = {}
+): GeminiTerminalChat {
+  return new GeminiTerminalChat(id, title, ctx, options);
 }

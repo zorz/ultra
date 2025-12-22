@@ -58,6 +58,9 @@ export interface TUISettings extends Partial<EditorSettings> {
 
   // File watching
   'files.watchFiles'?: FileWatchMode;
+
+  // AI settings
+  'ai.defaultProvider'?: 'claude-code' | 'codex' | 'gemini';
 }
 
 /**
