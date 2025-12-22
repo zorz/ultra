@@ -65,9 +65,33 @@ const PRELOAD_LANGUAGES = [
   'css', 'html', 'markdown', 'bash', 'python', 'rust', 'go'
 ];
 
+// Shared Shiki instance - created once, reused across all Highlighter instances
+let sharedShiki: ShikiHighlighter | null = null;
+let sharedShikiPromise: Promise<ShikiHighlighter | null> | null = null;
+
+/**
+ * Get or create the shared Shiki highlighter instance.
+ */
+async function getSharedShiki(): Promise<ShikiHighlighter | null> {
+  if (sharedShiki) return sharedShiki;
+
+  if (!sharedShikiPromise) {
+    sharedShikiPromise = createHighlighter({
+      themes: ['catppuccin-frappe', 'catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-latte', 'github-dark', 'github-light'],
+      langs: PRELOAD_LANGUAGES,
+    }).then(highlighter => {
+      sharedShiki = highlighter;
+      return highlighter;
+    }).catch(error => {
+      console.error('Failed to initialize Shiki:', error);
+      return null;
+    });
+  }
+
+  return sharedShikiPromise;
+}
+
 export class Highlighter {
-  private shiki: ShikiHighlighter | null = null;
-  private initPromise: Promise<void> | null = null;
   private languageId: string | null = null;
   private content: string = '';
   private lineCache: Map<number, HighlightToken[]> = new Map();
@@ -75,39 +99,23 @@ export class Highlighter {
   private themeName: string = 'catppuccin-frappe';
 
   constructor() {
-    // Start initialization immediately
-    this.initPromise = this.initialize();
-  }
-
-  /**
-   * Initialize Shiki highlighter
-   */
-  private async initialize(): Promise<void> {
-    try {
-      this.shiki = await createHighlighter({
-        themes: ['catppuccin-frappe', 'catppuccin-mocha', 'catppuccin-macchiato', 'catppuccin-latte', 'github-dark', 'github-light'],
-        langs: PRELOAD_LANGUAGES,
-      });
-    } catch (error) {
-      console.error('Failed to initialize Shiki:', error);
-    }
+    // Trigger shared Shiki initialization if not already started
+    getSharedShiki();
   }
 
   /**
    * Wait for Shiki to be ready
    */
   async waitForReady(): Promise<boolean> {
-    if (this.initPromise) {
-      await this.initPromise;
-    }
-    return this.shiki !== null;
+    const shiki = await getSharedShiki();
+    return shiki !== null;
   }
 
   /**
    * Check if Shiki is ready
    */
   isReady(): boolean {
-    return this.shiki !== null;
+    return sharedShiki !== null;
   }
 
   /**
@@ -132,17 +140,17 @@ export class Highlighter {
    */
   async setLanguage(languageId: string): Promise<boolean> {
     if (this.languageId === languageId) return true;
-    
-    await this.waitForReady();
-    if (!this.shiki) return false;
+
+    const shiki = await getSharedShiki();
+    if (!shiki) return false;
 
     const shikiLang = LANGUAGE_MAP[languageId] || languageId;
-    
+
     // Load language if not already loaded
     try {
-      const loadedLangs = this.shiki.getLoadedLanguages();
+      const loadedLangs = shiki.getLoadedLanguages();
       if (!loadedLangs.includes(shikiLang as any)) {
-        await this.shiki.loadLanguage(shikiLang as any);
+        await shiki.loadLanguage(shikiLang as any);
       }
       this.languageId = languageId;
       this.lineCache.clear();
@@ -160,18 +168,18 @@ export class Highlighter {
    */
   setLanguageSync(languageId: string): boolean {
     if (this.languageId === languageId) return true;
-    if (!this.shiki) return false;
+    if (!sharedShiki) return false;
 
     const shikiLang = LANGUAGE_MAP[languageId] || languageId;
-    const loadedLangs = this.shiki.getLoadedLanguages();
-    
+    const loadedLangs = sharedShiki.getLoadedLanguages();
+
     if (loadedLangs.includes(shikiLang as any)) {
       this.languageId = languageId;
       this.lineCache.clear();
       this.tokenizedLines = [];
       return true;
     }
-    
+
     // Need async loading - trigger it and return false
     this.setLanguage(languageId);
     return false;
@@ -191,14 +199,14 @@ export class Highlighter {
     this.content = content;
     this.lineCache.clear();
     this.tokenizedLines = [];
-    
-    if (!this.shiki || !this.languageId) return;
+
+    if (!sharedShiki || !this.languageId) return;
 
     const shikiLang = LANGUAGE_MAP[this.languageId] || this.languageId;
-    
+
     try {
       // Tokenize all lines at once
-      this.tokenizedLines = this.shiki.codeToTokensBase(content, {
+      this.tokenizedLines = sharedShiki.codeToTokensBase(content, {
         lang: shikiLang as any,
         theme: this.themeName as any,
       });
@@ -267,7 +275,7 @@ export class Highlighter {
    * Check if a language is supported
    */
   isLanguageSupported(languageId: string): boolean {
-    return languageId in LANGUAGE_MAP || this.shiki?.getLoadedLanguages().includes(languageId as any) || false;
+    return languageId in LANGUAGE_MAP || sharedShiki?.getLoadedLanguages().includes(languageId as any) || false;
   }
 }
 
