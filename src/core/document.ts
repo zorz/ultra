@@ -1107,13 +1107,14 @@ export class Document {
 
   private detectLanguage(path: string): string {
     const ext = path.split('.').pop()?.toLowerCase();
-    
+
     const languageMap: Record<string, string> = {
       'ts': 'typescript',
       'tsx': 'typescriptreact',
       'js': 'javascript',
       'jsx': 'javascriptreact',
       'json': 'json',
+      'jsonc': 'jsonc',
       'md': 'markdown',
       'py': 'python',
       'rb': 'ruby',

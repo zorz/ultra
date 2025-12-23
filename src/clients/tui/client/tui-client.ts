@@ -2864,6 +2864,7 @@ export class TUIClient {
       js: 'javascript',
       jsx: 'javascriptreact',
       json: 'json',
+      jsonc: 'jsonc',
       md: 'markdown',
       html: 'html',
       css: 'css',
