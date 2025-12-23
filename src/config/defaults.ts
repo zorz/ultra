@@ -245,6 +245,10 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "lsp.goToDefinition"
   },
   {
+    "key": "ctrl+i",
+    "command": "lsp.showHover"
+  },
+  {
     "key": "ctrl+space",
     "command": "lsp.triggerCompletion"
   },
