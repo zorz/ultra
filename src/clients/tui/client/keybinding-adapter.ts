@@ -83,6 +83,14 @@ export const DEFAULT_KEYBINDINGS: KeyBinding[] = [
   // Misc
   { key: 'Escape', command: 'cancelAction' },
   { key: 'ctrl+q', command: 'quit' },
+
+  // Chord keybindings (ctrl+k followed by another key)
+  { key: 'ctrl+k ctrl+c', command: 'editor.commentLine' },
+  { key: 'ctrl+k ctrl+u', command: 'editor.uncommentLine' },
+  { key: 'ctrl+k ctrl+s', command: 'file.saveAll' },
+  { key: 'ctrl+k ctrl+0', command: 'editor.foldAll' },
+  { key: 'ctrl+k ctrl+j', command: 'editor.unfoldAll' },
+  { key: 'ctrl+k ctrl+w', command: 'editor.closeAll' },
 ];
 
 // ============================================
@@ -334,8 +342,22 @@ export class KeybindingAdapter {
 
   /**
    * Format a key binding for display.
+   * Handles chord sequences (space-separated) like "ctrl+k ctrl+c".
    */
   formatKeyBinding(key: string): string {
+    // Split by space for chord sequences
+    const chordParts = key.trim().split(/\s+/);
+
+    // Format each key in the chord
+    const formattedParts = chordParts.map((part) => this.formatSingleKey(part));
+
+    return formattedParts.join(' ');
+  }
+
+  /**
+   * Format a single key binding (not a chord).
+   */
+  private formatSingleKey(key: string): string {
     return key
       .split('+')
       .map((part) => {

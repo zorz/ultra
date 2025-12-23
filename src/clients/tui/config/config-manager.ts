@@ -422,6 +422,7 @@ export class TUIConfigManager {
       'editor.fontSize': 14,
       'editor.tabSize': 2,
       'editor.insertSpaces': true,
+      'editor.autoIndent': 'full', // 'none', 'keep', or 'full'
       'editor.wordWrap': 'on', // Enabled by default for better terminal experience
       'editor.lineNumbers': 'on',
       'editor.minimap.enabled': false, // Disabled by default in TUI
@@ -535,8 +536,12 @@ export class TUIConfigManager {
       { key: 'ctrl+k ctrl+0', command: 'editor.foldAll' },
       { key: 'ctrl+k ctrl+j', command: 'editor.unfoldAll' },
 
-      // LSP
-      { key: 'ctrl+k', command: 'lsp.showHover' },
+      // Comment toggle (chord keybindings)
+      { key: 'ctrl+k ctrl+c', command: 'editor.commentLine' },
+      { key: 'ctrl+k ctrl+u', command: 'editor.uncommentLine' },
+      { key: 'ctrl+/', command: 'editor.toggleComment' },
+
+      // LSP (note: ctrl+k is a chord prefix, so use ctrl+i for hover instead)
       { key: 'ctrl+shift+k', command: 'lsp.goToDefinition' },
       { key: 'ctrl+space', command: 'lsp.triggerCompletion' },
       { key: 'ctrl+shift+space', command: 'lsp.triggerSignatureHelp' },

@@ -17,11 +17,11 @@ Issues and improvements to address in future sessions.
 
 - [ ] **Double-click file opening delay** - There is a noticeable delay when double-clicking a file to open it from either the file tree or git panel. Investigate and optimize the file opening path. This is also present when opening the app and files are reopened from the previous session.
 
-- [ ] **Chord keybinding support** - Add support for chord keybindings (e.g., `ctrl+d a` to select all occurrences). The keybinding system should:
-  - Detect when a partial chord is entered and wait for the next key
-  - Show a visual indicator that a chord is in progress
-  - Timeout after a reasonable delay if no second key is pressed
-  - Support arbitrary chord lengths (2+ keys)
+- [x] **Chord keybinding support** - Chord keybindings (e.g., `ctrl+k ctrl+c` for comment) are now supported:
+  - Detects partial chord and waits for next key (500ms timeout)
+  - Shows visual indicator in status bar (e.g., "ctrl+k ...")
+  - Clears status when chord completes or times out
+  - Default chords: ctrl+k ctrl+c/u (comment/uncomment), ctrl+k ctrl+0/j (fold all/unfold all), ctrl+k ctrl+s/o (session save/open)
 
 - [ ] **Shift+click selection not working** - Shift+click to extend selection in the DocumentEditor is not functioning. The code exists in `handleMouse()` but the shift modifier may not be reaching the handler correctly. Investigate:
   - Whether the input handler is correctly parsing the shift modifier for mouse events

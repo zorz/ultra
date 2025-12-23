@@ -13,6 +13,7 @@ import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
 import { InlineDiffExpander, type InlineDiffCallbacks } from '../components/inline-diff-expander.ts';
 import type { GitDiffHunk } from '../../../services/git/types.ts';
+import { calculateNewLineIndent, shouldDedentOnChar, calculateDedent, type IndentOptions } from '../../../core/auto-indent.ts';
 
 // ============================================
 // Types
@@ -1921,6 +1922,106 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
+   * Get the auto-indent options from settings.
+   */
+  private getIndentOptions(): IndentOptions {
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
+    const insertSpaces = this.ctx.getSetting('editor.insertSpaces', true);
+    const autoIndent = this.ctx.getSetting('editor.autoIndent', 'full') as 'none' | 'keep' | 'full';
+    return { tabSize, insertSpaces, autoIndent };
+  }
+
+  /**
+   * Insert newline with auto-indentation at all cursor positions.
+   * Handles bracket pairs and indent increase patterns.
+   */
+  insertNewlineWithAutoIndent(): void {
+    const cursorsBefore = this.createCursorSnapshot();
+    const operations: EditOperation[] = [];
+    const indentOptions = this.getIndentOptions();
+
+    // Delete selections first (this will add delete operations)
+    const selectionOps = this.deleteAllSelectionsWithOps();
+    operations.push(...selectionOps);
+
+    // Process cursors from bottom to top
+    const sortedCursors = [...this.cursors].sort((a, b) => this.comparePositions(b.position, a.position));
+
+    for (const cursor of sortedCursors) {
+      const line = this.lines[cursor.position.line];
+      if (!line) continue;
+
+      const lineText = line.text;
+      const column = cursor.position.column;
+
+      // Get character before and after cursor
+      const charBefore = column > 0 ? lineText[column - 1] : undefined;
+      const charAfter = column < lineText.length ? lineText[column] : undefined;
+
+      // Calculate indentation
+      const result = calculateNewLineIndent(
+        lineText.slice(0, column),
+        charBefore,
+        charAfter,
+        indentOptions
+      );
+
+      // Build the text to insert
+      let insertedText: string;
+      if (result.extraLine !== undefined) {
+        // Between brackets: insert newline + indent + newline + base indent
+        insertedText = '\n' + result.indent + '\n' + result.extraLine;
+      } else {
+        // Normal case: insert newline + indent
+        insertedText = '\n' + result.indent;
+      }
+
+      // Track the insert operation
+      operations.push({
+        type: 'insert',
+        position: { line: cursor.position.line, column: cursor.position.column },
+        text: insertedText,
+      });
+
+      // Perform the insert
+      const before = lineText.slice(0, column);
+      const after = lineText.slice(column);
+
+      if (result.extraLine !== undefined) {
+        // Between brackets case
+        line.text = before;
+        const newLines: DocumentLine[] = [
+          { text: result.indent },
+          { text: result.extraLine + after },
+        ];
+        this.lines.splice(cursor.position.line + 1, 0, ...newLines);
+        // Cursor goes on the indented line (middle line)
+        cursor.position.line += 1;
+        cursor.position.column = result.indent.length;
+      } else {
+        // Normal case
+        line.text = before;
+        this.lines.splice(cursor.position.line + 1, 0, { text: result.indent + after });
+        cursor.position.line += 1;
+        cursor.position.column = result.indent.length;
+      }
+      cursor.desiredColumn = cursor.position.column;
+    }
+
+    // Push undo action
+    const cursorsAfter = this.createCursorSnapshot();
+    this.pushUndoAction(operations, cursorsBefore, cursorsAfter);
+
+    this.modified = true;
+    this.contentVersion++;
+    this.updateGutterWidth();
+    this.updateFoldRegions();
+    this.ensurePrimaryCursorVisible();
+    this.callbacks.onContentChange?.(this.getContent());
+    this.ctx.markDirty();
+  }
+
+  /**
    * Delete character before all cursors (backspace).
    */
   deleteBackward(): void {
@@ -3291,11 +3392,15 @@ export class DocumentEditor extends BaseElement {
       return true;
     }
     if (event.key === 'Enter') {
-      this.insertText('\n');
+      this.insertNewlineWithAutoIndent();
       return true;
     }
     if (event.key === 'Tab') {
-      this.insertText('  '); // Insert spaces for tab
+      const indentOptions = this.getIndentOptions();
+      const tabText = indentOptions.insertSpaces
+        ? ' '.repeat(indentOptions.tabSize)
+        : '\t';
+      this.insertText(tabText);
       return true;
     }
 

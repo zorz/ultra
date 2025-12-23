@@ -98,6 +98,15 @@ export class Window {
   /** Whether window is active */
   private active = false;
 
+  /** Pending chord prefix (first key of a chord sequence) */
+  private pendingChord: string | null = null;
+
+  /** Chord timeout handle */
+  private chordTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /** Chord timeout duration (ms) */
+  private readonly CHORD_TIMEOUT = 500;
+
   /** Status bar height (1 collapsed, more when expanded) */
   private statusBarHeight = 1;
 
@@ -315,23 +324,103 @@ export class Window {
 
   /**
    * Check global keybindings.
+   * Supports chord sequences (e.g., "ctrl+k ctrl+c").
    */
   private handleKeybinding(event: KeyEvent): boolean {
     const keyStr = this.normalizeKey(event);
 
+    // Check for chord continuation
+    if (this.pendingChord) {
+      const chordKey = `${this.pendingChord} ${keyStr}`;
+      this.clearChord();
+
+      // Look for full chord match
+      for (const binding of this.keybindings) {
+        const normalizedBinding = this.normalizeBindingKey(binding.key);
+        if (normalizedBinding === chordKey) {
+          if (binding.when && !binding.when()) {
+            continue;
+          }
+          if (binding.handler()) {
+            return true;
+          }
+        }
+      }
+
+      // Chord didn't complete - fall through to check for new chord or direct binding
+    }
+
+    // Check if this key could start a chord
+    const chordPrefix = keyStr + ' ';
+    const hasChordContinuation = this.keybindings.some((b) => {
+      const normalized = this.normalizeBindingKey(b.key);
+      return normalized.startsWith(chordPrefix);
+    });
+
+    // Check for direct binding
     for (const binding of this.keybindings) {
-      if (binding.key === keyStr) {
-        // Check 'when' condition
+      const normalizedBinding = this.normalizeBindingKey(binding.key);
+      if (normalizedBinding === keyStr) {
         if (binding.when && !binding.when()) {
           continue;
         }
+
+        // If this key also starts a chord, wait for chord instead of executing
+        if (hasChordContinuation) {
+          break;
+        }
+
         if (binding.handler()) {
           return true;
         }
       }
     }
 
+    if (hasChordContinuation) {
+      // Start chord timeout
+      this.pendingChord = keyStr;
+
+      // Show chord indicator in status bar
+      this.showStatusCommand(`${keyStr} ...`);
+
+      this.chordTimeout = setTimeout(() => {
+        this.clearChord();
+        this.markDirty();
+      }, this.CHORD_TIMEOUT);
+
+      return true; // Consume the key to wait for chord
+    }
+
     return false;
+  }
+
+  /**
+   * Clear any pending chord.
+   */
+  private clearChord(): void {
+    if (this.chordTimeout) {
+      clearTimeout(this.chordTimeout);
+      this.chordTimeout = null;
+    }
+    if (this.pendingChord) {
+      // Clear the chord indicator from status bar
+      this.statusBar.setItemContent('command', '');
+    }
+    this.pendingChord = null;
+  }
+
+  /**
+   * Check if a chord is pending.
+   */
+  isChordPending(): boolean {
+    return this.pendingChord !== null;
+  }
+
+  /**
+   * Get the pending chord prefix.
+   */
+  getPendingChord(): string | null {
+    return this.pendingChord;
   }
 
   /**
@@ -345,6 +434,49 @@ export class Window {
     if (event.meta) parts.push('meta');
     parts.push(event.key.toLowerCase());
     return parts.join('+');
+  }
+
+  /**
+   * Normalize a binding key string to match normalizeKey output.
+   * Handles space-separated chord sequences like "ctrl+k ctrl+c".
+   */
+  private normalizeBindingKey(keyString: string): string {
+    // Split by space for chord sequences
+    const chordParts = keyString.trim().split(/\s+/);
+
+    // Normalize each part of the chord
+    const normalized = chordParts.map((part) => {
+      const segments = part.toLowerCase().split('+');
+      const modifiers: string[] = [];
+      let key = '';
+
+      for (const seg of segments) {
+        const trimmed = seg.trim();
+        if (['ctrl', 'cmd', 'control'].includes(trimmed)) {
+          modifiers.push('ctrl');
+        } else if (trimmed === 'shift') {
+          modifiers.push('shift');
+        } else if (['alt', 'option'].includes(trimmed)) {
+          modifiers.push('alt');
+        } else if (['meta', 'win', 'super'].includes(trimmed)) {
+          modifiers.push('meta');
+        } else {
+          key = trimmed;
+        }
+      }
+
+      // Match the order from normalizeKey: ctrl, alt, shift, meta
+      const orderedModifiers: string[] = [];
+      if (modifiers.includes('ctrl')) orderedModifiers.push('ctrl');
+      if (modifiers.includes('alt')) orderedModifiers.push('alt');
+      if (modifiers.includes('shift')) orderedModifiers.push('shift');
+      if (modifiers.includes('meta')) orderedModifiers.push('meta');
+      orderedModifiers.push(key);
+
+      return orderedModifiers.join('+');
+    });
+
+    return normalized.join(' ');
   }
 
   /**
