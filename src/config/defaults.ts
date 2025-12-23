@@ -17,423 +17,236 @@ import type { Theme } from '../ui/themes/theme-loader.ts';
 export const defaultKeybindings: KeyBinding[] = [
   {
     "key": "ctrl+s",
-    "command": "ultra.save"
+    "command": "file.save"
   },
   {
     "key": "ctrl+shift+s",
-    "command": "ultra.saveAs"
-  },
-  {
-    "key": "f4",
-    "command": "ultra.saveAs"
-  },
-  {
-    "key": "ctrl+z",
-    "command": "ultra.undo"
-  },
-  {
-    "key": "ctrl+shift+z",
-    "command": "ultra.redo"
-  },
-  {
-    "key": "ctrl+y",
-    "command": "ultra.redo"
-  },
-  {
-    "key": "ctrl+q",
-    "command": "ultra.quit"
-  },
-  {
-    "key": "ctrl+shift+r",
-    "command": "ultra.restart"
-  },
-  {
-    "key": "ctrl+r",
-    "command": "ultra.rebuild"
-  },
-  {
-    "key": "ctrl+w",
-    "command": "ultra.closeTab"
-  },
-  {
-    "key": "ctrl+n",
-    "command": "ultra.newFile"
+    "command": "file.saveAs"
   },
   {
     "key": "ctrl+o",
-    "command": "ultra.openFile"
+    "command": "file.open"
   },
   {
-    "key": "ctrl+]",
-    "command": "ultra.quickOpen"
+    "key": "ctrl+n",
+    "command": "file.new"
   },
   {
-    "key": "ctrl+p",
-    "command": "ultra.commandPalette"
+    "key": "ctrl+w",
+    "command": "file.close"
   },
   {
-    "key": "ctrl+shift+up",
-    "command": "ultra.focusSidebar"
+    "key": "ctrl+z",
+    "command": "edit.undo"
   },
   {
-    "key": "ctrl+shift+left",
-    "command": "ultra.focusGitPanel"
+    "key": "ctrl+shift+z",
+    "command": "edit.redo"
   },
   {
-    "key": "ctrl+shift+right",
-    "command": "ultra.focusEditor"
-  },
-  {
-    "key": "ctrl+shift+down",
-    "command": "ultra.focusTerminal"
-  },
-  {
-    "key": "ctrl+shift+m",
-    "command": "ultra.toggleMinimap"
-  },
-  {
-    "key": "ctrl+shift+[",
-    "command": "ultra.toggleFold"
-  },
-  {
-    "key": "ctrl+k ctrl+0",
-    "command": "ultra.foldAll"
-  },
-  {
-    "key": "ctrl+k ctrl+j",
-    "command": "ultra.unfoldAll"
-  },
-  {
-    "key": "home",
-    "command": "ultra.cursorLineStart"
-  },
-  {
-    "key": "end",
-    "command": "ultra.cursorLineEnd"
-  },
-  {
-    "key": "ctrl+a",
-    "command": "ultra.cursorLineStart"
-  },
-  {
-    "key": "ctrl+e",
-    "command": "ultra.cursorLineEnd"
-  },
-  {
-    "key": "ctrl+home",
-    "command": "ultra.cursorFileStart"
-  },
-  {
-    "key": "ctrl+end",
-    "command": "ultra.cursorFileEnd"
-  },
-  {
-    "key": "alt+left",
-    "command": "ultra.cursorWordLeft"
-  },
-  {
-    "key": "alt+right",
-    "command": "ultra.cursorWordRight"
-  },
-  {
-    "key": "alt+b",
-    "command": "ultra.cursorWordLeft"
-  },
-  {
-    "key": "alt+f",
-    "command": "ultra.cursorWordRight"
-  },
-  {
-    "key": "up",
-    "command": "ultra.cursorUp"
-  },
-  {
-    "key": "down",
-    "command": "ultra.cursorDown"
-  },
-  {
-    "key": "left",
-    "command": "ultra.cursorLeft"
-  },
-  {
-    "key": "right",
-    "command": "ultra.cursorRight"
-  },
-  {
-    "key": "shift+up",
-    "command": "ultra.selectUp"
-  },
-  {
-    "key": "shift+down",
-    "command": "ultra.selectDown"
-  },
-  {
-    "key": "shift+left",
-    "command": "ultra.selectLeft"
-  },
-  {
-    "key": "shift+right",
-    "command": "ultra.selectRight"
-  },
-  {
-    "key": "shift+home",
-    "command": "ultra.selectLineStart"
-  },
-  {
-    "key": "shift+end",
-    "command": "ultra.selectLineEnd"
-  },
-  {
-    "key": "alt+shift+left",
-    "command": "ultra.selectWordLeft"
-  },
-  {
-    "key": "alt+shift+right",
-    "command": "ultra.selectWordRight"
-  },
-  {
-    "key": "pageup",
-    "command": "ultra.pageUp"
-  },
-  {
-    "key": "pagedown",
-    "command": "ultra.pageDown"
-  },
-  {
-    "key": "shift+pageup",
-    "command": "ultra.selectPageUp"
-  },
-  {
-    "key": "shift+pagedown",
-    "command": "ultra.selectPageDown"
-  },
-  {
-    "key": "ctrl+shift+a",
-    "command": "ultra.selectAll"
-  },
-  {
-    "key": "ctrl+l",
-    "command": "ultra.selectLine"
-  },
-  {
-    "key": "ctrl+d",
-    "command": "ultra.selectNextOccurrence"
-  },
-  {
-    "key": "ctrl+d a",
-    "command": "ultra.selectAllOccurrences"
-  },
-  {
-    "key": "ctrl+shift+l",
-    "command": "ultra.splitSelectionIntoLines"
-  },
-  {
-    "key": "ctrl+u",
-    "command": "ultra.addCursorAbove"
-  },
-  {
-    "key": "ctrl+j",
-    "command": "ultra.addCursorBelow"
+    "key": "ctrl+y",
+    "command": "edit.redo"
   },
   {
     "key": "ctrl+c",
-    "command": "ultra.copy"
+    "command": "edit.copy"
   },
   {
     "key": "ctrl+x",
-    "command": "ultra.cut"
+    "command": "edit.cut"
   },
   {
     "key": "ctrl+v",
-    "command": "ultra.paste"
+    "command": "edit.paste"
   },
   {
-    "key": "ctrl+f",
-    "command": "ultra.find"
+    "key": "ctrl+a",
+    "command": "edit.selectAll"
   },
   {
-    "key": "ctrl+g",
-    "command": "ultra.goToLine"
+    "key": "ctrl+d",
+    "command": "edit.selectNextMatch"
   },
   {
-    "key": "f3",
-    "command": "ultra.findNext"
+    "key": "ctrl+shift+l",
+    "command": "edit.selectAllOccurrences"
   },
   {
-    "key": "shift+f3",
-    "command": "ultra.findPrevious"
+    "key": "ctrl+alt+up",
+    "command": "editor.addCursorAbove"
   },
   {
-    "key": "ctrl+h",
-    "command": "ultra.replace"
-  },
-  {
-    "key": "ctrl+shift+f",
-    "command": "ultra.projectSearch"
-  },
-  {
-    "key": "ctrl+b",
-    "command": "ultra.toggleSidebar"
-  },
-  {
-    "key": "ctrl+\\",
-    "command": "ultra.splitVertical"
-  },
-  {
-    "key": "ctrl+shift+\\",
-    "command": "ultra.splitHorizontal"
-  },
-  {
-    "key": "ctrl+shift+w",
-    "command": "ultra.closePane"
-  },
-  {
-    "key": "alt+]",
-    "command": "ultra.focusNextPane"
-  },
-  {
-    "key": "alt+[",
-    "command": "ultra.focusPreviousPane"
-  },
-  {
-    "key": "ctrl+1",
-    "command": "ultra.goToTab1"
-  },
-  {
-    "key": "ctrl+2",
-    "command": "ultra.goToTab2"
-  },
-  {
-    "key": "ctrl+3",
-    "command": "ultra.goToTab3"
-  },
-  {
-    "key": "ctrl+4",
-    "command": "ultra.goToTab4"
-  },
-  {
-    "key": "ctrl+5",
-    "command": "ultra.goToTab5"
-  },
-  {
-    "key": "ctrl+6",
-    "command": "ultra.goToTab6"
-  },
-  {
-    "key": "ctrl+7",
-    "command": "ultra.goToTab7"
-  },
-  {
-    "key": "ctrl+8",
-    "command": "ultra.goToTab8"
-  },
-  {
-    "key": "ctrl+9",
-    "command": "ultra.goToTab9"
-  },
-  {
-    "key": "ctrl+alt+right",
-    "command": "ultra.nextTab"
-  },
-  {
-    "key": "ctrl+alt+left",
-    "command": "ultra.previousTab"
-  },
-  {
-    "key": "ctrl+`",
-    "command": "ultra.toggleTerminal"
-  },
-  {
-    "key": "ctrl+shift+`",
-    "command": "ultra.newTerminal"
-  },
-  {
-    "key": "ctrl+shift+]",
-    "command": "ultra.nextTerminal"
-  },
-  {
-    "key": "ctrl+shift+[",
-    "command": "ultra.previousTerminal"
-  },
-  {
-    "key": "ctrl+i",
-    "command": "ultra.toggleAIPanel"
-  },
-  {
-    "key": "ctrl+shift+g",
-    "command": "ultra.toggleGitPanel"
-  },
-  {
-    "key": "ctrl+alt+s",
-    "command": "ultra.gitStageFile"
-  },
-  {
-    "key": "ctrl+alt+u",
-    "command": "ultra.gitUnstageFile"
-  },
-  {
-    "key": "ctrl+alt+z",
-    "command": "ultra.gitDiscardChanges"
-  },
-  {
-    "key": "ctrl+enter",
-    "command": "ultra.gitCommit"
-  },
-  {
-    "key": "ctrl+alt+d",
-    "command": "ultra.showGitDiff"
-  },
-  {
-    "key": "f12",
-    "command": "ultra.goToDefinition"
-  },
-  {
-    "key": "shift+f12",
-    "command": "ultra.findReferences"
-  },
-  {
-    "key": "f2",
-    "command": "ultra.rename"
-  },
-  {
-    "key": "ctrl+space",
-    "command": "ultra.triggerCompletion"
-  },
-  {
-    "key": "ctrl+k",
-    "command": "ultra.showHover"
-  },
-  {
-    "key": "ctrl+k d",
-    "command": "ultra.lspDebug"
+    "key": "ctrl+alt+down",
+    "command": "editor.addCursorBelow"
   },
   {
     "key": "escape",
-    "command": "ultra.escape"
+    "command": "editor.clearCursors",
+    "when": "editorHasMultipleCursors"
   },
   {
-    "key": "enter",
-    "command": "ultra.enter"
+    "key": "ctrl+f",
+    "command": "search.find"
   },
   {
-    "key": "tab",
-    "command": "ultra.tab"
+    "key": "ctrl+h",
+    "command": "search.replace"
   },
   {
-    "key": "shift+tab",
-    "command": "ultra.outdent"
+    "key": "ctrl+shift+f",
+    "command": "search.findInFiles"
   },
   {
-    "key": "backspace",
-    "command": "ultra.backspace"
+    "key": "f3",
+    "command": "search.findNext"
   },
   {
-    "key": "delete",
-    "command": "ultra.delete"
+    "key": "shift+f3",
+    "command": "search.findPrevious"
   },
   {
-    "key": "ctrl+shift+c",
-    "command": "ultra.copyStatusMessage"
+    "key": "ctrl+g",
+    "command": "editor.gotoLine"
+  },
+  {
+    "key": "ctrl+p",
+    "command": "workbench.quickOpen"
+  },
+  {
+    "key": "ctrl+shift+p",
+    "command": "workbench.commandPalette"
+  },
+  {
+    "key": "ctrl+shift+o",
+    "command": "editor.gotoSymbol"
+  },
+  {
+    "key": "ctrl+tab",
+    "command": "workbench.focusNextPane"
+  },
+  {
+    "key": "ctrl+shift+tab",
+    "command": "workbench.focusPreviousPane"
+  },
+  {
+    "key": "ctrl+]",
+    "command": "editor.nextTab"
+  },
+  {
+    "key": "ctrl+[",
+    "command": "editor.previousTab"
+  },
+  {
+    "key": "ctrl+shift+b",
+    "command": "workbench.toggleSidebar"
+  },
+  {
+    "key": "ctrl+`",
+    "command": "workbench.toggleTerminal"
+  },
+  {
+    "key": "ctrl+\\",
+    "command": "view.splitVertical"
+  },
+  {
+    "key": "ctrl+shift+\\",
+    "command": "view.splitHorizontal"
+  },
+  {
+    "key": "ctrl+1",
+    "command": "workbench.focusEditor1"
+  },
+  {
+    "key": "ctrl+2",
+    "command": "workbench.focusEditor2"
+  },
+  {
+    "key": "ctrl+3",
+    "command": "workbench.focusEditor3"
+  },
+  {
+    "key": "ctrl+l",
+    "command": "editor.selectLine"
+  },
+  {
+    "key": "ctrl+l d",
+    "command": "editor.duplicateLine"
+  },
+  {
+    "key": "ctrl+shift+d",
+    "command": "editor.duplicateSelection"
+  },
+  {
+    "key": "ctrl+shift+`",
+    "command": "terminal.new"
+  },
+  {
+    "key": "ctrl+shift+t",
+    "command": "terminal.newInPane"
+  },
+  {
+    "key": "ctrl+shift+g",
+    "command": "git.focusPanel"
+  },
+  {
+    "key": "ctrl+q",
+    "command": "workbench.quit"
+  },
+  {
+    "key": "ctrl+,",
+    "command": "workbench.openSettings"
+  },
+  {
+    "key": "ctrl+shift+,",
+    "command": "workbench.openKeybindings"
+  },
+  {
+    "key": "ctrl+k ctrl+s",
+    "command": "session.saveAs"
+  },
+  {
+    "key": "ctrl+k ctrl+o",
+    "command": "session.open"
+  },
+  {
+    "key": "ctrl+shift+[",
+    "command": "editor.fold"
+  },
+  {
+    "key": "ctrl+shift+]",
+    "command": "editor.unfold"
+  },
+  {
+    "key": "ctrl+k ctrl+0",
+    "command": "editor.foldAll"
+  },
+  {
+    "key": "ctrl+k ctrl+j",
+    "command": "editor.unfoldAll"
+  },
+  {
+    "key": "ctrl+k ctrl+c",
+    "command": "editor.commentLine"
+  },
+  {
+    "key": "ctrl+k ctrl+u",
+    "command": "editor.uncommentLine"
+  },
+  {
+    "key": "ctrl+/",
+    "command": "editor.toggleComment"
+  },
+  {
+    "key": "ctrl+shift+k",
+    "command": "lsp.goToDefinition"
+  },
+  {
+    "key": "ctrl+space",
+    "command": "lsp.triggerCompletion"
+  },
+  {
+    "key": "ctrl+shift+space",
+    "command": "lsp.triggerSignatureHelp"
   }
 ];
 
@@ -441,19 +254,14 @@ export const defaultSettings: Record<string, any> = {
   "editor.fontSize": 14,
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
+  "editor.autoIndent": "full",
   "editor.wordWrap": "on",
   "editor.lineNumbers": "on",
-  "editor.folding": true,
-  "editor.minimap.enabled": true,
-  "editor.minimap.width": 10,
-  "editor.minimap.showSlider": "always",
-  "editor.minimap.maxColumn": 120,
-  "editor.minimap.side": "right",
+  "editor.minimap.enabled": false,
   "editor.renderWhitespace": "selection",
-  "editor.mouseWheelScrollSensitivity": 3,
-  "editor.cursorBlinkRate": 500,
-  "editor.scrollBeyondLastLine": true,
+  "editor.diagnostics.curlyUnderline": true,
   "files.autoSave": "off",
+  "files.watchFiles": "onFocus",
   "files.exclude": {
     "**/node_modules": true,
     "**/.git": true,
@@ -462,26 +270,13 @@ export const defaultSettings: Record<string, any> = {
   "workbench.colorTheme": "catppuccin-frappe",
   "workbench.sideBar.visible": true,
   "workbench.sideBar.location": "left",
-  "workbench.sideBar.focusedBackground": "#2d3139",
-  "workbench.startupEditor": "~/.ultra/BOOT.md",
-  "ultra.sidebar.width": 30,
-  "ultra.ai.model": "claude-sonnet-4-20250514",
-  "ultra.ai.apiKey": "${env:ANTHROPIC_API_KEY}",
-  "ai.panel.defaultWidth": 80,
-  "ai.panel.maxWidthPercent": 50,
-  "ai.panel.openOnStartup": true,
-  "ai.panel.initialPrompt": "You are a helpful software engineer working with another software engineer on a coding project using the Ultra IDE",
+  "tui.sidebar.width": 36,
+  "tui.sidebar.visible": true,
+  "tui.terminal.height": 10,
   "terminal.integrated.shell": "",
   "terminal.integrated.position": "bottom",
-  "terminal.integrated.defaultHeight": 24,
-  "terminal.integrated.defaultWidth": 60,
-  "terminal.integrated.scrollback": 1000,
-  "git.statusInterval": 100,
-  "git.panel.location": "sidebar-bottom",
-  "git.panel.openOnStartup": true,
-  "git.diffContextLines": 3,
-  "terminal.integrated.openOnStartup": true,
-  "terminal.integrated.spawnOnStartup": true
+  "git.statusInterval": 5000,
+  "git.panel.openOnStartup": true
 };
 
 export const defaultThemes: Record<string, Theme> = {

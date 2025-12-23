@@ -2127,6 +2127,27 @@ export class TUIClient {
       return this.stop(TUIClient.EXIT_CODE_RESTART_REBUILD).then(() => true);
     });
 
+    // Migration command
+    this.commandHandlers.set('workbench.migrateConfig', async () => {
+      const hasLegacy = await this.configManager.hasLegacyConfig();
+      if (!hasLegacy) {
+        this.window.showNotification('No legacy config found in ~/.ultra/new-tui/', 'info');
+        return true;
+      }
+
+      const result = await this.configManager.migrateFromLegacy();
+      if (result.success) {
+        this.window.showNotification(result.message, 'info');
+        // Log details
+        for (const detail of result.details) {
+          this.log(detail);
+        }
+      } else {
+        this.window.showNotification(result.message, 'error');
+      }
+      return true;
+    });
+
     // Folding commands
     this.commandHandlers.set('editor.fold', () => {
       const element = this.window.getFocusedElement();
@@ -3170,6 +3191,7 @@ export class TUIClient {
     'workbench.quit': { label: 'Quit', category: 'App' },
     'workbench.restart': { label: 'Restart', category: 'App' },
     'workbench.restartAndRebuild': { label: 'Restart and Rebuild', category: 'App' },
+    'workbench.migrateConfig': { label: 'Migrate Legacy Config (~/.ultra/new-tui)', category: 'App' },
     // Terminal
     'terminal.new': { label: 'New Terminal in Panel', category: 'Term' },
     'terminal.newInPane': { label: 'New Terminal in Pane', category: 'Term' },

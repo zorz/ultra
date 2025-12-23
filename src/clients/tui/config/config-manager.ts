@@ -1,15 +1,20 @@
 /**
  * TUI Config Manager
  *
- * Manages configuration for the new TUI client.
- * Uses a separate subfolder (~/.ultra/<CONFIG_SUBDIR>/) to avoid conflicts with the current version.
+ * Manages configuration for the TUI client.
+ * Config is stored in ~/.ultra/ with user settings/keybindings and sessions.
+ * Default settings and keybindings are loaded from config/default-*.json files.
  */
 
-import { mkdir } from 'fs/promises';
+import { mkdir, cp, rm } from 'fs/promises';
 import * as fs from 'fs';
 import { debugLog } from '../../../debug.ts';
 import type { EditorSettings } from '../../../config/settings.ts';
 import type { KeyBinding } from '../../../services/session/types.ts';
+
+// Import default configs from JSON files (source of truth)
+import defaultSettingsJson from '../../../../config/default-settings.json' with { type: 'json' };
+import defaultKeybindingsJson from '../../../../config/default-keybindings.json' with { type: 'json' };
 
 // ============================================
 // Hot-Reload Types
@@ -30,10 +35,10 @@ export type ConfigReloadCallback = (type: ConfigReloadType) => void;
 // ============================================
 
 /**
- * Subdirectory name within ~/.ultra/ for the new TUI config.
- * Change this when transitioning to production.
+ * Legacy subdirectory name - kept for migration purposes.
+ * Config files were previously stored in ~/.ultra/new-tui/
  */
-export const CONFIG_SUBDIR = 'new-tui';
+export const LEGACY_CONFIG_SUBDIR = 'new-tui';
 
 // ============================================
 // Types
@@ -75,24 +80,28 @@ export interface TUISettings extends Partial<EditorSettings> {
  * Config paths for different locations.
  */
 export interface ConfigPaths {
-  /** User config directory (~/.ultra/<CONFIG_SUBDIR>/) */
+  /** Base ultra directory (~/.ultra/) */
+  baseDir: string;
+  /** User config directory (~/.ultra/) */
   userDir: string;
-  /** User settings file (~/.ultra/<CONFIG_SUBDIR>/settings.json) */
+  /** User settings file (~/.ultra/settings.json) */
   userSettings: string;
-  /** User keybindings file (~/.ultra/<CONFIG_SUBDIR>/keybindings.json) */
+  /** User keybindings file (~/.ultra/keybindings.json) */
   userKeybindings: string;
   /** Workspace settings directory (<project>/.ultra/) - created on demand */
   workspaceDir: string | null;
   /** Workspace settings file (<project>/.ultra/settings.json) */
   workspaceSettings: string | null;
-  /** Sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/) */
+  /** Sessions directory (~/.ultra/sessions/) */
   sessionsDir: string;
-  /** Workspace sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/workspaces/) */
+  /** Workspace sessions directory (~/.ultra/sessions/workspaces/) */
   workspaceSessionsDir: string;
-  /** Named sessions directory (~/.ultra/<CONFIG_SUBDIR>/sessions/named/) */
+  /** Named sessions directory (~/.ultra/sessions/named/) */
   namedSessionsDir: string;
-  /** Last session reference file (~/.ultra/<CONFIG_SUBDIR>/sessions/last-session.json) */
+  /** Last session reference file (~/.ultra/sessions/last-session.json) */
   lastSessionFile: string;
+  /** Legacy config directory (~/.ultra/new-tui/) - for migration */
+  legacyDir: string;
 }
 
 // ============================================
@@ -129,10 +138,12 @@ export class TUIConfigManager {
 
   constructor(workingDirectory?: string) {
     const home = process.env.HOME || process.env.USERPROFILE || '';
-    const userDir = `${home}/.ultra/${CONFIG_SUBDIR}`;
+    const baseDir = `${home}/.ultra`;
+    const userDir = baseDir;
     const sessionsDir = `${userDir}/sessions`;
 
     this.paths = {
+      baseDir,
       userDir,
       userSettings: `${userDir}/settings.json`,
       userKeybindings: `${userDir}/keybindings.json`,
@@ -142,6 +153,7 @@ export class TUIConfigManager {
       workspaceSessionsDir: `${sessionsDir}/workspaces`,
       namedSessionsDir: `${sessionsDir}/named`,
       lastSessionFile: `${sessionsDir}/last-session.json`,
+      legacyDir: `${baseDir}/${LEGACY_CONFIG_SUBDIR}`,
     };
   }
 
@@ -417,140 +429,24 @@ export class TUIConfigManager {
    * Get default settings.
    */
   private getDefaultSettings(): TUISettings {
-    return {
-      // Editor settings
-      'editor.fontSize': 14,
-      'editor.tabSize': 2,
-      'editor.insertSpaces': true,
-      'editor.autoIndent': 'full', // 'none', 'keep', or 'full'
-      'editor.wordWrap': 'on', // Enabled by default for better terminal experience
-      'editor.lineNumbers': 'on',
-      'editor.minimap.enabled': false, // Disabled by default in TUI
-      'editor.renderWhitespace': 'selection',
+    // Load defaults from JSON file (source of truth)
+    // Apply runtime overrides for environment-specific values
+    const defaults = { ...defaultSettingsJson } as TUISettings;
 
-      // Files
-      'files.autoSave': 'off',
-      'files.watchFiles': 'onFocus', // Check for external changes on focus
-      'files.exclude': {
-        '**/node_modules': true,
-        '**/.git': true,
-        '**/.DS_Store': true,
-      },
+    // Override shell with environment variable if not set in JSON
+    if (!defaults['terminal.integrated.shell']) {
+      defaults['terminal.integrated.shell'] = process.env.SHELL || '/bin/zsh';
+    }
 
-      // Theme
-      'workbench.colorTheme': 'catppuccin-frappe',
-
-      // Sidebar
-      'workbench.sideBar.visible': true,
-      'workbench.sideBar.location': 'left',
-
-      // TUI-specific
-      'tui.sidebar.width': 36,
-      'tui.sidebar.visible': true,
-      'tui.terminal.height': 10,
-
-      // Diagnostics
-      'editor.diagnostics.curlyUnderline': true, // Enabled by default, falls back gracefully in unsupported terminals
-
-      // Terminal
-      'terminal.integrated.shell': process.env.SHELL || '/bin/zsh',
-      'terminal.integrated.position': 'bottom',
-
-      // Git
-      'git.statusInterval': 5000,
-      'git.panel.openOnStartup': true,
-    };
+    return defaults;
   }
 
   /**
    * Get default keybindings.
+   * Loaded from config/default-keybindings.json (source of truth).
    */
   private getDefaultKeybindings(): KeyBinding[] {
-    return [
-      // File operations
-      { key: 'ctrl+s', command: 'file.save' },
-      { key: 'ctrl+shift+s', command: 'file.saveAs' },
-      { key: 'ctrl+o', command: 'file.open' },
-      { key: 'ctrl+n', command: 'file.new' },
-      { key: 'ctrl+w', command: 'file.close' },
-
-      // Edit operations
-      { key: 'ctrl+z', command: 'edit.undo' },
-      { key: 'ctrl+shift+z', command: 'edit.redo' },
-      { key: 'ctrl+y', command: 'edit.redo' },
-      { key: 'ctrl+c', command: 'edit.copy' },
-      { key: 'ctrl+x', command: 'edit.cut' },
-      { key: 'ctrl+v', command: 'edit.paste' },
-      { key: 'ctrl+a', command: 'edit.selectAll' },
-      { key: 'ctrl+d', command: 'edit.selectNextMatch' },
-      { key: 'ctrl+shift+d', command: 'edit.selectAllOccurrences' },
-      { key: 'ctrl+alt+up', command: 'editor.addCursorAbove' },
-      { key: 'ctrl+alt+down', command: 'editor.addCursorBelow' },
-      { key: 'escape', command: 'editor.clearCursors', when: 'editorHasMultipleCursors' },
-
-      // Search
-      { key: 'ctrl+f', command: 'search.find' },
-      { key: 'ctrl+h', command: 'search.replace' },
-      { key: 'ctrl+shift+f', command: 'search.findInFiles' },
-      { key: 'f3', command: 'search.findNext' },
-      { key: 'shift+f3', command: 'search.findPrevious' },
-
-      // Navigation
-      { key: 'ctrl+g', command: 'editor.gotoLine' },
-      { key: 'ctrl+p', command: 'workbench.quickOpen' },
-      { key: 'ctrl+shift+p', command: 'workbench.commandPalette' },
-      { key: 'ctrl+shift+o', command: 'editor.gotoSymbol' },
-      { key: 'ctrl+tab', command: 'workbench.focusNextPane' },
-      { key: 'ctrl+shift+tab', command: 'workbench.focusPreviousPane' },
-      { key: 'ctrl+]', command: 'editor.nextTab' },
-      { key: 'ctrl+[', command: 'editor.previousTab' },
-
-      // View
-      { key: 'ctrl+shift+b', command: 'workbench.toggleSidebar' },
-      { key: 'ctrl+`', command: 'workbench.toggleTerminal' },
-      { key: 'ctrl+\\', command: 'view.splitVertical' },
-      { key: 'ctrl+shift+\\', command: 'view.splitHorizontal' },
-      { key: 'ctrl+1', command: 'workbench.focusEditor1' },
-      { key: 'ctrl+2', command: 'workbench.focusEditor2' },
-      { key: 'ctrl+3', command: 'workbench.focusEditor3' },
-
-      // Line selection and duplication
-      { key: 'ctrl+l', command: 'editor.selectLine' },
-      { key: 'ctrl+l d', command: 'editor.duplicateLine' },
-      { key: 'ctrl+shift+d', command: 'editor.duplicateSelection' },
-
-      // Terminal
-      { key: 'ctrl+shift+`', command: 'terminal.new' },
-      { key: 'ctrl+shift+t', command: 'terminal.newInPane' },
-
-      // Git
-      { key: 'ctrl+shift+g', command: 'git.focusPanel' },
-
-      // App
-      { key: 'ctrl+q', command: 'workbench.quit' },
-      { key: 'ctrl+,', command: 'workbench.openSettings' },
-      { key: 'ctrl+shift+,', command: 'workbench.openKeybindings' },
-
-      // Session (note: no default keybinding for session.save - happens automatically)
-      { key: 'ctrl+k ctrl+s', command: 'session.saveAs' },
-      { key: 'ctrl+k ctrl+o', command: 'session.open' },
-
-      // Folding
-      { key: 'ctrl+shift+[', command: 'editor.fold' },
-      { key: 'ctrl+shift+]', command: 'editor.unfold' },
-      { key: 'ctrl+k ctrl+0', command: 'editor.foldAll' },
-      { key: 'ctrl+k ctrl+j', command: 'editor.unfoldAll' },
-
-      // Comment toggle (chord keybindings)
-      { key: 'ctrl+k ctrl+c', command: 'editor.commentLine' },
-      { key: 'ctrl+k ctrl+u', command: 'editor.uncommentLine' },
-      { key: 'ctrl+/', command: 'editor.toggleComment' },
-
-      // LSP (note: ctrl+k is a chord prefix, so use ctrl+i for hover instead)
-      { key: 'ctrl+shift+k', command: 'lsp.goToDefinition' },
-      { key: 'ctrl+space', command: 'lsp.triggerCompletion' },
-      { key: 'ctrl+shift+space', command: 'lsp.triggerSignatureHelp' },
-    ];
+    return defaultKeybindingsJson as KeyBinding[];
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -562,6 +458,130 @@ export class TUIConfigManager {
    */
   getPaths(): ConfigPaths {
     return { ...this.paths };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Migration
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Check if legacy config directory exists and has content.
+   */
+  async hasLegacyConfig(): Promise<boolean> {
+    try {
+      const legacyDir = Bun.file(this.paths.legacyDir);
+      const stat = await legacyDir.stat();
+      return stat.isDirectory;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Migrate config from legacy ~/.ultra/new-tui/ to ~/.ultra/
+   * - Copies sessions from legacy/sessions/ to ~/.ultra/sessions/
+   * - Copies settings.json and keybindings.json (overwrites existing - legacy takes precedence)
+   * - Archives legacy folder to ~/.ultra/archived/new-tui-backup-<timestamp>
+   *
+   * @returns Migration result with details
+   */
+  async migrateFromLegacy(): Promise<{
+    success: boolean;
+    message: string;
+    details: string[];
+  }> {
+    const details: string[] = [];
+
+    try {
+      // Check if legacy directory exists
+      if (!await this.hasLegacyConfig()) {
+        return {
+          success: true,
+          message: 'No legacy config found',
+          details: ['Legacy directory ~/.ultra/new-tui/ does not exist'],
+        };
+      }
+
+      const legacyDir = this.paths.legacyDir;
+      const legacySessionsDir = `${legacyDir}/sessions`;
+      const legacySettings = `${legacyDir}/settings.json`;
+      const legacyKeybindings = `${legacyDir}/keybindings.json`;
+
+      // 1. Migrate sessions (copy to new location, overwriting if needed)
+      try {
+        const legacySessionsStat = await Bun.file(legacySessionsDir).stat();
+        if (legacySessionsStat.isDirectory) {
+          // Ensure sessions directory exists
+          await mkdir(this.paths.sessionsDir, { recursive: true });
+
+          // Copy sessions recursively
+          await cp(legacySessionsDir, this.paths.sessionsDir, { recursive: true, force: true });
+          details.push(`Migrated sessions from ${legacySessionsDir}`);
+        }
+      } catch {
+        details.push('No legacy sessions to migrate');
+      }
+
+      // 2. Copy settings.json from legacy (overwrites existing - legacy takes precedence)
+      try {
+        const legacySettingsFile = Bun.file(legacySettings);
+
+        if (await legacySettingsFile.exists()) {
+          const content = await legacySettingsFile.text();
+          await Bun.write(this.paths.userSettings, content);
+          details.push(`Migrated settings.json (legacy takes precedence)`);
+        }
+      } catch (e) {
+        details.push(`Error migrating settings: ${e}`);
+      }
+
+      // 3. Copy keybindings.json from legacy (overwrites existing - legacy takes precedence)
+      try {
+        const legacyKeybindingsFile = Bun.file(legacyKeybindings);
+
+        if (await legacyKeybindingsFile.exists()) {
+          const content = await legacyKeybindingsFile.text();
+          await Bun.write(this.paths.userKeybindings, content);
+          details.push(`Migrated keybindings.json (legacy takes precedence)`);
+        }
+      } catch (e) {
+        details.push(`Error migrating keybindings: ${e}`);
+      }
+
+      // 4. Archive the legacy folder
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const archiveDir = `${this.paths.baseDir}/archived`;
+      const archivePath = `${archiveDir}/new-tui-backup-${timestamp}`;
+
+      try {
+        await mkdir(archiveDir, { recursive: true });
+        await cp(legacyDir, archivePath, { recursive: true });
+        details.push(`Archived legacy config to ${archivePath}`);
+
+        // Remove the legacy directory
+        await rm(legacyDir, { recursive: true, force: true });
+        details.push(`Removed legacy directory ${legacyDir}`);
+      } catch (e) {
+        details.push(`Error archiving legacy config: ${e}`);
+      }
+
+      // Reload config after migration
+      this.loaded = false;
+      await this.load();
+      details.push('Reloaded configuration');
+
+      return {
+        success: true,
+        message: 'Migration completed successfully',
+        details,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Migration failed: ${error}`,
+        details,
+      };
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
