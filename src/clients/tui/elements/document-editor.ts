@@ -3595,25 +3595,28 @@ export class DocumentEditor extends BaseElement {
           const column = Math.min(wrapColumnOffset + baseColumn, lineText.text.length);
           const clickPos = { line: bufferLine, column };
 
-          // Update click count for double/triple click detection
-          const clickCount = this.updateClickCount(event.x, event.y);
-
-          if (clickCount === 3) {
-            // Triple click - select line
-            this.selectLine(bufferLine);
-          } else if (clickCount === 2) {
-            // Double click - select word
-            this.selectWordAt(clickPos);
-          } else if (event.ctrl) {
-            // Ctrl+click - add cursor
+          // Check modifiers FIRST - they take priority over multi-click detection
+          if (event.ctrl) {
+            // Ctrl+click - add cursor (always, regardless of click count)
             this.addCursor(clickPos);
           } else if (event.shift) {
-            // Shift+click - extend selection
+            // Shift+click - extend selection (always, regardless of click count)
             this.setCursorPosition(clickPos, true);
           } else {
-            // Normal click - set cursor and start drag selection
-            this.setCursor(clickPos);
-            this.selectionDragging = true;
+            // No modifiers - check for double/triple click
+            const clickCount = this.updateClickCount(event.x, event.y);
+
+            if (clickCount === 3) {
+              // Triple click - select line
+              this.selectLine(bufferLine);
+            } else if (clickCount === 2) {
+              // Double click - select word
+              this.selectWordAt(clickPos);
+            } else {
+              // Normal click - set cursor and start drag selection
+              this.setCursor(clickPos);
+              this.selectionDragging = true;
+            }
           }
 
           this.ctx.requestFocus();

@@ -23,10 +23,17 @@ Issues and improvements to address in future sessions.
   - Clears status when chord completes or times out
   - Default chords: ctrl+k ctrl+c/u (comment/uncomment), ctrl+k ctrl+0/j (fold all/unfold all), ctrl+k ctrl+s/o (session save/open)
 
-- [ ] **Shift+click selection not working** - Shift+click to extend selection in the DocumentEditor is not functioning. The code exists in `handleMouse()` but the shift modifier may not be reaching the handler correctly. Investigate:
-  - Whether the input handler is correctly parsing the shift modifier for mouse events
-  - Whether the mouse event is being intercepted before reaching the editor
-  - The `setCursorPosition(clickPos, true)` call with extend=true
+- [x] **Auto-indent** - Smart auto-indentation when pressing Enter:
+  - Maintains current line's indentation by default
+  - Increases indent after `{`, `[`, `(`, `:`, arrow functions, etc.
+  - Between brackets (e.g., `{|}`): creates indented line with closing bracket below
+  - Tab key respects `editor.tabSize` and `editor.insertSpaces` settings
+  - Configurable via `editor.autoIndent`: `'none'`, `'keep'`, or `'full'`
+
+- [x] **Shift+click selection not working** - Fixed. The issue was that double/triple click detection was checked BEFORE shift/ctrl modifiers, so a fast shift+click would trigger word selection instead of extending selection. Now modifiers are checked first, so:
+  - Shift+click always extends selection (regardless of click speed)
+  - Ctrl+click always adds a cursor (regardless of click speed)
+  - Double/triple click only triggers for plain clicks without modifiers
 
 - [ ] **Kitty terminal ctrl+shift+key conflicts** - Kitty terminal has default shortcuts that intercept ctrl+shift+p, ctrl+shift+k, etc. before they reach the application. The first keypress is consumed by Kitty, and only subsequent presses get through. Solutions:
   - Document that users need to unbind these in Kitty config (`map ctrl+shift+p no_op`)
