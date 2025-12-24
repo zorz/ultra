@@ -132,3 +132,140 @@ Issues and improvements to address in future sessions.
 ## ECP
 
 ## Testing
+
+---
+
+## Archived Features (from src/archived/)
+
+Features identified from `src/archived/` that have not yet been reimplemented in the new TUI architecture. These should be migrated or reimplemented as part of the 1.0 effort.
+
+### High Priority
+
+#### MCP Server (Model Context Protocol)
+
+**Source:** `src/archived/features/mcp/`
+
+A JSON-RPC based server that exposes Ultra's functionality as tools for AI assistants (Claude Code, etc.) to use.
+
+**Key Features:**
+- Tool registration and execution framework
+- Approval system for AI tool calls (once, session, always scopes)
+- HTTP transport for communication with external AI clients
+- Automatic MCP config file generation for Claude Code integration
+
+**Files:**
+- `mcp-server.ts` - Core MCP server with JSON-RPC handling
+- `mcp-transport.ts` - HTTP transport layer
+- `mcp-tools.ts` - Ultra-specific tool definitions
+- `mcp-types.ts` - Type definitions
+
+**Why Important:** Enables Ultra to be used as an MCP server for Claude Code, allowing AI to directly interact with the editor (open files, edit, navigate, run commands).
+
+---
+
+#### AI Integration Layer
+
+**Source:** `src/archived/features/ai/ai-integration.ts`
+
+Orchestrates AI features including MCP server management, AI chat pane management, and the approval system.
+
+**Key Features:**
+- MCP server lifecycle management
+- Tool handler registration (getContext, openFile, readFile, editFile, etc.)
+- AI chat instance management
+- Approval persistence across sessions
+- Command registration for AI features
+
+**Dependencies:** Requires MCP Server implementation
+
+---
+
+#### AI Approval Dialog
+
+**Source:** `src/archived/ui/components/ai-approval-dialog.ts`
+
+Modal dialog for users to approve/deny AI tool calls with scope selection (once, session, always).
+
+**Key Features:**
+- Shows tool name and arguments for review
+- Three approval scopes: once, session, always
+- Visual display of what the AI wants to do
+- Keyboard-driven interface
+
+---
+
+### Medium Priority
+
+#### Project-Wide Search (ripgrep)
+
+**Source:** `src/archived/features/search/project-search.ts`
+
+**Status:** Interface defined, implementation placeholder (TODO in archived code)
+
+Full-text search across project using ripgrep.
+
+**Interface Defined:**
+```typescript
+interface SearchMatch {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+  matchStart: number;
+  matchEnd: number;
+}
+
+interface SearchOptions {
+  caseSensitive?: boolean;
+  regex?: boolean;
+  includePattern?: string;
+  excludePattern?: string;
+  maxResults?: number;
+}
+```
+
+**Note:** The new TUI has `SearchResultBrowser` which may need this backend implementation.
+
+---
+
+### Implementation Notes
+
+#### MCP Server Priority
+
+The MCP Server should be the first backlog item implemented because:
+
+1. **AI Integration Dependency:** The AI Integration layer depends on it
+2. **Claude Code Compatibility:** Enables Ultra to work as an MCP server
+3. **Existing Code Quality:** The archived implementation is complete and well-structured
+4. **Architecture Alignment:** Fits naturally into the ECP/Services model
+
+#### Recommended Migration Path
+
+1. Move MCP types to `src/services/mcp/types.ts`
+2. Move MCP server to `src/services/mcp/server.ts`
+3. Create MCP transport adapter for new architecture
+4. Implement AI approval dialog in new overlay system
+5. Create AI integration service in `src/services/ai/`
+6. Wire up to TUI client
+
+---
+
+### Components Already Reimplemented
+
+| Archived Component | New TUI Equivalent | Status |
+|-------------------|-------------------|--------|
+| `command-palette.ts` | `overlays/command-palette.ts` | Done |
+| `file-picker.ts` | `overlays/file-picker.ts` | Done |
+| `settings-dialog.ts` | `overlays/settings-dialog.ts` | Done |
+| `git-panel.ts` | `elements/git-panel.ts` | Done |
+| `commit-dialog.ts` | `overlays/commit-dialog.ts` | Done |
+| `search-widget.ts` | `overlays/search-replace.ts` | Done |
+| `file-tree.ts` | `elements/file-tree.ts` | Done |
+| `terminal-pane.ts` | `elements/terminal-session.ts` | Done |
+| `ai-panel.ts` | `elements/ai-terminal-chat.ts` | Done |
+| `minimap.ts` | `elements/document-editor.ts` | Integrated |
+| `save-browser.ts` | `overlays/save-as-dialog.ts` | Done |
+| `status-bar.ts` | `components/status-bar.ts` | Done |
+| `tab-bar.ts` | `components/tab-bar.ts` | Done |
+
+*Analysis performed on 2024-12-24*
