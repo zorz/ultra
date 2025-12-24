@@ -3858,7 +3858,7 @@ export class DocumentEditor extends BaseElement {
     primaryCursor.desiredColumn = primaryCursor.position.column;
 
     // Clear selection after duplication
-    primaryCursor.selection = undefined;
+    primaryCursor.selection = null;
 
     const cursorsAfter = this.createCursorSnapshot();
     this.pushUndoAction(operations, cursorsBefore, cursorsAfter);

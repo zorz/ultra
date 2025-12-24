@@ -340,11 +340,11 @@ export class ECPServer {
 
     const response = await this.documentAdapter.handleRequest(request);
 
-    if ('error' in response) {
+    if ('error' in response && response.error) {
       return { error: response.error };
     }
 
-    return { result: response.result };
+    return { result: (response as { result: unknown }).result };
   }
 
   /**
@@ -364,11 +364,11 @@ export class ECPServer {
 
     const response = await this.fileAdapter.handleRequest(request);
 
-    if ('error' in response) {
+    if ('error' in response && response.error) {
       return { error: response.error };
     }
 
-    return { result: response.result };
+    return { result: (response as { result: unknown }).result };
   }
 
   /**

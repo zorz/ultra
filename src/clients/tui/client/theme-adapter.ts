@@ -277,7 +277,7 @@ export class ThemeAdapter {
    */
   listThemes(): ThemeInfo[] {
     if (!this.sessionService) {
-      return [{ id: DEFAULT_THEME.id, name: DEFAULT_THEME.name, type: DEFAULT_THEME.type, builtin: true }];
+      return [{ id: DEFAULT_THEME.id ?? 'dark-plus', name: DEFAULT_THEME.name, type: DEFAULT_THEME.type, builtin: true }];
     }
     return this.sessionService.listThemes();
   }

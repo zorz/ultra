@@ -36,7 +36,6 @@ export type {
   DeleteDirOptions,
   SearchOptions,
   SearchResult,
-  SearchMatch,
   GlobOptions,
   WatchOptions,
   WatchHandle,

@@ -415,16 +415,18 @@ export class LocalDocumentService implements DocumentService {
     const cm = entry.document.cursorManager;
 
     // Set first cursor
-    if (cursors.length > 0) {
-      cm.setPosition(cursors[0].position);
-      if (cursors[0].selection) {
-        cm.setSelection(cursors[0].selection);
+    const firstCursor = cursors[0];
+    if (firstCursor) {
+      cm.setPosition(firstCursor.position);
+      if (firstCursor.selection) {
+        cm.setSelections([{ anchor: firstCursor.selection.anchor, head: firstCursor.selection.active }]);
       }
 
       // Add additional cursors
       for (let i = 1; i < cursors.length; i++) {
-        cm.addCursor(cursors[i].position);
-        if (cursors[i].selection) {
+        const cursor = cursors[i];
+        if (cursor) {
+          cm.addCursor(cursor.position);
           // Note: The current CursorManager doesn't support setting selection on non-primary cursor
           // This is a limitation we may need to address
         }
@@ -528,7 +530,7 @@ export class LocalDocumentService implements DocumentService {
       const cm = entry.document.cursorManager;
       const current = cm.getPrimaryCursor().position;
       cm.setPosition(position);
-      cm.setSelection({ anchor: current, active: position });
+      cm.setSelections([{ anchor: current, head: position }]);
     } else {
       entry.document.cursorManager.setPosition(position);
     }

@@ -103,8 +103,8 @@ export class LocalLSPService implements LSPService {
     this.emitStatusChange({ languageId, status: 'starting' });
 
     // Start the client with the resolved command path
+    // Debug logging is controlled globally via --debug flag
     const client = new LSPClient(commandPath, config.args, workspacePath);
-    client.debugEnabled = true; // Enable LSP client debug logging
 
     // Set up notification handler
     client.onNotification((method, params) => {

@@ -52,9 +52,9 @@ export class FileError extends Error {
     /** URI that caused the error */
     public readonly uri: string,
     /** Human-readable message */
-    message: string,
+    override message: string,
     /** Underlying error, if any */
-    public readonly cause?: Error
+    public override readonly cause?: Error
   ) {
     super(message);
     this.name = 'FileError';
