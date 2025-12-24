@@ -6,7 +6,7 @@ alwaysApply: true
 
 # Ultra Editor Development Guide
 
-Ultra is a terminal-native code editor built with TypeScript and Bun.
+Ultra (v0.5.0) is a terminal-native code editor built with TypeScript and Bun.
 
 ## Bun Usage
 
@@ -55,8 +55,8 @@ Import singletons by name, not default:
 
 ```typescript
 // Good
-import { gitIntegration } from './features/git/git-integration.ts';
-import { themeLoader } from './ui/themes/theme-loader.ts';
+import { gitCliService } from './services/git/cli.ts';
+import { localSessionService } from './services/session/local.ts';
 
 // Avoid default imports for singletons
 ```
@@ -154,7 +154,7 @@ For commands that need text output, use `.text()`:
 const result = await $`git -C ${workspaceRoot} branch`.text();
 ```
 
-Git commands should never open an editor (vi/vim). **NOTE:** `GIT_EDITOR=true` should be set but is currently missing from git-integration.ts - this is a known issue to fix.
+Git commands should never open an editor (vi/vim). `GIT_EDITOR=true` is set in `src/services/git/cli.ts`.
 
 ### Event Callbacks
 
@@ -236,6 +236,24 @@ await $`git commit`;
 await $`git commit -m ${message}`.quiet();
 ```
 
+### Don't clear the entire buffer in render loops
+```typescript
+// Bad - defeats dirty tracking, causes full screen rewrite
+render(): void {
+  this.buffer.clear(bg, fg);  // Don't do this!
+  // ... render components ...
+}
+
+// Good - components paint their own backgrounds
+render(): void {
+  // Each component is responsible for its own region
+  this.paneContainer.render(this.buffer);
+  this.statusBar.render(this.buffer);
+}
+```
+
+The ScreenBuffer has dirty-tracking infrastructure. Clearing the entire buffer defeats this optimization and causes flickering.
+
 ## Project Structure
 
 ```
@@ -296,7 +314,11 @@ bun test                 # Run all tests
 bun run typecheck        # TypeScript type checking
 ```
 
-If tests fail, fix them before proceeding. Do not skip or delete failing tests without understanding why they fail.
+**CRITICAL: Run tests after EVERY significant change.** This is mandatory, not optional:
+- After completing any feature or fix, run `bun test` and `bun run typecheck`
+- If tests fail, fix them before proceeding to the next task
+- Do not skip or delete failing tests without understanding why they fail
+- Document any test failures in commit messages if they pre-existed
 
 ### Running Tests
 
@@ -324,7 +346,7 @@ tests/
 
 ### TestECPClient
 
-The `TestECPClient` class enables testing ECP methods without terminal I/O:
+The `TestECPClient` class enables testing ECP methods without terminal I/O. **Use this for programmatic testing of user workflows.**
 
 ```typescript
 import { TestECPClient } from '@test/ecp-client.ts';
@@ -350,6 +372,41 @@ test('document editing', async () => {
 });
 ```
 
+### ECP Integration Tests
+
+The ECP architecture enables headless testing of the full editor without terminal I/O:
+
+```typescript
+// Test complete user workflows programmatically
+test('file open, edit, save workflow', async () => {
+  const client = new TestECPClient();
+
+  // Open file
+  const { documentId } = await client.request('document/open', {
+    uri: 'file:///tmp/test.txt'
+  });
+
+  // Edit
+  await client.request('document/insert', { documentId, text: 'new content' });
+
+  // Save
+  await client.request('document/save', { documentId });
+
+  // Verify
+  const saved = await Bun.file('/tmp/test.txt').text();
+  expect(saved).toContain('new content');
+
+  await client.shutdown();
+});
+```
+
+**Required ECP integration tests for each service:**
+- Document: open, edit, save, undo/redo
+- File: read, write, delete, list
+- Git: status, stage, commit, diff
+- Session: save, restore, settings
+- LSP: completion, hover, definition
+
 ### Test Documentation
 
 - [Testing Overview](./architecture/testing/overview.md) - Strategy and structure
@@ -364,6 +421,48 @@ bun run dev              # Development mode
 bun run dev --debug      # With debug logging
 bun run build            # Build executable
 ```
+
+## Configuration System
+
+Ultra uses a unified configuration system. All configuration lives in `~/.ultra/` by default.
+
+### Settings File
+
+- **Primary:** `~/.ultra/settings.jsonc` (JSONC with comments)
+- **Fallback:** `~/.ultra/settings.json` (JSON without comments)
+- Look for `.jsonc` first, fall back to `.json` if not found
+
+### Settings Key Naming
+
+Settings are namespaced by what they control:
+
+| Prefix | Purpose | Examples |
+|--------|---------|----------|
+| `tui.*` | TUI-specific settings | `tui.sidebar.width`, `tui.terminal.position` |
+| `editor.*` | Editor behavior | `editor.tabSize`, `editor.wordWrap`, `editor.fontSize` |
+| `ultra.*` | Ultra application settings | `ultra.ai.model`, `ultra.session.autoSave` |
+
+```typescript
+// GOOD - Correct namespacing
+const sidebarWidth = getSetting('tui.sidebar.width');
+const tabSize = getSetting('editor.tabSize');
+const aiModel = getSetting('ultra.ai.model');
+
+// BAD - Wrong namespace or hardcoded
+const sidebarWidth = 30;  // Hardcoded
+const tabSize = getSetting('ultra.tabSize');  // Wrong namespace
+```
+
+### Theme Default
+
+The default theme is `catppuccin-frappe`. All theme references should use this as the fallback.
+
+### Adding New Settings
+
+1. Add to schema in `src/services/session/schema.ts`
+2. Add default value in the schema
+3. Use correct namespace prefix
+4. Document in settings.jsonc with comments
 
 ## Ultra 1.0 Architecture
 
@@ -405,9 +504,7 @@ These issues were identified during the architecture review:
 | `console.error` usage | Multiple files | Should use `debugLog()` instead |
 | Silent failures | Git, LSP, Config | Operations fail without error feedback |
 | Hardcoded tabSize | `document.ts:813` | Uses `2` instead of settings |
-| Defaults inconsistency | settings.ts vs defaults.ts | Theme, wordWrap values differ |
-| Fold state not saved | `app.ts:490` | TODO comment, always empty array |
-| Missing GIT_EDITOR | git-integration.ts | Not set despite CLAUDE.md claim |
+| Render loop inefficiency | `window.ts` | `buffer.clear()` defeats dirty tracking |
 | No input validation | Settings | Any value accepted without validation |
 | Memory unbounded | CacheManager | No size limits, potential memory leak |
 | when clauses unused | keymap.ts | Context conditions not implemented |
@@ -463,6 +560,19 @@ ECP methods use namespaced naming:
 3. **Fix issues as you go** - Address known issues when touching files
 4. **Add tests** - New service code should have test coverage
 5. **Update this file** - Keep CLAUDE.md current with new patterns
+6. **Validate after each change** - Run `bun test` and `bun run typecheck`
+
+### Validation Checkpoints
+
+After completing work, verify:
+
+| Change Type | Validation |
+|-------------|------------|
+| TypeScript changes | `bun run typecheck` passes |
+| Any code change | `bun test` passes |
+| Build changes | `bun run build` succeeds |
+| Configuration changes | Settings load correctly, no silent failures |
+| UI changes | Visual verification, no render regressions |
 
 ## Architecture Principles
 
