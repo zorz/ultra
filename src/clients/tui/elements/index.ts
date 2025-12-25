@@ -90,6 +90,7 @@ export {
   GitDiffBrowser,
   createGitDiffBrowser,
   type GitDiffBrowserCallbacks,
+  type DiagnosticsProvider,
 } from './git-diff-browser.ts';
 
 export {

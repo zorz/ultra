@@ -372,11 +372,11 @@ This requires extending `GitDiffBrowser` to support commit-to-commit diffs (not 
 10. [x] Implement refresh debouncing (100ms via TIMEOUTS.FILE_WATCH_DEBOUNCE)
 11. [x] Add isHistoricalDiff flag to skip auto-refresh for commit diffs
 
-### Sprint 4: LSP Diagnostics
-11. [ ] Add diagnostics provider interface
-12. [ ] Integrate with existing LSP service
-13. [ ] Render diagnostics on added lines
-14. [ ] Add diagnostic tooltips
+### Sprint 4: LSP Diagnostics ✓
+11. [x] Add diagnostics provider interface
+12. [x] Integrate with existing LSP service
+13. [x] Render diagnostics on added lines (unified and side-by-side views)
+14. [ ] Add diagnostic tooltips (backlog - requires hover integration)
 
 ### Sprint 5: Inline Editing
 15. [ ] Add edit mode state

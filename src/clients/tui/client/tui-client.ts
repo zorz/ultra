@@ -38,6 +38,7 @@ import {
   type AIProvider,
   type TerminalTabDropdownInfo,
   type GitDiffBrowserCallbacks,
+  type DiagnosticsProvider,
 } from '../elements/index.ts';
 import { createGitDiffArtifact } from '../artifacts/git-diff-artifact.ts';
 import type { Pane } from '../layout/pane.ts';
@@ -1047,6 +1048,12 @@ export class TUIClient {
         diffBrowser.setBrowserSubtitle(`Commit ${shortHash}`);
         diffBrowser.setHistoricalDiff(true); // Commit diffs don't auto-refresh
         diffBrowser.setArtifacts(artifacts);
+
+        // Set up diagnostics provider for LSP integration
+        const diagnosticsProvider = this.getDiagnosticsProvider();
+        if (diagnosticsProvider) {
+          diffBrowser.setDiagnosticsProvider(diagnosticsProvider);
+        }
 
         // Set up callbacks for opening files
         const callbacks: GitDiffBrowserCallbacks = {
@@ -5567,6 +5574,18 @@ export class TUIClient {
   getLSPDiagnostics(uri: string): import('../../../services/lsp/types.ts').LSPDiagnostic[] {
     if (!this.lspIntegration) return [];
     return this.lspIntegration.getDiagnostics(uri);
+  }
+
+  /**
+   * Get a DiagnosticsProvider for use with GitDiffBrowser.
+   * Returns null if LSP is not available.
+   */
+  private getDiagnosticsProvider(): DiagnosticsProvider | null {
+    if (!this.lspIntegration) return null;
+    const lsp = this.lspIntegration;
+    return {
+      getDiagnostics: (uri: string) => lsp.getDiagnostics(uri),
+    };
   }
 
   /**

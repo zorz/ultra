@@ -11,6 +11,7 @@ import type { KeyEvent } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import type { ArtifactNode, ArtifactAction, ContentBrowserCallbacks, SummaryItem } from '../artifacts/types.ts';
 import type { GitDiffHunk, DiffLine, GitChangeType } from '../../../services/git/types.ts';
+import type { LSPDiagnostic } from '../../../services/lsp/client.ts';
 import { TIMEOUTS } from '../../../constants.ts';
 import {
   type GitDiffArtifact,
@@ -28,6 +29,28 @@ import {
 // ============================================
 // Types
 // ============================================
+
+/**
+ * Provider interface for getting LSP diagnostics for files.
+ */
+export interface DiagnosticsProvider {
+  /**
+   * Get diagnostics for a file.
+   * @param uri File URI (e.g., file:///path/to/file.ts)
+   * @returns Array of diagnostics for the file
+   */
+  getDiagnostics(uri: string): LSPDiagnostic[];
+}
+
+/**
+ * Diagnostic severity levels (from LSP spec).
+ */
+export const DiagnosticSeverity = {
+  Error: 1,
+  Warning: 2,
+  Information: 3,
+  Hint: 4,
+} as const;
 
 /**
  * Callbacks for git diff browser.
@@ -72,6 +95,15 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
   /** Whether this is a historical diff (commit diff vs working tree) */
   private isHistoricalDiff = false;
 
+  /** Diagnostics provider for LSP integration */
+  private diagnosticsProvider: DiagnosticsProvider | null = null;
+
+  /** Whether to show diagnostics on added lines */
+  private showDiagnostics = true;
+
+  /** Cached diagnostics per file path */
+  private diagnosticsCache = new Map<string, LSPDiagnostic[]>();
+
   /** Git-specific callbacks */
   private gitCallbacks: GitDiffBrowserCallbacks;
 
@@ -86,8 +118,9 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
     this.browserTitle = title;
     this.hintBarHeight = 2;
 
-    // Read auto-refresh setting
+    // Read settings
     this.autoRefresh = this.ctx.getSetting('tui.diffViewer.autoRefresh', true);
+    this.showDiagnostics = this.ctx.getSetting('tui.diffViewer.showDiagnostics', true);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -211,6 +244,137 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
       this.refreshDebounceTimer = null;
     }
     super.dispose();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Diagnostics
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Set the diagnostics provider for LSP integration.
+   * @param provider The diagnostics provider, or null to disable
+   */
+  setDiagnosticsProvider(provider: DiagnosticsProvider | null): void {
+    this.diagnosticsProvider = provider;
+    this.refreshDiagnosticsCache();
+    this.ctx.markDirty();
+  }
+
+  /**
+   * Set whether to show diagnostics on added lines.
+   */
+  setShowDiagnostics(show: boolean): void {
+    if (this.showDiagnostics !== show) {
+      this.showDiagnostics = show;
+      this.ctx.markDirty();
+    }
+  }
+
+  /**
+   * Get whether diagnostics are shown.
+   */
+  isShowingDiagnostics(): boolean {
+    return this.showDiagnostics && this.diagnosticsProvider !== null;
+  }
+
+  /**
+   * Refresh the diagnostics cache for all files in the diff.
+   */
+  refreshDiagnosticsCache(): void {
+    this.diagnosticsCache.clear();
+
+    if (!this.diagnosticsProvider || !this.showDiagnostics) {
+      return;
+    }
+
+    // Get diagnostics for each file in the diff
+    const artifacts = this.getArtifacts();
+    for (const artifact of artifacts) {
+      const uri = `file://${artifact.filePath}`;
+      const diagnostics = this.diagnosticsProvider.getDiagnostics(uri);
+      if (diagnostics.length > 0) {
+        this.diagnosticsCache.set(artifact.filePath, diagnostics);
+      }
+    }
+  }
+
+  /**
+   * Get diagnostics for a specific line in a file.
+   * Only returns diagnostics for added lines (new code).
+   * @param filePath File path
+   * @param lineNum Line number in the new file (1-based)
+   * @returns Array of diagnostics on this line
+   */
+  private getDiagnosticsForLine(filePath: string, lineNum: number): LSPDiagnostic[] {
+    if (!this.showDiagnostics || !this.diagnosticsProvider) {
+      return [];
+    }
+
+    const diagnostics = this.diagnosticsCache.get(filePath);
+    if (!diagnostics) {
+      return [];
+    }
+
+    // Filter diagnostics that include this line (LSP lines are 0-based)
+    return diagnostics.filter((d) => {
+      const startLine = d.range.start.line + 1; // Convert to 1-based
+      const endLine = d.range.end.line + 1;
+      return lineNum >= startLine && lineNum <= endLine;
+    });
+  }
+
+  /**
+   * Get the highest severity diagnostic for a line.
+   * @returns Severity (1=Error, 2=Warning, 3=Info, 4=Hint) or null if none
+   */
+  private getHighestSeverityForLine(filePath: string, lineNum: number): number | null {
+    const diagnostics = this.getDiagnosticsForLine(filePath, lineNum);
+    if (diagnostics.length === 0) {
+      return null;
+    }
+
+    // Lower number = higher severity (Error=1 is highest)
+    let highest = Infinity;
+    for (const d of diagnostics) {
+      const severity = d.severity ?? DiagnosticSeverity.Error;
+      if (severity < highest) {
+        highest = severity;
+      }
+    }
+    return highest === Infinity ? null : highest;
+  }
+
+  /**
+   * Get the icon and color for a diagnostic severity.
+   */
+  private getDiagnosticIconAndColor(severity: number): { icon: string; color: string } {
+    switch (severity) {
+      case DiagnosticSeverity.Error:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorError.foreground', '#f14c4c'),
+        };
+      case DiagnosticSeverity.Warning:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorWarning.foreground', '#cca700'),
+        };
+      case DiagnosticSeverity.Information:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorInfo.foreground', '#3794ff'),
+        };
+      case DiagnosticSeverity.Hint:
+        return {
+          icon: '○',
+          color: this.ctx.getThemeColor('editorHint.foreground', '#75beff'),
+        };
+      default:
+        return {
+          icon: '●',
+          color: this.ctx.getThemeColor('editorError.foreground', '#f14c4c'),
+        };
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -575,16 +739,28 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
     }
 
     // Unified view rendering
-    const indent = '      ';
     const line = node.line;
     const prefix = line.type === 'added' ? '+' : line.type === 'deleted' ? '-' : ' ';
 
-    // Line number columns
+    // Check for diagnostics on added lines
+    let diagnosticIcon = ' ';
+    let diagnosticColor = colors.fg;
+    if (line.type === 'added' && line.newLineNum !== undefined) {
+      const severity = this.getHighestSeverityForLine(node.artifact.filePath, line.newLineNum);
+      if (severity !== null) {
+        const { icon, color } = this.getDiagnosticIconAndColor(severity);
+        diagnosticIcon = icon;
+        diagnosticColor = color;
+      }
+    }
+
+    // Layout: "D     1234 5678 +content" where D is diagnostic icon
+    const indent = '     '; // 5 spaces (1 for diagnostic icon)
     const oldNum = line.oldLineNum?.toString().padStart(4, ' ') ?? '    ';
     const newNum = line.newLineNum?.toString().padStart(4, ' ') ?? '    ';
 
-    // Build line: "      1234 5678 +content"
-    let displayLine = `${indent}${oldNum} ${newNum} ${prefix}${line.content}`;
+    // Build line: " D    1234 5678 +content"
+    let displayLine = ` ${diagnosticIcon}${indent}${oldNum} ${newNum} ${prefix}${line.content}`;
 
     if (displayLine.length > width) {
       displayLine = displayLine.slice(0, width - 1) + '…';
@@ -611,7 +787,13 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
       }
     }
 
+    // Write the line
     buffer.writeString(x, y, displayLine, lineFg, lineBg);
+
+    // Overwrite the diagnostic icon with its specific color
+    if (diagnosticIcon !== ' ') {
+      buffer.set(x + 1, y, { char: diagnosticIcon, fg: diagnosticColor, bg: lineBg });
+    }
   }
 
   /**
@@ -723,7 +905,19 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
       const lineNum = line.newLineNum?.toString().padStart(numWidth, ' ') ?? '    ';
       const content = line.content;
 
-      // Left side (empty)
+      // Check for diagnostics on added lines
+      let diagnosticIcon = ' ';
+      let diagnosticColor = colors.fg;
+      if (line.newLineNum !== undefined) {
+        const severity = this.getHighestSeverityForLine(node.artifact.filePath, line.newLineNum);
+        if (severity !== null) {
+          const { icon, color } = this.getDiagnosticIconAndColor(severity);
+          diagnosticIcon = icon;
+          diagnosticColor = color;
+        }
+      }
+
+      // Left side (empty, but reserve 1 char for diagnostic alignment)
       const emptyLeft = ' '.repeat(leftWidth);
       buffer.writeString(col, y, emptyLeft, colors.fg, colors.rowBg);
       col += leftWidth;
@@ -732,12 +926,19 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
       buffer.writeString(col, y, '│', dividerFg, colors.rowBg);
       col++;
 
-      // Right side (added)
-      const rightContent = content.length > rightContentWidth
-        ? content.slice(0, rightContentWidth - 1) + '…'
-        : content.padEnd(rightContentWidth, ' ');
+      // Right side (added) - show diagnostic icon before line number
       const rightFg = isSelected && this.focused ? colors.selectedFg : colors.addedFg;
       const rightBg = isSelected ? colors.rowBg : insertedBg;
+
+      // Write diagnostic icon
+      buffer.set(col, y, { char: diagnosticIcon, fg: diagnosticColor, bg: rightBg });
+      col++;
+
+      // Adjust content width for diagnostic icon
+      const adjustedRightContentWidth = rightContentWidth - 1;
+      const rightContent = content.length > adjustedRightContentWidth
+        ? content.slice(0, adjustedRightContentWidth - 1) + '…'
+        : content.padEnd(adjustedRightContentWidth, ' ');
 
       buffer.writeString(col, y, lineNum, rightFg, rightBg);
       col += numWidth;
