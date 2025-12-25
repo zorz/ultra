@@ -41,6 +41,12 @@ Reviewed changes since commit `5bec89f` plus the current working tree (`src/clie
 - **Impact**: Users can toggle the setting but see no effect, which undermines configuration trust.
 - **Recommendation**: Wire the setting into `OutlinePanel` rendering or remove the setting until it is supported.
 
+### 7) AITerminalChat overlays a cursor even when ink owns it
+- **Where**: `src/clients/tui/elements/ai-terminal-chat.ts:392`.
+- **What**: `AITerminalChat` draws a cursor block unconditionally when focused. Ink-based apps (Claude/Gemini, and likely Codex) hide the terminal cursor and draw their own caret as styled characters.
+- **Impact**: Cursor appears in the wrong place or flickers between render passes, because PTY cursor coordinates reflect ink’s paint operations, not the logical input location.
+- **Recommendation**: Skip overlay cursor rendering for ink providers, or gate it on `this.pty.isCursorVisible()`. That lets ink’s own cursor glyph remain the only caret and avoids mispositioned overlays. Consider a `usesInkCursor()` hook on subclasses so non-ink providers keep the overlay behavior.
+
 ## Coverage & Testing Gaps
 - No tests added for the new outline/timeline panels, tab bar scrolling, or PTY ANSI sequences (DECSTBM, IL/DL, ICH/DCH/ECH). These changes are stateful and UI-heavy; targeted tests would reduce regression risk.
 
