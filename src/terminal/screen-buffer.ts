@@ -6,6 +6,8 @@
  * contexts where bun-pty isn't available (e.g., bundled binary with IPC backend).
  */
 
+import { debugLog } from '../debug.ts';
+
 /**
  * Terminal cell with character and attributes
  */
@@ -89,6 +91,17 @@ export class ScreenBuffer {
   private savedCursorY: number = 0;
   private cursorVisible: boolean = true; // DECTCEM cursor visibility
 
+  // Scroll region (DECSTBM) - 0-indexed, inclusive
+  private scrollTop: number = 0;
+  private scrollBottom: number;
+
+  // Alternate screen buffer (mode 1049)
+  private alternateMode: boolean = false;
+  private savedMainBuffer: TerminalCell[][] | null = null;
+  private savedMainCursorX: number = 0;
+  private savedMainCursorY: number = 0;
+  private savedMainScrollback: TerminalCell[][] | null = null;
+
   // Current text attributes
   private currentFg: string | null = null;
   private currentBg: string | null = null;
@@ -104,6 +117,7 @@ export class ScreenBuffer {
     private scrollbackLimit: number = 1000
   ) {
     this.buffer = this.createEmptyBuffer();
+    this.scrollBottom = rows - 1;
   }
 
   private createEmptyBuffer(): TerminalCell[][] {
@@ -149,6 +163,10 @@ export class ScreenBuffer {
     // Clamp cursor
     this.cursorX = Math.min(this.cursorX, cols - 1);
     this.cursorY = Math.min(this.cursorY, rows - 1);
+
+    // Reset scroll region to full screen
+    this.scrollTop = 0;
+    this.scrollBottom = rows - 1;
   }
 
   /**
@@ -191,26 +209,155 @@ export class ScreenBuffer {
    * Handle new line (line feed)
    */
   newLine(): void {
-    this.cursorY++;
-    if (this.cursorY >= this.rows) {
-      this.scrollUp();
-      this.cursorY = this.rows - 1;
+    debugLog(`[ScreenBuffer] newLine: cursorY=${this.cursorY}, scrollTop=${this.scrollTop}, scrollBottom=${this.scrollBottom}, rows=${this.rows}`);
+
+    // Check if cursor is within the scroll region
+    const inScrollRegion = this.cursorY >= this.scrollTop && this.cursorY <= this.scrollBottom;
+
+    if (inScrollRegion && this.cursorY === this.scrollBottom) {
+      // At bottom of scroll region - scroll the region up
+      debugLog(`[ScreenBuffer] newLine: at scroll bottom (in region), scrolling region up`);
+      this.scrollRegionUp();
+    } else if (inScrollRegion && this.cursorY < this.scrollBottom) {
+      // Inside scroll region but not at bottom - move down within region
+      this.cursorY++;
+      debugLog(`[ScreenBuffer] newLine: in scroll region, moved cursor to row ${this.cursorY}`);
+    } else if (!inScrollRegion && this.cursorY < this.rows - 1) {
+      // Outside scroll region - move down if not at screen bottom
+      this.cursorY++;
+      debugLog(`[ScreenBuffer] newLine: outside scroll region, moved cursor to row ${this.cursorY}`);
+    } else {
+      debugLog(`[ScreenBuffer] newLine: cursor at boundary, not moving (cursorY=${this.cursorY}, inRegion=${inScrollRegion})`);
     }
   }
 
   /**
-   * Scroll buffer up by one line
+   * Scroll the scroll region up by one line.
+   * The top line of the region is removed, bottom gets a new empty line.
    */
-  private scrollUp(): void {
-    const line = this.buffer.shift();
-    if (line) {
-      this.scrollback.push(line);
-      // Limit scrollback
-      if (this.scrollback.length > this.scrollbackLimit) {
-        this.scrollback.shift();
+  private scrollRegionUp(): void {
+    if (this.scrollTop === 0) {
+      // Scrolling from top of screen - save to scrollback for history
+      const line = this.buffer.shift();
+      if (line) {
+        this.scrollback.push(line);
+        if (this.scrollback.length > this.scrollbackLimit) {
+          this.scrollback.shift();
+        }
       }
+      // Insert new row at bottom of scroll region
+      this.buffer.splice(this.scrollBottom, 0, this.createEmptyRow());
+    } else {
+      // Scroll region doesn't start at top - no scrollback
+      this.buffer.splice(this.scrollTop, 1);
+      this.buffer.splice(this.scrollBottom, 0, this.createEmptyRow());
     }
-    this.buffer.push(this.createEmptyRow());
+  }
+
+  /**
+   * Scroll the scroll region down by one line (reverse index).
+   * The bottom line of the region is removed, top gets a new empty line.
+   */
+  private scrollRegionDown(): void {
+    this.buffer.splice(this.scrollBottom, 1);
+    this.buffer.splice(this.scrollTop, 0, this.createEmptyRow());
+  }
+
+  /**
+   * Set scroll region (DECSTBM).
+   * @param top Top row (1-indexed, inclusive)
+   * @param bottom Bottom row (1-indexed, inclusive)
+   */
+  setScrollRegion(top: number, bottom: number): void {
+    // Convert from 1-indexed to 0-indexed
+    this.scrollTop = Math.max(0, top - 1);
+    this.scrollBottom = Math.min(this.rows - 1, bottom - 1);
+
+    // Ensure top < bottom
+    if (this.scrollTop >= this.scrollBottom) {
+      this.scrollTop = 0;
+      this.scrollBottom = this.rows - 1;
+    }
+
+    // Move cursor to home position (top-left of screen, not region)
+    this.cursorX = 0;
+    this.cursorY = 0;
+  }
+
+  /**
+   * Reset scroll region to full screen.
+   */
+  resetScrollRegion(): void {
+    this.scrollTop = 0;
+    this.scrollBottom = this.rows - 1;
+  }
+
+  /**
+   * Enter alternate screen buffer (mode 1049).
+   * Saves main buffer and cursor, creates a fresh buffer with no scrollback.
+   */
+  enterAlternateScreen(): void {
+    if (this.alternateMode) return; // Already in alternate mode
+
+    // Save main buffer state
+    this.savedMainBuffer = this.buffer;
+    this.savedMainCursorX = this.cursorX;
+    this.savedMainCursorY = this.cursorY;
+    this.savedMainScrollback = this.scrollback;
+
+    // Create fresh alternate buffer (no scrollback)
+    this.buffer = this.createEmptyBuffer();
+    this.scrollback = [];
+    this.cursorX = 0;
+    this.cursorY = 0;
+    this.scrollTop = 0;
+    this.scrollBottom = this.rows - 1;
+    this.viewOffset = 0;
+    this.alternateMode = true;
+  }
+
+  /**
+   * Exit alternate screen buffer (mode 1049).
+   * Restores main buffer and cursor.
+   */
+  exitAlternateScreen(): void {
+    if (!this.alternateMode) return; // Not in alternate mode
+
+    // Restore main buffer state
+    if (this.savedMainBuffer) {
+      this.buffer = this.savedMainBuffer;
+      this.savedMainBuffer = null;
+    }
+    if (this.savedMainScrollback) {
+      this.scrollback = this.savedMainScrollback;
+      this.savedMainScrollback = null;
+    }
+    this.cursorX = this.savedMainCursorX;
+    this.cursorY = this.savedMainCursorY;
+    this.scrollTop = 0;
+    this.scrollBottom = this.rows - 1;
+    this.viewOffset = 0;
+    this.alternateMode = false;
+  }
+
+  /**
+   * Check if in alternate screen mode.
+   */
+  isAlternateScreen(): boolean {
+    return this.alternateMode;
+  }
+
+  /**
+   * Reverse index (ESC M) - move cursor up, scrolling region down if at top.
+   */
+  reverseIndex(): void {
+    if (this.cursorY === this.scrollTop) {
+      // At top of scroll region - scroll the region down
+      this.scrollRegionDown();
+    } else if (this.cursorY > 0) {
+      // Not at top of screen - just move up
+      this.cursorY--;
+    }
   }
 
   /**
@@ -234,8 +381,11 @@ export class ScreenBuffer {
    * Move cursor to position (1-based coordinates from ANSI)
    */
   setCursor(row: number, col: number): void {
+    const oldX = this.cursorX;
+    const oldY = this.cursorY;
     this.cursorY = Math.max(0, Math.min(this.rows - 1, row - 1));
     this.cursorX = Math.max(0, Math.min(this.cols - 1, col - 1));
+    debugLog(`[ScreenBuffer] setCursor: (${row},${col}) -> internal (${this.cursorY},${this.cursorX}) [was (${oldY},${oldX})]`);
   }
 
   /**
@@ -373,23 +523,35 @@ export class ScreenBuffer {
 
   /**
    * Insert n blank lines at cursor (IL - CSI L)
+   * Respects scroll region - only affects lines within the region.
    */
   insertLines(n: number): void {
+    // Only works if cursor is within scroll region
+    if (this.cursorY < this.scrollTop || this.cursorY > this.scrollBottom) {
+      return;
+    }
+
     for (let i = 0; i < n; i++) {
-      // Remove bottom line, insert blank line at cursor row
-      this.buffer.pop();
+      // Remove line at bottom of scroll region, insert blank line at cursor
+      this.buffer.splice(this.scrollBottom, 1);
       this.buffer.splice(this.cursorY, 0, this.createEmptyRow());
     }
   }
 
   /**
    * Delete n lines at cursor (DL - CSI M)
+   * Respects scroll region - only affects lines within the region.
    */
   deleteLines(n: number): void {
+    // Only works if cursor is within scroll region
+    if (this.cursorY < this.scrollTop || this.cursorY > this.scrollBottom) {
+      return;
+    }
+
     for (let i = 0; i < n; i++) {
-      // Remove line at cursor, add blank line at bottom
+      // Remove line at cursor, add blank line at bottom of scroll region
       this.buffer.splice(this.cursorY, 1);
-      this.buffer.push(this.createEmptyRow());
+      this.buffer.splice(this.scrollBottom, 0, this.createEmptyRow());
     }
   }
 
@@ -502,6 +664,20 @@ export class ScreenBuffer {
   }
 
   /**
+   * Get number of rows
+   */
+  getRows(): number {
+    return this.rows;
+  }
+
+  /**
+   * Get number of columns
+   */
+  getCols(): number {
+    return this.cols;
+  }
+
+  /**
    * Get cursor visibility state (DECTCEM)
    */
   isCursorVisible(): boolean {
@@ -575,14 +751,33 @@ export class ScreenBuffer {
  * Simple ANSI escape sequence parser
  */
 export class AnsiParser {
-  private state: 'normal' | 'escape' | 'csi' | 'osc' = 'normal';
+  private state: 'normal' | 'escape' | 'csi' | 'osc' | 'charset' = 'normal';
   private csiParams: string = '';
   private oscData: string = '';
 
   /** Callback for OSC 99 notifications (used by Claude Code, etc.) */
   private onNotificationCallback?: (message: string) => void;
 
+  /** Callback for sending data back to PTY (for DSR responses, etc.) */
+  private onOutputCallback?: (data: string) => void;
+
   constructor(private screen: ScreenBuffer) {}
+
+  /**
+   * Set callback for PTY output (responses to queries like DSR).
+   */
+  onOutput(callback: (data: string) => void): void {
+    this.onOutputCallback = callback;
+  }
+
+  /**
+   * Send data back to PTY.
+   */
+  private sendOutput(data: string): void {
+    if (this.onOutputCallback) {
+      this.onOutputCallback(data);
+    }
+  }
 
   /**
    * Set notification callback for OSC 99 messages.
@@ -611,6 +806,12 @@ export class AnsiParser {
           break;
         case 'osc':
           this.processOSC(char, code);
+          break;
+        case 'charset':
+          // Character set designation - just consume the designator and return to normal
+          // ESC ( B = ASCII, ESC ( 0 = DEC Special Graphics, etc.
+          // We don't actually change character sets, just acknowledge them
+          this.state = 'normal';
           break;
       }
     }
@@ -647,6 +848,12 @@ export class AnsiParser {
     } else if (char === ']') {
       this.state = 'osc';
       this.oscData = '';
+    } else if (char === '(' || char === ')' || char === '*' || char === '+') {
+      // Character set designation (G0-G3) - next char specifies the set
+      // ESC ( B = ASCII, ESC ( 0 = DEC Special Graphics, etc.
+      // We ignore this but need to consume the next character
+      this.state = 'charset';
+      return;
     } else if (char === '7') {
       this.screen.saveCursor();
       this.state = 'normal';
@@ -659,11 +866,12 @@ export class AnsiParser {
       this.screen.setCursor(1, 1);
       this.state = 'normal';
     } else if (char === 'M') {
-      // Reverse index (scroll down)
-      this.screen.cursorUp(1);
+      // Reverse index - move up, scroll region down if at top
+      this.screen.reverseIndex();
       this.state = 'normal';
     } else {
       // Unknown escape sequence
+      debugLog(`[ANSI] Unknown ESC sequence: ESC ${char} (0x${code.toString(16)})`);
       this.state = 'normal';
     }
   }
@@ -731,12 +939,44 @@ export class AnsiParser {
           if (mode === 25) {
             // DECTCEM - Cursor visibility
             this.screen.setCursorVisible(command === 'h');
+          } else if (mode === 1049) {
+            // Alternate screen buffer
+            if (command === 'h') {
+              this.screen.enterAlternateScreen();
+            } else {
+              this.screen.exitAlternateScreen();
+            }
+          } else if (mode === 2026) {
+            // Synchronized updates (kitty/iTerm2 extension)
+            // h = begin synchronized update, l = end synchronized update
+            // We don't buffer, so just acknowledge and ignore
+          } else if (mode === 1) {
+            // DECCKM - Cursor keys mode (application vs normal)
+            // Ignored - we always use normal mode cursor keys
+          } else if (mode === 7) {
+            // DECAWM - Auto-wrap mode
+            // Ignored - we always have auto-wrap enabled
+          } else if (mode === 12) {
+            // Cursor blinking (AT&T 610)
+            // Ignored - cursor blink is a visual preference
+          } else {
+            // Log unhandled private modes
+            debugLog(`[ANSI] Unhandled private mode: CSI ? ${mode} ${command}`);
           }
-          // Other private modes (1049 for alternate screen, etc.) ignored for now
         }
         break;
-      case 'r': // Set scroll region
-        // Ignore for now
+      case 'r': // DECSTBM - Set scroll region
+        if (params.length === 0 || (params[0] === 0 && params[1] === 0)) {
+          // CSI r with no params - reset to full screen
+          debugLog(`[ANSI] Reset scroll region to full screen`);
+          this.screen.resetScrollRegion();
+        } else {
+          // CSI Pt ; Pb r - set region from top to bottom
+          const top = params[0] || 1;
+          const bottom = params[1] || this.screen.getRows();
+          debugLog(`[ANSI] Set scroll region: top=${top}, bottom=${bottom}`);
+          this.screen.setScrollRegion(top, bottom);
+        }
         break;
       case '@': // ICH - Insert Characters
         this.screen.insertChars(params[0] || 1);
@@ -761,8 +1001,30 @@ export class AnsiParser {
         this.screen.cursorUp(params[0] || 1);
         this.screen.carriageReturn();
         break;
+      case 'n': // DSR - Device Status Report
+        if (params[0] === 6) {
+          // Cursor Position Report - respond with CSI row ; col R
+          const cursor = this.screen.getCursor();
+          // Convert 0-indexed to 1-indexed
+          const response = `\x1b[${cursor.y + 1};${cursor.x + 1}R`;
+          debugLog(`[ANSI] DSR 6: Reporting cursor position ${cursor.y + 1};${cursor.x + 1}, sending response`);
+          this.sendOutput(response);
+          debugLog(`[ANSI] DSR 6: Response sent (callback exists: ${!!this.onOutputCallback})`);
+        } else if (params[0] === 5) {
+          // Device status - respond "OK"
+          debugLog(`[ANSI] DSR 5: Reporting OK status`);
+          this.sendOutput('\x1b[0n');
+        }
+        break;
+      case 'c': // DA - Device Attributes
+        // Respond as VT100 with advanced video option
+        // CSI ? 1 ; 2 c means "VT100 with Advanced Video Option"
+        debugLog(`[ANSI] DA: Reporting device attributes`);
+        this.sendOutput('\x1b[?1;2c');
+        break;
       default:
-        // Unknown CSI command - ignore
+        // Unknown CSI command - log for debugging
+        debugLog(`[ANSI] Unknown CSI command: CSI ${this.csiParams} ${command}`);
         break;
     }
   }

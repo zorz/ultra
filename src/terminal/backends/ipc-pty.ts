@@ -56,6 +56,11 @@ export class IpcPtyBackend implements PTYBackend {
     const scrollback = options.scrollback ?? 1000;
     this.screenBuffer = new ScreenBuffer(this._cols, this._rows, scrollback);
     this.ansiParser = new AnsiParser(this.screenBuffer);
+
+    // Set up parser output callback for DSR responses
+    this.ansiParser.onOutput((data: string) => {
+      this.write(data);
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────

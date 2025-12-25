@@ -361,7 +361,6 @@ export abstract class AITerminalChat extends BaseElement {
       const ptyBuffer = this.pty.getBuffer();
       const cursor = this.pty.getCursor();
       const viewOffset = this.pty.getViewOffset();
-      const cursorVisible = this.pty.isCursorVisible();
       const contentWidth = width - AITerminalChat.SCROLLBAR_WIDTH;
 
       for (let row = 0; row < height; row++) {
@@ -390,21 +389,17 @@ export abstract class AITerminalChat extends BaseElement {
         }
       }
 
-      // Draw cursor if:
-      // - Element is focused
-      // - Not scrolled back (viewOffset === 0)
-      // - Cursor visibility is enabled (DECTCEM)
-      // - Cursor position is within visible bounds
-      if (this.focused && viewOffset === 0 && cursorVisible &&
+      // Draw cursor at PTY cursor position for all providers.
+      // Ink-based tools (Claude/Gemini) position the cursor at the input location
+      // when the user is typing. We just need to render it there.
+      if (this.focused && viewOffset === 0 &&
           cursor.y < height && cursor.x < contentWidth) {
         const cursorCell = buffer.get(x + cursor.x, y + cursor.y);
-        if (cursorCell) {
-          buffer.set(x + cursor.x, y + cursor.y, {
-            ...cursorCell,
-            bg: cursorBg,
-            fg: defaultBg,
-          });
-        }
+        buffer.set(x + cursor.x, y + cursor.y, {
+          char: cursorCell?.char ?? ' ',
+          fg: defaultBg,
+          bg: cursorBg,
+        });
       }
     } else {
       // Fill with background when no PTY

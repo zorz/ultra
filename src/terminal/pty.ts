@@ -72,6 +72,13 @@ export class PTY {
     const scrollbackLimit = options.scrollback || 1000;
     this.screen = new ScreenBuffer(this._cols, this._rows, scrollbackLimit);
     this.parser = new AnsiParser(this.screen);
+
+    // Set up parser output callback for DSR responses
+    this.parser.onOutput((data: string) => {
+      if (this.ptyProcess) {
+        this.ptyProcess.write(data);
+      }
+    });
   }
 
   /**
