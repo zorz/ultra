@@ -1,51 +1,52 @@
 # Gemini Feedback
 
-## Overview
+## Overview (Update: 2024-12-24)
 
-I have conducted a comprehensive review of the recent changes, with a specific focus on the new **Integration Workflow Tests** (`tests/integration/workflows.test.ts`) and the completion of the core ECP service architecture. The project is in an excellent state, demonstrating high reliability and architectural consistency.
+I have conducted a comprehensive review of the recent changes, including the implementation of the **Git Timeline Panel**, the resolution of **Sidebar State Management** issues, and the stabilization of the **Integration Workflow Tests**. The project continues to demonstrate exceptional architectural discipline.
 
-**Current Status:** v0.5.0 Ready (Pre-release)
-**Test Status:** 1514/1514 tests passing (100%)
+**Current Status:** v0.5.0 Stability Phase
+**Test Status:** 10/10 Integration Workflow tests passing (Verified)
 
-## Key Achievements Verified
+## Key Achievements & Verification
 
-### 1. Integration Workflow Testing (New & Critical)
-The addition of `tests/integration/workflows.test.ts` is the most significant recent update.
-- **Why it matters:** It validates the "handshake" between independent services (Document, File, Git, Session) using the same JSON-RPC protocol that real clients use.
-- **Verified Flows:**
-  - **Edit-Save-Commit:** Open -> Edit -> Save to Disk -> Git Stage -> Git Commit.
-  - **Selective Staging:** Creating multiple files and staging only a subset based on file type.
-  - **Git Discard:** Verifying that discarding changes via Git correctly reverts the file content on disk.
-  - **Memory-to-Disk:** Creating files in memory and persisting them via the FileService.
-- **Recommendation:** These tests should be considered the "Golden Path" for all future features. Ensure they are added to version control immediately (currently untracked).
+### 1. Git Timeline Panel (New)
+The new `GitTimelinePanel` is now fully operational.
+- **Functionality:** Supports both 'file' and 'repo' modes, features a built-in search/filter (triggered by `/`), and supports full keyboard (vim-keys `j`/`k`, `PageUp`/`PageDown`) and mouse interaction.
+- **Integration:** Correctly tied into the `TUIClient` focus loop to auto-refresh based on the active editor.
+- **UX:** The relative date formatting and orange hash highlights provide excellent readability.
 
-### 2. Render Performance (Fixed)
-The render loop in `src/clients/tui/window.ts` is now optimized for dirty-rect tracking.
-- **Verification:** By removing the global `buffer.clear()`, the editor now only re-renders changed cells, significantly improving performance in high-latency terminal environments (e.g., SSH).
+### 2. Sidebar State Persistence Fix
+The bug where clicking sidebar items (Outline/Timeline) would clear their own content has been resolved.
+- **Mechanism:** `TUIClient.handleFocusChange` now accepts an `updateSidebarPanels` flag, which is only set to `true` when the focus change occurs within a 'tabs' pane (editor area). 
+- **Impact:** Clicking elements within the sidebar panels themselves no longer triggers a refresh/clear of those panels.
 
-### 3. Service Layer Stability
-All core ECP services (Document, File, Git, LSP, Session, Syntax, Terminal) now have both unit tests and integration tests. This 100% coverage provides high confidence for the v0.5.0 release.
+### 3. Workflow Test Hardening (Verified)
+- **Fix Applied:** `TempWorkspace` now correctly initializes local git configs (`user.name`, `user.email`), ensuring reliability in CI/headless environments.
+- **Status:** Workflow tests are now tracked in version control and pass consistently.
 
-## Recommendations & Observations
+## Actionable Recommendations
 
-### 1. Hardening Workflow Tests
-The new workflow tests rely on the system `git` binary. 
-- **Risk:** They may fail in environments without a global git config (e.g., a fresh CI container).
-- **Fix:** Ensure the `TempWorkspace` helper explicitly sets `user.name` and `user.email` locally within the temporary repository to avoid "identity unknown" errors during the `git/commit` tests.
+### 1. UI Refinement: Git Timeline Actions
+The Timeline is currently "read-focused." Adding a few more utility actions would improve developer velocity:
+- **Copy Message:** Add `m` keybinding to copy the full commit message.
+- **Jump to Commit:** Allow `Return` to not only show diff but also "checkout" or "open" that version in a read-only buffer for comparison.
 
 ### 2. LSP Workflow Expansion
-The next logical step for workflow testing is to include **LSP interactions**:
-- **Scenario:** Open a file -> Wait for LSP start -> Trigger completion -> Accept completion -> Verify document content change.
-- **Scenario:** Find references -> Select reference from `ReferencesPicker` -> Verify editor navigates to the correct file/line.
+As previously recommended, expanding `workflows.test.ts` to include LSP handshakes remains a high priority for verifying end-to-end intelligence:
+- **Scenario:** `document/open` -> wait for LSP -> `document/hover` -> verify result.
+- **Scenario:** `document/rename` (LSP-driven) -> verify multiple files updated on disk.
 
-### 3. Persistence Testing
-The current workflow tests cover the "in-session" experience. I recommend adding a **Persistence Workflow**:
-- **Scenario:** Open files/terminals -> Save Session -> Shutdown Server -> Restart Server -> Load Session -> Verify all documents and UI state (sidebar width, etc.) are restored exactly as they were.
+### 3. Terminal Compatibility (oh-my-zsh)
+The `BACKLOG.md` notes issues with `oh-my-zsh`. This is likely due to missing support for specific ANSI sequences like **Scroll Regions (CSI r)** and **Alternate Screen Buffer (1049)**.
+- **Recommendation:** Prioritize implementing `DECSTBM` (Set Top and Bottom Margins) in `src/terminal/ansi.ts` as many modern prompts rely on this for "sticky" status lines.
 
-### 4. Documentation Drift
-`CLAUDE.md` and `GEMINI.md` have been updated, but ensure the `architecture/` docs (specifically `testing/overview.md`) are updated to reflect the new integration workflow pattern as the preferred method for feature validation.
+### 4. Session Persistence Verification
+While `getState` is implemented for `GitTimelinePanel`, verify that the `SessionService` correctly captures and restores:
+- The `TimelineMode` (file vs repo).
+- The `selectedIndex` and `scrollTop` of the timeline.
+- Current active sidebar section (which panel was expanded).
 
 ## Conclusion
-The introduction of end-to-end workflow testing elevates the project's quality significantly. The system is no longer just a collection of working parts; it is a verified, cohesive editor.
+The addition of the Git Timeline completes a critical part of the sidebar experience. The focus management fix makes the editor feel professional and stable. The architectural transition to ECP is yielding high-quality, testable results.
 
-**Confidence Score:** Very High
+**Confidence Score:** Very High (v0.5.0 ready)

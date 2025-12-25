@@ -362,26 +362,31 @@ export abstract class AITerminalChat extends BaseElement {
       const cursor = this.pty.getCursor();
       const viewOffset = this.pty.getViewOffset();
       const cursorVisible = this.pty.isCursorVisible();
+      const contentWidth = width - AITerminalChat.SCROLLBAR_WIDTH;
 
-      for (let row = 0; row < height && row < ptyBuffer.length; row++) {
-        const line = ptyBuffer[row];
-        if (!line) continue;
+      for (let row = 0; row < height; row++) {
+        const line = row < ptyBuffer.length ? ptyBuffer[row] : null;
 
-        for (let col = 0; col < width - AITerminalChat.SCROLLBAR_WIDTH && col < line.length; col++) {
-          const cell = line[col];
-          if (!cell) continue;
-
-          buffer.set(x + col, y + row, {
-            char: cell.char,
-            fg: cell.fg ?? defaultFg,
-            bg: cell.bg ?? defaultBg,
-            bold: cell.bold,
-          });
-        }
-
-        // Fill rest of line
-        for (let col = line.length; col < width - AITerminalChat.SCROLLBAR_WIDTH; col++) {
-          buffer.set(x + col, y + row, { char: ' ', fg: defaultFg, bg: defaultBg });
+        if (line) {
+          for (let col = 0; col < contentWidth; col++) {
+            if (col < line.length) {
+              const cell = line[col];
+              buffer.set(x + col, y + row, {
+                char: cell?.char ?? ' ',
+                fg: cell?.fg ?? defaultFg,
+                bg: cell?.bg ?? defaultBg,
+                bold: cell?.bold,
+              });
+            } else {
+              // Fill rest of line after content
+              buffer.set(x + col, y + row, { char: ' ', fg: defaultFg, bg: defaultBg });
+            }
+          }
+        } else {
+          // Empty row - fill with background
+          for (let col = 0; col < contentWidth; col++) {
+            buffer.set(x + col, y + row, { char: ' ', fg: defaultFg, bg: defaultBg });
+          }
         }
       }
 
@@ -391,7 +396,7 @@ export abstract class AITerminalChat extends BaseElement {
       // - Cursor visibility is enabled (DECTCEM)
       // - Cursor position is within visible bounds
       if (this.focused && viewOffset === 0 && cursorVisible &&
-          cursor.y < height && cursor.x < width - AITerminalChat.SCROLLBAR_WIDTH) {
+          cursor.y < height && cursor.x < contentWidth) {
         const cursorCell = buffer.get(x + cursor.x, y + cursor.y);
         if (cursorCell) {
           buffer.set(x + cursor.x, y + cursor.y, {
