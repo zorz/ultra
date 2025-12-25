@@ -46,6 +46,11 @@ export interface GitDiffBrowserCallbacks extends ContentBrowserCallbacks<GitDiff
   onDiscardHunk?: (filePath: string, hunkIndex: number) => void;
 }
 
+/**
+ * Diff view mode for rendering.
+ */
+export type DiffViewMode = 'unified' | 'side-by-side';
+
 // ============================================
 // Git Diff Browser
 // ============================================
@@ -53,6 +58,9 @@ export interface GitDiffBrowserCallbacks extends ContentBrowserCallbacks<GitDiff
 export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
   /** Whether showing staged or unstaged diffs */
   private staged = false;
+
+  /** Diff view mode (unified or side-by-side) */
+  private diffViewMode: DiffViewMode = 'unified';
 
   /** Git-specific callbacks */
   private gitCallbacks: GitDiffBrowserCallbacks;
@@ -87,6 +95,30 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
    */
   isStaged(): boolean {
     return this.staged;
+  }
+
+  /**
+   * Set diff view mode.
+   */
+  setDiffViewMode(mode: DiffViewMode): void {
+    if (this.diffViewMode !== mode) {
+      this.diffViewMode = mode;
+      this.ctx.markDirty();
+    }
+  }
+
+  /**
+   * Get diff view mode.
+   */
+  getDiffViewMode(): DiffViewMode {
+    return this.diffViewMode;
+  }
+
+  /**
+   * Toggle between unified and side-by-side view.
+   */
+  toggleDiffViewMode(): void {
+    this.setDiffViewMode(this.diffViewMode === 'unified' ? 'side-by-side' : 'unified');
   }
 
   /**
@@ -453,6 +485,12 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
       rowBg: string;
     }
   ): void {
+    if (this.diffViewMode === 'side-by-side') {
+      this.renderLineNodeSideBySide(buffer, node, x, y, width, isSelected, colors);
+      return;
+    }
+
+    // Unified view rendering
     const indent = '      ';
     const line = node.line;
     const prefix = line.type === 'added' ? '+' : line.type === 'deleted' ? '-' : ' ';
@@ -492,33 +530,167 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
     buffer.writeString(x, y, displayLine, lineFg, lineBg);
   }
 
+  /**
+   * Render a line node in side-by-side mode.
+   * Layout: │ lineNum │ old content │ lineNum │ new content │
+   */
+  private renderLineNodeSideBySide(
+    buffer: ScreenBuffer,
+    node: GitDiffLineNode,
+    x: number,
+    y: number,
+    width: number,
+    isSelected: boolean,
+    colors: {
+      selectedFg: string;
+      fg: string;
+      addedFg: string;
+      deletedFg: string;
+      rowBg: string;
+    }
+  ): void {
+    const line = node.line;
+    const indent = '      '; // Match hunk node indent
+
+    // Calculate panel widths (50/50 split after indent)
+    const contentWidth = width - indent.length;
+    const halfWidth = Math.floor(contentWidth / 2);
+    const leftWidth = halfWidth;
+    const rightWidth = contentWidth - halfWidth;
+
+    // Line number widths
+    const numWidth = 4;
+    const leftContentWidth = leftWidth - numWidth - 2; // -2 for separator
+    const rightContentWidth = rightWidth - numWidth - 1;
+
+    // Get background colors
+    const insertedBg = this.ctx.getThemeColor('diffEditor.insertedLineBackground', '#1e3a21');
+    const removedBg = this.ctx.getThemeColor('diffEditor.removedLineBackground', '#3a1e1e');
+    const dividerFg = '#555555';
+
+    // Write indent
+    buffer.writeString(x, y, indent, colors.fg, colors.rowBg);
+    let col = x + indent.length;
+
+    // Determine what to show on each side
+    if (line.type === 'context') {
+      // Context: show on both sides
+      const lineNum = (line.oldLineNum ?? line.newLineNum)?.toString().padStart(numWidth, ' ') ?? '    ';
+      const content = line.content;
+
+      // Left side
+      const leftContent = content.length > leftContentWidth
+        ? content.slice(0, leftContentWidth - 1) + '…'
+        : content.padEnd(leftContentWidth, ' ');
+      const leftFg = isSelected && this.focused ? colors.selectedFg : colors.fg;
+      const leftBg = isSelected ? colors.rowBg : colors.rowBg;
+
+      buffer.writeString(col, y, lineNum, leftFg, leftBg);
+      col += numWidth;
+      buffer.writeString(col, y, ' ', leftFg, leftBg);
+      col++;
+      buffer.writeString(col, y, leftContent, leftFg, leftBg);
+      col += leftContentWidth;
+
+      // Divider
+      buffer.writeString(col, y, '│', dividerFg, colors.rowBg);
+      col++;
+
+      // Right side
+      const rightContent = content.length > rightContentWidth
+        ? content.slice(0, rightContentWidth - 1) + '…'
+        : content.padEnd(rightContentWidth, ' ');
+
+      buffer.writeString(col, y, lineNum, leftFg, leftBg);
+      col += numWidth;
+      buffer.writeString(col, y, ' ', leftFg, leftBg);
+      col++;
+      buffer.writeString(col, y, rightContent, leftFg, leftBg);
+
+    } else if (line.type === 'deleted') {
+      // Deleted: show on left side only, right side empty
+      const lineNum = line.oldLineNum?.toString().padStart(numWidth, ' ') ?? '    ';
+      const content = line.content;
+
+      // Left side (deleted)
+      const leftContent = content.length > leftContentWidth
+        ? content.slice(0, leftContentWidth - 1) + '…'
+        : content.padEnd(leftContentWidth, ' ');
+      const leftFg = isSelected && this.focused ? colors.selectedFg : colors.deletedFg;
+      const leftBg = isSelected ? colors.rowBg : removedBg;
+
+      buffer.writeString(col, y, lineNum, leftFg, leftBg);
+      col += numWidth;
+      buffer.writeString(col, y, '-', leftFg, leftBg);
+      col++;
+      buffer.writeString(col, y, leftContent, leftFg, leftBg);
+      col += leftContentWidth;
+
+      // Divider
+      buffer.writeString(col, y, '│', dividerFg, colors.rowBg);
+      col++;
+
+      // Right side (empty)
+      const emptyRight = ' '.repeat(rightWidth - 1);
+      buffer.writeString(col, y, emptyRight, colors.fg, colors.rowBg);
+
+    } else if (line.type === 'added') {
+      // Added: show on right side only, left side empty
+      const lineNum = line.newLineNum?.toString().padStart(numWidth, ' ') ?? '    ';
+      const content = line.content;
+
+      // Left side (empty)
+      const emptyLeft = ' '.repeat(leftWidth);
+      buffer.writeString(col, y, emptyLeft, colors.fg, colors.rowBg);
+      col += leftWidth;
+
+      // Divider
+      buffer.writeString(col, y, '│', dividerFg, colors.rowBg);
+      col++;
+
+      // Right side (added)
+      const rightContent = content.length > rightContentWidth
+        ? content.slice(0, rightContentWidth - 1) + '…'
+        : content.padEnd(rightContentWidth, ' ');
+      const rightFg = isSelected && this.focused ? colors.selectedFg : colors.addedFg;
+      const rightBg = isSelected ? colors.rowBg : insertedBg;
+
+      buffer.writeString(col, y, lineNum, rightFg, rightBg);
+      col += numWidth;
+      buffer.writeString(col, y, '+', rightFg, rightBg);
+      col++;
+      buffer.writeString(col, y, rightContent, rightFg, rightBg);
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Keyboard Hints
   // ─────────────────────────────────────────────────────────────────────────
 
   protected override getKeyboardHints(): string[] {
     const node = this.getSelectedNode();
+    const viewLabel = this.diffViewMode === 'unified' ? 'unified' : 'split';
 
     if (this.staged) {
       return [
-        ' ↑↓:navigate  Enter:toggle  Tab:view-mode  o:open',
-        ' u:unstage  r:refresh',
+        ` ↑↓:navigate  Enter:toggle  v:${viewLabel}  o:open`,
+        ' u:unstage  p:pin  r:refresh',
       ];
     } else {
       if (node && isFileNode(node)) {
         return [
-          ' ↑↓:navigate  Enter:toggle  Tab:view-mode  o:open',
-          ' s:stage  d:discard  r:refresh',
+          ` ↑↓:navigate  Enter:toggle  v:${viewLabel}  o:open`,
+          ' s:stage  d:discard  p:pin  r:refresh',
         ];
       } else if (node && isHunkNode(node)) {
         return [
-          ' ↑↓:navigate  Enter:toggle  Tab:view-mode  o:open',
-          ' s:stage-hunk  d:discard-hunk  r:refresh',
+          ` ↑↓:navigate  Enter:toggle  v:${viewLabel}  o:open`,
+          ' s:stage-hunk  d:discard-hunk  p:pin  r:refresh',
         ];
       }
       return [
-        ' ↑↓:navigate  Enter:toggle  Tab:view-mode  o:open',
-        ' s:stage  d:discard  r:refresh',
+        ` ↑↓:navigate  Enter:toggle  v:${viewLabel}  o:open`,
+        ' s:stage  d:discard  p:pin  r:refresh',
       ];
     }
   }
@@ -568,6 +740,12 @@ export class GitDiffBrowser extends ContentBrowser<GitDiffArtifact> {
           return true;
         }
       }
+    }
+
+    // Toggle diff view mode (v)
+    if (event.key === 'v' && !event.ctrl && !event.alt && !event.shift) {
+      this.toggleDiffViewMode();
+      return true;
     }
 
     return false;
