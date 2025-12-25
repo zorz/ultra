@@ -1154,6 +1154,7 @@ export class Pane {
       ProjectSearch: 'Find',
       DiagnosticsView: 'Problems',
       OutlinePanel: 'Outline',
+      GitTimelinePanel: 'Timeline',
     };
     return titles[type] ?? type;
   }

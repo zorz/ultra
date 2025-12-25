@@ -497,6 +497,39 @@ export class GitCliService implements GitService {
     }
   }
 
+  /**
+   * Get commit history for a specific file.
+   * Uses --follow to track file renames.
+   */
+  async fileLog(uri: string, path: string, count = 50): Promise<GitCommit[]> {
+    const root = await this.getRoot(uri);
+    if (!root) {
+      throw GitError.notARepo(uri);
+    }
+
+    try {
+      // --follow tracks file across renames, -- path specifies the file
+      const result = await $`git -C ${root} log --oneline -n ${count} --follow --format=%H%x00%s%x00%an%x00%ae%x00%ai -- ${path}`.quiet();
+      if (result.exitCode !== 0) {
+        return [];
+      }
+
+      return result.text().trim().split('\n').filter(l => l).map(line => {
+        const [hash, message, author, email, date] = line.split('\x00');
+        return {
+          hash: hash || '',
+          shortHash: hash?.substring(0, 8) || '',
+          message: message || '',
+          author: author || '',
+          email: email || '',
+          date: date?.split(' ')[0] || ''
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Branches
   // ─────────────────────────────────────────────────────────────────────────

@@ -43,7 +43,8 @@ export type ElementType =
   | 'ContentBrowser'
   | 'ProjectSearch'
   | 'DiagnosticsView'
-  | 'OutlinePanel';
+  | 'OutlinePanel'
+  | 'GitTimelinePanel';
 
 export interface ElementConfig {
   type: ElementType;

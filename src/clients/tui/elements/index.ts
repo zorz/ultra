@@ -107,6 +107,14 @@ export {
 } from './outline-panel.ts';
 
 export {
+  GitTimelinePanel,
+  createGitTimelinePanel,
+  type TimelineMode,
+  type GitTimelinePanelState,
+  type GitTimelinePanelCallbacks,
+} from './git-timeline-panel.ts';
+
+export {
   parseTypeScriptSymbols,
   parseMarkdownSymbols,
   getSymbolParser,
@@ -127,6 +135,7 @@ import { createAITerminalChat } from './ai-terminal-chat.ts';
 import { GitDiffBrowser } from './git-diff-browser.ts';
 import { SearchResultBrowser } from './search-result-browser.ts';
 import { OutlinePanel } from './outline-panel.ts';
+import { GitTimelinePanel } from './git-timeline-panel.ts';
 
 /**
  * Register all built-in elements with the factory.
@@ -183,6 +192,14 @@ export function registerBuiltinElements(): void {
     const panel = new OutlinePanel(id, title, ctx);
     if (state && typeof state === 'object') {
       panel.setState(state as import('./outline-panel.ts').OutlinePanelState);
+    }
+    return panel;
+  });
+
+  registerElement('GitTimelinePanel', (id, title, ctx, state) => {
+    const panel = new GitTimelinePanel(id, title, ctx);
+    if (state && typeof state === 'object') {
+      panel.setState(state as import('./git-timeline-panel.ts').GitTimelinePanelState);
     }
     return panel;
   });

@@ -237,6 +237,25 @@ export const settingsSchema: SettingsSchema = {
     },
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Git Timeline Panel Settings
+    // ─────────────────────────────────────────────────────────────────────────
+    'timeline.mode': {
+      type: 'string',
+      default: 'file',
+      description: 'Timeline mode: file-specific or repository-wide',
+    },
+    'timeline.commitCount': {
+      type: 'number',
+      default: 50,
+      description: 'Number of commits to display in timeline',
+    },
+    'timeline.collapsedOnStartup': {
+      type: 'boolean',
+      default: true,
+      description: 'Start with timeline panel collapsed in sidebar',
+    },
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Ultra Application Settings
     // ─────────────────────────────────────────────────────────────────────────
     'ultra.ai.model': {

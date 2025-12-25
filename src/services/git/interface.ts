@@ -145,6 +145,14 @@ export interface GitService {
    */
   log(uri: string, count?: number): Promise<GitCommit[]>;
 
+  /**
+   * Get commit history for a specific file.
+   * @param uri Repository URI
+   * @param path File path (relative to repo root)
+   * @param count Number of commits to retrieve (default 50)
+   */
+  fileLog(uri: string, path: string, count?: number): Promise<GitCommit[]>;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Branches
   // ─────────────────────────────────────────────────────────────────────────

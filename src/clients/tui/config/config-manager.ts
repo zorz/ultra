@@ -106,6 +106,17 @@ export interface TUISettings extends Partial<EditorSettings> {
 
   /** Default AI provider: 'claude-code', 'codex', or 'gemini' */
   'ai.defaultProvider'?: 'claude-code' | 'codex' | 'gemini';
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Timeline
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Timeline mode: 'file' (current file) or 'repo' (all commits) */
+  'timeline.mode'?: 'file' | 'repo';
+  /** Number of commits to show in timeline */
+  'timeline.commitCount'?: number;
+  /** Whether to collapse timeline panel on startup */
+  'timeline.collapsedOnStartup'?: boolean;
 }
 
 /**

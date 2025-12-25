@@ -15,6 +15,7 @@ import {
   FileTree,
   GitPanel,
   OutlinePanel,
+  GitTimelinePanel,
   TerminalSession,
   TerminalPanel,
   AITerminalChat,
@@ -29,6 +30,8 @@ import {
   type GitPanelCallbacks,
   type OutlinePanelCallbacks,
   type OutlineSymbol,
+  type GitTimelinePanelCallbacks,
+  type TimelineMode,
   type TerminalSessionCallbacks,
   type AITerminalChatState,
   type AIProvider,
@@ -223,6 +226,9 @@ export class TUIClient {
 
   /** Outline panel element reference */
   private outlinePanel: OutlinePanel | null = null;
+
+  /** Git timeline panel element reference */
+  private gitTimelinePanel: GitTimelinePanel | null = null;
 
   /** Workspace directory watcher */
   private workspaceWatcher: WatchHandle | null = null;
@@ -538,6 +544,20 @@ export class TUIClient {
       }
     }
 
+    // Add git timeline panel
+    const timelinePanelId = sidePane.addElement('GitTimelinePanel', 'Timeline');
+    const timelinePanel = sidePane.getElement(timelinePanelId) as GitTimelinePanel | null;
+    if (timelinePanel) {
+      this.gitTimelinePanel = timelinePanel;
+      this.configureGitTimelinePanel(timelinePanel);
+
+      // Collapse by default if configured
+      const collapseOnStartup = this.configManager.getWithDefault('timeline.collapsedOnStartup', true);
+      if (collapseOnStartup) {
+        sidePane.collapseAccordionSection(timelinePanelId);
+      }
+    }
+
     // Split for main editor area (vertical = side by side)
     const editorPaneId = container.split('vertical', sidePane.id);
     this.editorPaneId = editorPaneId;
@@ -814,6 +834,142 @@ export class TUIClient {
 
       return symbol;
     });
+  }
+
+  /**
+   * Configure git timeline panel callbacks.
+   */
+  private configureGitTimelinePanel(timelinePanel: GitTimelinePanel): void {
+    // Set mode from config
+    const mode = this.configManager.getWithDefault('timeline.mode', 'file') as TimelineMode;
+    timelinePanel.setMode(mode);
+    timelinePanel.setRepoUri(`file://${this.workingDirectory}`);
+
+    const callbacks: GitTimelinePanelCallbacks = {
+      onViewDiff: async (commit, _filePath) => {
+        // TODO: Show diff for commit
+        this.window.showNotification(`View diff: ${commit.shortHash} - ${commit.message}`, 'info');
+      },
+      onViewFileAtCommit: async (commit, filePath) => {
+        await this.openFileAtCommit(commit.hash, filePath);
+      },
+      onCopyHash: async (hash) => {
+        this.clipboard = hash;
+        this.window.showNotification(`Copied: ${hash.substring(0, 8)}`, 'success');
+      },
+      onFocusChange: (focused) => {
+        if (focused) {
+          this.updateTimelineForCurrentFile();
+        }
+      },
+      onModeChange: async (newMode) => {
+        if (newMode === 'repo') {
+          await this.updateTimelineRepoMode();
+        } else {
+          await this.updateTimelineForCurrentFile();
+        }
+      },
+    };
+    timelinePanel.setCallbacks(callbacks);
+  }
+
+  /**
+   * Update timeline for current file (file mode).
+   */
+  private async updateTimelineForCurrentFile(): Promise<void> {
+    if (!this.gitTimelinePanel) return;
+    if (this.gitTimelinePanel.getMode() !== 'file') return;
+
+    const focusedElement = this.window.getFocusedElement();
+    if (!(focusedElement instanceof DocumentEditor)) {
+      // Try to find the active editor in the editor pane
+      if (this.editorPaneId) {
+        const pane = this.window.getPaneContainer().getPane(this.editorPaneId);
+        const activeElement = pane?.getActiveElement();
+        if (activeElement instanceof DocumentEditor) {
+          await this.loadTimelineForEditor(activeElement);
+          return;
+        }
+      }
+      this.gitTimelinePanel.clearCommits();
+      return;
+    }
+
+    await this.loadTimelineForEditor(focusedElement);
+  }
+
+  /**
+   * Load timeline for a specific editor.
+   */
+  private async loadTimelineForEditor(editor: DocumentEditor): Promise<void> {
+    if (!this.gitTimelinePanel) return;
+
+    const uri = editor.getUri();
+    if (!uri) {
+      this.gitTimelinePanel.clearCommits();
+      return;
+    }
+
+    // Get relative path from workspace root
+    const filePath = uri.replace(/^file:\/\//, '').replace(this.workingDirectory + '/', '');
+    const count = this.configManager.getWithDefault('timeline.commitCount', 50);
+
+    this.gitTimelinePanel.setLoading(true);
+
+    try {
+      const commits = await gitCliService.fileLog(this.workingDirectory, filePath, count);
+      this.gitTimelinePanel.setCommits(commits, uri, filePath);
+    } catch {
+      this.gitTimelinePanel.clearCommits();
+    }
+  }
+
+  /**
+   * Update timeline for repo mode.
+   */
+  private async updateTimelineRepoMode(): Promise<void> {
+    if (!this.gitTimelinePanel) return;
+
+    const count = this.configManager.getWithDefault('timeline.commitCount', 50);
+
+    this.gitTimelinePanel.setLoading(true);
+
+    try {
+      const commits = await gitCliService.log(this.workingDirectory, count);
+      this.gitTimelinePanel.setCommits(commits);
+    } catch {
+      this.gitTimelinePanel.clearCommits();
+    }
+  }
+
+  /**
+   * Open a file at a specific commit.
+   */
+  private async openFileAtCommit(commitHash: string, filePath: string): Promise<void> {
+    try {
+      const content = await gitCliService.show(this.workingDirectory, filePath, commitHash);
+      const fileName = filePath.split('/').pop() || filePath;
+      const shortHash = commitHash.substring(0, 7);
+
+      // Find or create a pane for the editor
+      const pane = this.editorPaneId
+        ? this.window.getPaneContainer().getPane(this.editorPaneId)
+        : this.window.getPaneContainer().ensureRoot();
+
+      if (!pane) return;
+
+      // Add editor element
+      const title = `${fileName} @ ${shortHash}`;
+      const editorId = pane.addElement('DocumentEditor', title);
+      const editor = pane.getElement(editorId) as DocumentEditor | null;
+
+      if (editor) {
+        editor.setContent(content);
+        this.window.focusElement(editor);
+      }
+    } catch (error) {
+      this.window.showNotification(`Failed to get file at commit: ${error}`, 'error');
+    }
   }
 
   /**
