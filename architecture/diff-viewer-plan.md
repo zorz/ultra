@@ -124,7 +124,7 @@ protected override renderNode(): void {
 }
 ```
 
-**Side-by-side layout:**
+**Side-by-side layout (50/50 split):**
 ```
 │ 123 │ old content here     │ 124 │ new content here      │
 │ 124 │ deleted line         │     │                       │
@@ -134,6 +134,7 @@ protected override renderNode(): void {
 - Left panel: old file (deletions highlighted)
 - Right panel: new file (additions highlighted)
 - Synced scrolling between panels
+- Fixed 50/50 split (resizable divider in backlog)
 
 ### 2.2 Pinned Summary Section
 
@@ -162,11 +163,12 @@ Add ability to edit hunk content before staging.
 private editingNode: ArtifactNode<GitDiffArtifact> | null = null;
 private editBuffer: string[] = [];
 private editCursor = { line: 0, col: 0 };
+private editMode: 'stage-modified' | 'direct-write' = 'stage-modified';
 
 // Methods
 startEdit(node: GitDiffLineNode | GitDiffHunkNode): void;
 cancelEdit(): void;
-saveEdit(): void;  // Creates modified hunk for staging
+saveEdit(): void;  // Behavior depends on editMode setting
 
 // Keybindings
 // 'e' - start editing selected line/hunk
@@ -177,7 +179,9 @@ saveEdit(): void;  // Creates modified hunk for staging
 **Edit mode rendering:**
 - Show editable text area for the selected hunk
 - Cursor visible, text input works
-- Changes are staged as a modified hunk
+- Save behavior (configurable via `tui.diffViewer.editMode`):
+  - `stage-modified` (default): Creates modified hunk for staging (non-destructive)
+  - `direct-write`: Directly modifies the working tree file (immediate effect)
 
 ### 2.4 Auto-Refresh with File Watching
 
@@ -384,6 +388,7 @@ class SpecViewer extends BaseViewer<SpecSection, SpecViewerItem> {
   "tui.diffViewer.defaultViewMode": "unified", // "unified" | "side-by-side"
   "tui.diffViewer.autoRefresh": true,
   "tui.diffViewer.showDiagnostics": true,
+  "tui.diffViewer.editMode": "stage-modified", // "stage-modified" | "direct-write"
 
   // Content browser settings (shared)
   "tui.contentBrowser.summaryPinned": true
@@ -426,3 +431,5 @@ Each sprint must include tests:
 | Refresh behavior | Auto-refresh (new) |
 | Summary behavior | Pinned at top, toggleable |
 | Generic viewer model | ViewerItem<T> pattern |
+| Side-by-side layout | 50/50 fixed split (resizing in backlog) |
+| Edit save behavior | Default to stage-modified, configurable |
