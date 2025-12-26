@@ -428,6 +428,24 @@ export class PaneContainer implements FocusResolver {
     return true;
   }
 
+  /**
+   * Swap the order of children in a split (e.g., to move sidebar from left to right).
+   * Swaps both children and ratios so each pane keeps its size.
+   */
+  swapSplitChildren(splitId: string): boolean {
+    const split = this.findSplit(this.root, splitId);
+    if (!split) return false;
+
+    // Reverse both children and ratios - each pane keeps its size
+    split.children.reverse();
+    split.ratios.reverse();
+
+    // Re-layout to apply changes
+    this.layoutNode(this.root!, this.bounds);
+    this.callbacks.onDirty();
+    return true;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Element Management
   // ─────────────────────────────────────────────────────────────────────────

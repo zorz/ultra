@@ -66,7 +66,7 @@ import { TabSwitcherDialog, type TabInfo } from '../overlays/tab-switcher.ts';
 import { debugLog, isDebugEnabled } from '../../../debug.ts';
 
 // Config
-import { TUIConfigManager, createTUIConfigManager } from '../config/index.ts';
+import { TUIConfigManager, createTUIConfigManager, type TUISettings } from '../config/index.ts';
 import { defaultThemes, defaultSettings, defaultKeybindings } from '../../../config/defaults.ts';
 
 // Services
@@ -215,6 +215,9 @@ export class TUIClient {
 
   /** Sidebar visible */
   private sidebarVisible = true;
+
+  /** Sidebar location (left or right) */
+  private sidebarLocation: 'left' | 'right' = 'left';
 
   /** Saved sidebar width ratio for restore after hiding */
   private savedSidebarRatio: number = 0.2;
@@ -600,6 +603,13 @@ export class TUIClient {
     const totalWidth = this.window.getSize().width;
     const sidebarRatio = Math.min(0.3, sidebarWidth / totalWidth); // Cap at 30%
     container.adjustRatios('split-1', [sidebarRatio, 1 - sidebarRatio]);
+
+    // Apply sidebar location from config
+    this.sidebarLocation = this.configManager.getWithDefault('tui.sidebar.location', 'left') as 'left' | 'right';
+    if (this.sidebarLocation === 'right') {
+      // Swap the children so sidebar is on the right
+      container.swapSplitChildren('split-1');
+    }
 
     // Load file tree
     if (fileTree) {
@@ -3109,14 +3119,135 @@ export class TUIClient {
    * Toggle sidebar visibility.
    */
   private toggleSidebar(): void {
+    if (this.sidebarVisible) {
+      this.hideSidebar();
+    } else {
+      this.showSidebar();
+    }
+    // Update setting to reflect new state
+    this.configManager.set('tui.sidebar.visible', this.sidebarVisible);
+    this.configManager.saveSettings();
+  }
+
+  /**
+   * Show the sidebar.
+   */
+  private showSidebar(): void {
+    if (this.sidebarVisible) return;
     if (!this.sidebarPaneId) return;
 
     const container = this.window.getPaneContainer();
-    const pane = container.getPane(this.sidebarPaneId);
-    if (pane) {
-      // Toggle visibility via pane API if available
-      // For now, just show a notification
-      this.window.showNotification('Sidebar toggle not yet implemented', 'info');
+    // Restore the sidebar ratio based on location
+    if (this.sidebarLocation === 'left') {
+      container.adjustRatios('split-1', [this.savedSidebarRatio, 1 - this.savedSidebarRatio]);
+    } else {
+      container.adjustRatios('split-1', [1 - this.savedSidebarRatio, this.savedSidebarRatio]);
+    }
+
+    this.sidebarVisible = true;
+    this.scheduleRender();
+    debugLog('[TUIClient] Sidebar shown');
+  }
+
+  /**
+   * Hide the sidebar.
+   */
+  private hideSidebar(): void {
+    if (!this.sidebarVisible) return;
+    if (!this.sidebarPaneId) return;
+
+    const container = this.window.getPaneContainer();
+    // Save current ratio before hiding
+    const sidebarWidth = this.configManager.getWithDefault('tui.sidebar.width', 36);
+    const totalWidth = this.window.getSize().width;
+    this.savedSidebarRatio = Math.min(0.3, sidebarWidth / totalWidth);
+
+    // Set sidebar to minimal width (effectively hiding it) based on location
+    if (this.sidebarLocation === 'left') {
+      container.adjustRatios('split-1', [0.001, 0.999]);
+    } else {
+      container.adjustRatios('split-1', [0.999, 0.001]);
+    }
+
+    this.sidebarVisible = false;
+    this.scheduleRender();
+    debugLog('[TUIClient] Sidebar hidden');
+  }
+
+  /**
+   * Update sidebar width based on setting.
+   */
+  private updateSidebarWidth(): void {
+    if (!this.sidebarVisible) return;
+    if (!this.sidebarPaneId) return;
+
+    const sidebarWidth = this.configManager.getWithDefault('tui.sidebar.width', 36);
+    const totalWidth = this.window.getSize().width;
+    const sidebarRatio = Math.min(0.3, sidebarWidth / totalWidth);
+
+    const container = this.window.getPaneContainer();
+    // Ratios depend on sidebar location
+    if (this.sidebarLocation === 'left') {
+      container.adjustRatios('split-1', [sidebarRatio, 1 - sidebarRatio]);
+    } else {
+      container.adjustRatios('split-1', [1 - sidebarRatio, sidebarRatio]);
+    }
+    this.scheduleRender();
+  }
+
+  /**
+   * Handle live updates when settings change.
+   * Called when a setting is modified in the settings palette.
+   */
+  private handleSettingChange(key: string, value: unknown): void {
+    switch (key) {
+      case 'tui.sidebar.visible':
+        if (value) {
+          this.showSidebar();
+        } else {
+          this.hideSidebar();
+        }
+        break;
+
+      case 'tui.sidebar.width':
+        this.updateSidebarWidth();
+        break;
+
+      case 'tui.sidebar.location':
+        {
+          const newLocation = value as 'left' | 'right';
+          if (newLocation !== this.sidebarLocation) {
+            // Swap the sidebar position
+            const container = this.window.getPaneContainer();
+            container.swapSplitChildren('split-1');
+            this.sidebarLocation = newLocation;
+            this.scheduleRender();
+            debugLog(`[TUIClient] Sidebar location changed to ${newLocation}`);
+          }
+        }
+        break;
+
+      case 'workbench.colorTheme':
+        // Theme change - reload theme colors
+        {
+          const themeName = value as string;
+          const newTheme = this.loadThemeColors(themeName);
+          this.theme = newTheme;
+          this.syntaxService.setTheme(themeName);
+          this.notifySettingsChanged();
+          this.scheduleRender();
+          debugLog(`[TUIClient] Theme changed to ${themeName}`);
+        }
+        break;
+
+      case 'tui.terminal.height':
+        // Terminal height - handled on next terminal open
+        this.scheduleRender();
+        break;
+
+      default:
+        // Other settings don't need live updates
+        break;
     }
   }
 
@@ -3660,8 +3791,27 @@ export class TUIClient {
       // Apply terminal panel height from updated config
       this.terminalPanelHeight = this.configManager.getWithDefault('tui.terminal.height', 10);
 
-      // Apply sidebar width from updated config
-      this.applySidebarWidth();
+      // Apply sidebar visibility from updated config
+      const shouldBeVisible = this.configManager.getWithDefault('tui.sidebar.visible', true);
+      if (shouldBeVisible !== this.sidebarVisible) {
+        if (shouldBeVisible) {
+          this.showSidebar();
+        } else {
+          this.hideSidebar();
+        }
+      } else if (this.sidebarVisible) {
+        // Only apply width if sidebar is visible
+        this.applySidebarWidth();
+      }
+
+      // Apply sidebar location from updated config
+      const newLocation = this.configManager.getWithDefault('tui.sidebar.location', 'left') as 'left' | 'right';
+      if (newLocation !== this.sidebarLocation) {
+        const container = this.window.getPaneContainer();
+        container.swapSplitChildren('split-1');
+        this.sidebarLocation = newLocation;
+        this.log(`Sidebar location updated to: ${newLocation}`);
+      }
 
       // Apply theme from updated config
       const themeName = this.configManager.get('workbench.colorTheme') ?? 'catppuccin-frappe';
@@ -3694,19 +3844,25 @@ export class TUIClient {
 
   /**
    * Apply sidebar width from config.
+   * Only applies if sidebar is currently visible.
    */
   private applySidebarWidth(): void {
     if (this.sidebarPaneId === null) return;
+    if (!this.sidebarVisible) return; // Don't override hidden state
 
     const container = this.window.getPaneContainer();
     if (!container) return;
 
-    const sidebarWidth = this.configManager.getWithDefault('tui.sidebar.width', 24);
+    const sidebarWidth = this.configManager.getWithDefault('tui.sidebar.width', 36);
     const totalWidth = this.window.getSize().width;
     const sidebarRatio = Math.min(0.3, sidebarWidth / totalWidth);
 
-    // Find and update the sidebar split
-    container.adjustRatios('split-1', [sidebarRatio, 1 - sidebarRatio]);
+    // Ratios depend on sidebar location
+    if (this.sidebarLocation === 'left') {
+      container.adjustRatios('split-1', [sidebarRatio, 1 - sidebarRatio]);
+    } else {
+      container.adjustRatios('split-1', [1 - sidebarRatio, sidebarRatio]);
+    }
     this.log(`Sidebar width updated to: ${sidebarWidth}`);
   }
 
@@ -4395,13 +4551,16 @@ export class TUIClient {
   private async showSettingsPalette(): Promise<void> {
     if (!this.dialogManager) return;
 
-    // Build settings items from current settings
-    const allSettings = this.configManager.getAllSettings();
+    // Build settings items from the known schema (defaultSettings),
+    // getting current values from config manager (which includes user overrides)
     const settingItems: SettingItem[] = [];
 
-    for (const [key, value] of Object.entries(allSettings)) {
-      const defaultValue = defaultSettings[key] ?? value;
-      const item = buildSettingItem(key, value, defaultValue);
+    for (const [key, defaultValue] of Object.entries(defaultSettings)) {
+      // Get current value from config manager (user setting or default)
+      // Cast key since Object.entries returns string keys
+      const typedKey = key as keyof TUISettings;
+      const currentValue = this.configManager.get(typedKey) ?? defaultValue;
+      const item = buildSettingItem(key, currentValue, defaultValue);
       settingItems.push(item);
     }
 
@@ -4417,17 +4576,21 @@ export class TUIClient {
       callbacks: {
         onValueChange: async (key: string, value: unknown) => {
           // Update the setting in config manager
-          this.configManager.set(key as keyof typeof allSettings, value as never);
+          this.configManager.set(key as keyof TUISettings, value as never);
           // Save to file
           await this.configManager.saveSettings();
           debugLog(`[TUIClient] Setting changed: ${key} = ${JSON.stringify(value)}`);
+          // Handle live updates for certain settings
+          this.handleSettingChange(key, value);
         },
         onReset: async (key: string, defaultValue: unknown) => {
           // Reset to default in config manager
-          this.configManager.set(key as keyof typeof allSettings, defaultValue as never);
+          this.configManager.set(key as keyof TUISettings, defaultValue as never);
           // Save to file
           await this.configManager.saveSettings();
           debugLog(`[TUIClient] Setting reset: ${key} = ${JSON.stringify(defaultValue)}`);
+          // Handle live updates for certain settings
+          this.handleSettingChange(key, defaultValue);
         },
       },
     });
