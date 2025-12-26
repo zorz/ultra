@@ -70,6 +70,7 @@ import { defaultThemes } from '../../../config/defaults.ts';
 import { localDocumentService, type DocumentService } from '../../../services/document/index.ts';
 import { fileService, type FileService, type WatchHandle } from '../../../services/file/index.ts';
 import { gitCliService } from '../../../services/git/index.ts';
+import type { GitDiffHunk } from '../../../services/git/types.ts';
 import { localSyntaxService, type SyntaxService, type HighlightToken } from '../../../services/syntax/index.ts';
 import {
   localSessionService,
@@ -832,6 +833,115 @@ export class TUIClient {
   }
 
   /**
+   * Update outline panel for a GitDiffBrowser.
+   * Shows symbols for the first file in the diff with changed sections highlighted.
+   */
+  private async updateOutlineForDiffBrowser(diffBrowser: GitDiffBrowser): Promise<void> {
+    if (!this.outlinePanel) return;
+
+    const artifacts = diffBrowser.getArtifacts();
+    if (artifacts.length === 0) {
+      this.outlinePanel.clearSymbols();
+      return;
+    }
+
+    // Use the first file (or could be enhanced to use selected file)
+    const artifact = artifacts[0]!;
+    const filePath = artifact.filePath;
+    const fullPath = `${this.workingDirectory}/${filePath}`;
+    const uri = `file://${fullPath}`;
+
+    try {
+      // Get symbols from LSP
+      const symbols = await localLSPService.getDocumentSymbols(uri);
+      if (symbols.length === 0) {
+        // Try fallback parser
+        const parser = getSymbolParser(uri);
+        if (parser) {
+          const content = await Bun.file(fullPath).text();
+          const fallbackSymbols = parser(content, uri);
+          this.markSymbolsDiffState(fallbackSymbols, artifact.hunks);
+          this.outlinePanel.setSymbols(fallbackSymbols, uri);
+        } else {
+          this.outlinePanel.clearSymbols();
+        }
+        return;
+      }
+
+      const outlineSymbols = this.convertLSPSymbols(symbols as LSPDocumentSymbol[]);
+      this.markSymbolsDiffState(outlineSymbols, artifact.hunks);
+      this.outlinePanel.setSymbols(outlineSymbols, uri);
+    } catch {
+      this.outlinePanel.clearSymbols();
+    }
+  }
+
+  /**
+   * Mark symbols with their diff state based on which lines are affected by hunks.
+   */
+  private markSymbolsDiffState(symbols: OutlineSymbol[], hunks: GitDiffHunk[]): void {
+    // Build a set of affected line ranges (1-based, from newStart/newLines in hunks)
+    const affectedRanges: Array<{ start: number; end: number; type: 'added' | 'modified' }> = [];
+
+    for (const hunk of hunks) {
+      // Check what type of change this hunk represents
+      let hasAdded = false;
+      let hasDeleted = false;
+
+      for (const line of hunk.lines) {
+        if (line.type === 'added') hasAdded = true;
+        if (line.type === 'deleted') hasDeleted = true;
+      }
+
+      const changeType: 'added' | 'modified' = hasAdded && hasDeleted ? 'modified' : hasAdded ? 'added' : 'modified';
+
+      // The hunk affects lines from newStart to newStart + newCount - 1
+      affectedRanges.push({
+        start: hunk.newStart,
+        end: hunk.newStart + hunk.newCount - 1,
+        type: changeType,
+      });
+    }
+
+    // Recursively mark symbols
+    const markSymbol = (symbol: OutlineSymbol): void => {
+      // Symbol lines are 0-indexed, hunk lines are 1-indexed
+      const symbolStart = symbol.startLine + 1;
+      const symbolEnd = symbol.endLine + 1;
+
+      // Check if any affected range overlaps with this symbol
+      let hasChange = false;
+      let isModified = false;
+      let isAdded = false;
+
+      for (const range of affectedRanges) {
+        if (range.start <= symbolEnd && range.end >= symbolStart) {
+          hasChange = true;
+          if (range.type === 'modified') isModified = true;
+          if (range.type === 'added') isAdded = true;
+        }
+      }
+
+      if (hasChange) {
+        symbol.diffState = isModified ? 'modified' : isAdded ? 'added' : 'modified';
+      } else {
+        symbol.diffState = 'unchanged';
+      }
+
+      // Mark children
+      if (symbol.children) {
+        for (const child of symbol.children) {
+          markSymbol(child);
+        }
+      }
+    };
+
+    for (const symbol of symbols) {
+      markSymbol(symbol);
+    }
+  }
+
+  /**
    * Convert LSP document symbols to outline symbols.
    */
   private convertLSPSymbols(lspSymbols: LSPDocumentSymbol[], parent?: OutlineSymbol): OutlineSymbol[] {
@@ -1073,6 +1183,178 @@ export class TUIClient {
       }
     } catch (error) {
       debugLog(`[TUIClient] Failed to open commit diff: ${error}`);
+      this.window.showNotification(`Failed to open diff: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Open a diff viewer for working tree changes.
+   * @param staged If true, show staged changes; if false, show unstaged changes
+   */
+  private async openWorkingTreeDiff(staged: boolean): Promise<void> {
+    try {
+      const repoUri = `file://${this.workingDirectory}`;
+      const status = await gitCliService.status(repoUri);
+
+      // Get files to diff
+      const filesToDiff = staged ? status.staged : status.unstaged;
+      if (filesToDiff.length === 0) {
+        this.window.showNotification(
+          staged ? 'No staged changes' : 'No unstaged changes',
+          'info'
+        );
+        return;
+      }
+
+      // Get diffs for each file
+      const artifacts = [];
+      for (const file of filesToDiff) {
+        const hunks = await gitCliService.diff(repoUri, file.path, staged);
+        if (hunks.length > 0) {
+          const artifact = createGitDiffArtifact(file.path, hunks, {
+            staged,
+            changeType: file.status === 'A' ? 'added' : file.status === 'D' ? 'deleted' : 'modified',
+          });
+          artifacts.push(artifact);
+        }
+      }
+
+      if (artifacts.length === 0) {
+        this.window.showNotification('No diff data available', 'info');
+        return;
+      }
+
+      // Find or create pane
+      const pane = this.editorPaneId
+        ? this.window.getPaneContainer().getPane(this.editorPaneId)
+        : this.window.getPaneContainer().ensureRoot();
+
+      if (!pane) return;
+
+      // Create diff browser
+      const title = staged ? 'Staged Changes' : 'Changes';
+      const diffBrowserId = pane.addElement('GitDiffBrowser', title);
+      const diffBrowser = pane.getElement(diffBrowserId) as GitDiffBrowser | null;
+
+      if (diffBrowser) {
+        diffBrowser.setStaged(staged);
+        diffBrowser.setArtifacts(artifacts);
+
+        // Set up diagnostics
+        const diagnosticsProvider = this.getDiagnosticsProvider();
+        if (diagnosticsProvider) {
+          diffBrowser.setDiagnosticsProvider(diagnosticsProvider);
+        }
+
+        // Set up edit callbacks for inline editing
+        diffBrowser.setEditCallbacks(this.getEditCallbacks());
+
+        // Set up git callbacks
+        const callbacks: GitDiffBrowserCallbacks = {
+          onOpenFile: (path, line) => {
+            this.openFile(`file://${this.workingDirectory}/${path}`, { line });
+          },
+          onStageFile: async (path) => {
+            await gitCliService.stage(this.workingDirectory, [path]);
+            await this.refreshGitStatus();
+            this.window.showNotification(`Staged: ${path}`, 'success');
+          },
+          onUnstageFile: async (path) => {
+            await gitCliService.unstage(this.workingDirectory, [path]);
+            await this.refreshGitStatus();
+            this.window.showNotification(`Unstaged: ${path}`, 'success');
+          },
+          onDiscardFile: async (path) => {
+            await gitCliService.discard(`file://${this.workingDirectory}`, [path]);
+            await this.refreshGitStatus();
+            this.window.showNotification(`Discarded: ${path}`, 'success');
+          },
+        };
+        diffBrowser.setGitCallbacks(callbacks);
+
+        this.window.focusElement(diffBrowser);
+      }
+    } catch (error) {
+      debugLog(`[TUIClient] Failed to open working tree diff: ${error}`);
+      this.window.showNotification(`Failed to open diff: ${error}`, 'error');
+    }
+  }
+
+  /**
+   * Open a diff viewer for the current file.
+   */
+  private async openCurrentFileDiff(): Promise<void> {
+    const focusedElement = this.window.getFocusedElement();
+    if (!(focusedElement instanceof DocumentEditor)) {
+      this.window.showNotification('No file open', 'info');
+      return;
+    }
+
+    const uri = this.findUriForEditor(focusedElement);
+    if (!uri) {
+      this.window.showNotification('File not saved', 'info');
+      return;
+    }
+
+    try {
+      const filePath = uri.startsWith('file://') ? uri.slice(7) : uri;
+      const relativePath = filePath.startsWith(this.workingDirectory)
+        ? filePath.slice(this.workingDirectory.length + 1)
+        : filePath;
+
+      const repoUri = `file://${this.workingDirectory}`;
+      const hunks = await gitCliService.diff(repoUri, relativePath, false);
+
+      if (hunks.length === 0) {
+        this.window.showNotification('No changes in this file', 'info');
+        return;
+      }
+
+      const artifact = createGitDiffArtifact(relativePath, hunks, {
+        staged: false,
+        changeType: 'modified',
+      });
+
+      // Find or create pane
+      const pane = this.editorPaneId
+        ? this.window.getPaneContainer().getPane(this.editorPaneId)
+        : this.window.getPaneContainer().ensureRoot();
+
+      if (!pane) return;
+
+      const title = `Diff: ${relativePath.split('/').pop()}`;
+      const diffBrowserId = pane.addElement('GitDiffBrowser', title);
+      const diffBrowser = pane.getElement(diffBrowserId) as GitDiffBrowser | null;
+
+      if (diffBrowser) {
+        diffBrowser.setArtifacts([artifact]);
+
+        const diagnosticsProvider = this.getDiagnosticsProvider();
+        if (diagnosticsProvider) {
+          diffBrowser.setDiagnosticsProvider(diagnosticsProvider);
+        }
+
+        diffBrowser.setEditCallbacks(this.getEditCallbacks());
+
+        const callbacks: GitDiffBrowserCallbacks = {
+          onOpenFile: (path, line) => {
+            this.openFile(`file://${this.workingDirectory}/${path}`, { line });
+          },
+          onStageFile: async (path) => {
+            await gitCliService.stage(this.workingDirectory, [path]);
+            await this.refreshGitStatus();
+          },
+          onDiscardFile: async (path) => {
+            await gitCliService.discard(`file://${this.workingDirectory}`, [path]);
+            await this.refreshGitStatus();
+          },
+        };
+        diffBrowser.setGitCallbacks(callbacks);
+
+        this.window.focusElement(diffBrowser);
+      }
+    } catch (error) {
+      debugLog(`[TUIClient] Failed to open file diff: ${error}`);
       this.window.showNotification(`Failed to open diff: ${error}`, 'error');
     }
   }
@@ -2524,6 +2806,21 @@ export class TUIClient {
       return true;
     });
 
+    this.commandHandlers.set('git.viewChanges', async () => {
+      await this.openWorkingTreeDiff(false);
+      return true;
+    });
+
+    this.commandHandlers.set('git.viewStagedChanges', async () => {
+      await this.openWorkingTreeDiff(true);
+      return true;
+    });
+
+    this.commandHandlers.set('git.openFileDiff', async () => {
+      await this.openCurrentFileDiff();
+      return true;
+    });
+
     // Ultra namespace commands for keybindings
     this.commandHandlers.set('view.splitVertical', () => {
       this.splitEditorPane('vertical');
@@ -3554,6 +3851,17 @@ export class TUIClient {
           this.loadTimelineForEditor(element);
         }
       }
+    } else if (element instanceof GitDiffBrowser) {
+      // GitDiffBrowser - keep timeline visible, update outline for first file
+      this.clearStatusBarFile();
+
+      if (updateSidebarPanels) {
+        // Keep timeline visible - don't clear it
+        // The timeline shows relevant context for the diff being viewed
+
+        // Update outline for first file in the diff (if available)
+        this.updateOutlineForDiffBrowser(element);
+      }
     } else {
       // Not a document editor - clear file-related status bar items
       this.clearStatusBarFile();
@@ -3732,6 +4040,10 @@ export class TUIClient {
     'git.stashPop': { label: 'Git: Pop Stash', category: 'Git' },
     'git.stashApply': { label: 'Git: Apply Stash...', category: 'Git' },
     'git.stashDrop': { label: 'Git: Drop Stash...', category: 'Git' },
+    // Git diff
+    'git.viewChanges': { label: 'Git: View Changes (Unstaged)', category: 'Git' },
+    'git.viewStagedChanges': { label: 'Git: View Staged Changes', category: 'Git' },
+    'git.openFileDiff': { label: 'Git: View File Changes', category: 'Git' },
     // Session
     'session.save': { label: 'Save Session', category: 'Session' },
     'session.saveAs': { label: 'Save Session As...', category: 'Session' },

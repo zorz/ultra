@@ -22,6 +22,11 @@ import { SymbolKind } from '../../../services/lsp/index.ts';
 /**
  * Normalized symbol representation for outline display.
  */
+/**
+ * Diff state for symbols when viewing a diff.
+ */
+export type SymbolDiffState = 'added' | 'modified' | 'deleted' | 'unchanged';
+
 export interface OutlineSymbol {
   /** Unique ID for tracking */
   id: string;
@@ -41,6 +46,8 @@ export interface OutlineSymbol {
   children?: OutlineSymbol[];
   /** Parent symbol (for tree navigation) */
   parent?: OutlineSymbol;
+  /** Diff state when viewing a diff (optional) */
+  diffState?: SymbolDiffState;
 }
 
 /**
@@ -725,32 +732,63 @@ export class OutlinePanel extends BaseElement {
     const icon = SYMBOL_ICONS[symbol.kind] ?? '?';
     const iconColor = SYMBOL_COLORS[symbol.kind] ?? fg;
 
+    // Diff state indicator and colors
+    let diffIndicator = ' ';
+    let diffIndicatorColor = fg;
+    let lineBg = bg;
+    if (symbol.diffState && symbol.diffState !== 'unchanged') {
+      switch (symbol.diffState) {
+        case 'added':
+          diffIndicator = '+';
+          diffIndicatorColor = this.ctx.getThemeColor('gitDecoration.addedResourceForeground', '#81b88b');
+          lineBg = this.ctx.getThemeColor('diffEditor.insertedLineBackground', '#1e3a21');
+          break;
+        case 'modified':
+          diffIndicator = '~';
+          diffIndicatorColor = this.ctx.getThemeColor('gitDecoration.modifiedResourceForeground', '#e2c08d');
+          lineBg = this.ctx.getThemeColor('diffEditor.modifiedLineBackground', '#2d2a1e');
+          break;
+        case 'deleted':
+          diffIndicator = '-';
+          diffIndicatorColor = this.ctx.getThemeColor('gitDecoration.deletedResourceForeground', '#c74e39');
+          lineBg = this.ctx.getThemeColor('diffEditor.removedLineBackground', '#3a1e1e');
+          break;
+      }
+    }
+
+    // Use lineBg unless selected
+    const actualBg = isSelected ? bg : lineBg;
+
     // Calculate available space for name
-    const prefixLen = indent.length + 2 + 2; // indent + expander + space + icon + space
+    const prefixLen = indent.length + 1 + 2 + 2; // indent + diffIndicator + expander + space + icon + space
     const availableWidth = Math.max(1, width - prefixLen - 1); // -1 for scrollbar
     const name = symbol.name.slice(0, availableWidth);
 
-    // Draw indent and expander
+    // Draw diff indicator at start
     let xPos = x;
-    buffer.writeString(xPos, y, indent, fg, bg);
+    buffer.writeString(xPos, y, diffIndicator, diffIndicatorColor, actualBg);
+    xPos += 1;
+
+    // Draw indent and expander
+    buffer.writeString(xPos, y, indent, fg, actualBg);
     xPos += indent.length;
 
-    buffer.writeString(xPos, y, expander + ' ', fg, bg);
+    buffer.writeString(xPos, y, expander + ' ', fg, actualBg);
     xPos += 2;
 
     // Draw icon with color
-    buffer.writeString(xPos, y, icon + ' ', iconColor, bg);
+    buffer.writeString(xPos, y, icon + ' ', iconColor, actualBg);
     xPos += 2;
 
     // Draw symbol name
     const nameFg = isSelected ? this.ctx.getThemeColor('list.activeSelectionForeground', '#ffffff') : fg;
-    buffer.writeString(xPos, y, name, nameFg, bg);
+    buffer.writeString(xPos, y, name, nameFg, actualBg);
     xPos += name.length;
 
     // Fill rest of line
     const remaining = width - (xPos - x);
     if (remaining > 0) {
-      buffer.writeString(xPos, y, ' '.repeat(remaining), fg, bg);
+      buffer.writeString(xPos, y, ' '.repeat(remaining), fg, actualBg);
     }
   }
 
