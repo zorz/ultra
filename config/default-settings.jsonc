@@ -33,14 +33,13 @@
 
   // Workbench
   "workbench.colorTheme": "catppuccin-frappe", // Color theme name
-  "workbench.sideBar.visible": true, // Show sidebar on startup
-  "workbench.sideBar.location": "left", // Sidebar position: "left", "right"
-  "workbench.sideBar.focusedBackground": "#2d3139", // Sidebar focused item background color
   "workbench.startupEditor": "", // File to open on startup (empty for none)
 
-  // TUI Layout
+  // TUI Sidebar
   "tui.sidebar.width": 36, // Sidebar width in characters
   "tui.sidebar.visible": true, // Sidebar visibility
+  "tui.sidebar.location": "left", // Sidebar position: "left", "right"
+  "tui.sidebar.focusedBackground": "#2d3139", // Sidebar focused item background color
   "tui.terminal.height": 24, // Terminal panel height in rows
   "tui.terminal.scrollback": 1000, // Terminal scrollback buffer size in lines
 

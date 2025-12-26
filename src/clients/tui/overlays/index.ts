@@ -74,8 +74,32 @@ export {
 export {
   SettingsDialog,
   type SettingsDialogOptions,
+  type SettingsDialogCallbacks,
   type SettingItem,
 } from './settings-dialog.ts';
+
+export {
+  inferSettingType,
+  getEnumOptions,
+  getSettingDescription,
+  isMultilineSetting,
+  getSettingCategory,
+  buildSettingItem,
+  parseSettingValue,
+  validateNumberSetting,
+  ENUM_OPTIONS,
+  MULTILINE_SETTINGS,
+  SETTING_DESCRIPTIONS,
+  type SettingType,
+} from './settings-utils.ts';
+
+export {
+  KeybindingsDialog,
+  type KeybindingsDialogOptions,
+  type KeybindingsDialogCallbacks,
+  type KeybindingItem,
+  type CommandInfo,
+} from './keybindings-dialog.ts';
 
 export {
   FileBrowserDialog,

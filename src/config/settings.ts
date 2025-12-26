@@ -28,12 +28,11 @@ export interface EditorSettings {
   'files.watchFiles': 'onFocus' | 'always' | 'off';
   'files.exclude': Record<string, boolean>;
   'workbench.colorTheme': string;
-  'workbench.sideBar.visible': boolean;
-  'workbench.sideBar.location': 'left' | 'right';
-  'workbench.sideBar.focusedBackground': string;
   'workbench.startupEditor': string;
   'tui.sidebar.width': number;
   'tui.sidebar.visible': boolean;
+  'tui.sidebar.location': 'left' | 'right';
+  'tui.sidebar.focusedBackground': string;
   'tui.terminal.height': number;
   'tui.tabBar.scrollAmount': number;
   // TUI Outline panel settings
@@ -123,12 +122,11 @@ const defaultSettings: EditorSettings = {
     '**/.DS_Store': true
   },
   'workbench.colorTheme': 'catppuccin-frappe',
-  'workbench.sideBar.visible': true,
-  'workbench.sideBar.location': 'left',
-  'workbench.sideBar.focusedBackground': '#2d3139',
   'workbench.startupEditor': '~/.ultra/BOOT.md',
   'tui.sidebar.width': 36,
   'tui.sidebar.visible': true,
+  'tui.sidebar.location': 'left',
+  'tui.sidebar.focusedBackground': '#2d3139',
   'tui.terminal.height': 10,
   'tui.tabBar.scrollAmount': 1,
   // TUI Outline panel settings

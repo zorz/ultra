@@ -65,6 +65,10 @@ export interface TUISettings extends Partial<EditorSettings> {
   'tui.sidebar.width'?: number;
   /** Whether the sidebar is visible */
   'tui.sidebar.visible'?: boolean;
+  /** Sidebar location (left or right) */
+  'tui.sidebar.location'?: 'left' | 'right';
+  /** Sidebar focused background color */
+  'tui.sidebar.focusedBackground'?: string;
   /** Height of the terminal panel in rows */
   'tui.terminal.height'?: number;
 

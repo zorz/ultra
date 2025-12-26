@@ -52,10 +52,13 @@ import {
   SaveAsDialog,
   SearchReplaceDialog,
   createSearchReplaceDialog,
+  buildSettingItem,
   type Command,
   type FileEntry,
   type StagedFile,
   type SearchOptions,
+  type SettingItem,
+  type KeybindingItem,
 } from '../overlays/index.ts';
 import { TabSwitcherDialog, type TabInfo } from '../overlays/tab-switcher.ts';
 
@@ -64,7 +67,7 @@ import { debugLog, isDebugEnabled } from '../../../debug.ts';
 
 // Config
 import { TUIConfigManager, createTUIConfigManager } from '../config/index.ts';
-import { defaultThemes } from '../../../config/defaults.ts';
+import { defaultThemes, defaultSettings, defaultKeybindings } from '../../../config/defaults.ts';
 
 // Services
 import { localDocumentService, type DocumentService } from '../../../services/document/index.ts';
@@ -209,6 +212,12 @@ export class TUIClient {
 
   /** Sidebar pane ID */
   private sidebarPaneId: string | null = null;
+
+  /** Sidebar visible */
+  private sidebarVisible = true;
+
+  /** Saved sidebar width ratio for restore after hiding */
+  private savedSidebarRatio: number = 0.2;
 
   /** Git status polling interval */
   private gitStatusInterval: ReturnType<typeof setInterval> | null = null;
@@ -2663,14 +2672,12 @@ export class TUIClient {
     });
 
     this.commandHandlers.set('workbench.openSettings', async () => {
-      const paths = this.configManager.getPaths();
-      await this.openFile(`file://${paths.userSettings}`);
+      await this.showSettingsPalette();
       return true;
     });
 
     this.commandHandlers.set('workbench.openKeybindings', async () => {
-      const paths = this.configManager.getPaths();
-      await this.openFile(`file://${paths.userKeybindings}`);
+      await this.showKeybindingsPalette();
       return true;
     });
 
@@ -4376,6 +4383,123 @@ export class TUIClient {
       this.terminalPanel.setActiveTerminal(result.value.id);
       this.scheduleRender();
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Settings Palette
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the settings palette for inline editing of settings.
+   */
+  private async showSettingsPalette(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    // Build settings items from current settings
+    const allSettings = this.configManager.getAllSettings();
+    const settingItems: SettingItem[] = [];
+
+    for (const [key, value] of Object.entries(allSettings)) {
+      const defaultValue = defaultSettings[key] ?? value;
+      const item = buildSettingItem(key, value, defaultValue);
+      settingItems.push(item);
+    }
+
+    // Sort by key for consistent ordering
+    settingItems.sort((a, b) => a.key.localeCompare(b.key));
+
+    await this.dialogManager.showSettings({
+      settings: settingItems,
+      title: 'Settings',
+      placeholder: 'Search settings...',
+      width: 80,
+      height: 25,
+      callbacks: {
+        onValueChange: async (key: string, value: unknown) => {
+          // Update the setting in config manager
+          this.configManager.set(key as keyof typeof allSettings, value as never);
+          // Save to file
+          await this.configManager.saveSettings();
+          debugLog(`[TUIClient] Setting changed: ${key} = ${JSON.stringify(value)}`);
+        },
+        onReset: async (key: string, defaultValue: unknown) => {
+          // Reset to default in config manager
+          this.configManager.set(key as keyof typeof allSettings, defaultValue as never);
+          // Save to file
+          await this.configManager.saveSettings();
+          debugLog(`[TUIClient] Setting reset: ${key} = ${JSON.stringify(defaultValue)}`);
+        },
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Keybindings Palette
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the keybindings palette for editing keybindings.
+   */
+  private async showKeybindingsPalette(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    // Build keybinding items from current keybindings
+    const keybindings = this.configManager.getKeybindings();
+    const keybindingItems: KeybindingItem[] = [];
+
+    for (const binding of keybindings) {
+      // Find the default keybinding for this command
+      const defaultBinding = defaultKeybindings.find((b) => b.command === binding.command);
+      const defaultKey = defaultBinding?.key ?? binding.key;
+
+      // Get command info for label and category
+      const info = TUIClient.COMMAND_INFO[binding.command];
+
+      keybindingItems.push({
+        command: binding.command,
+        label: info?.label ?? binding.command,
+        key: binding.key,
+        defaultKey,
+        when: binding.when,
+        category: info?.category ?? 'Other',
+        isModified: binding.key !== defaultKey,
+      });
+    }
+
+    // Sort by label for consistent ordering
+    keybindingItems.sort((a, b) => a.label.localeCompare(b.label));
+
+    await this.dialogManager.showKeybindings({
+      keybindings: keybindingItems,
+      title: 'Keyboard Shortcuts',
+      placeholder: 'Search keybindings...',
+      width: 80,
+      height: 25,
+      callbacks: {
+        onKeybindingChange: async (command: string, newKey: string) => {
+          // Find and update the keybinding
+          const bindings = this.configManager.getKeybindings();
+          const binding = bindings.find((b) => b.command === command);
+          if (binding) {
+            binding.key = newKey;
+          }
+          // Save to file
+          await this.configManager.saveKeybindings();
+          debugLog(`[TUIClient] Keybinding changed: ${command} = ${newKey}`);
+        },
+        onReset: async (command: string, defaultKey: string) => {
+          // Find and reset the keybinding
+          const bindings = this.configManager.getKeybindings();
+          const binding = bindings.find((b) => b.command === command);
+          if (binding) {
+            binding.key = defaultKey;
+          }
+          // Save to file
+          await this.configManager.saveKeybindings();
+          debugLog(`[TUIClient] Keybinding reset: ${command} = ${defaultKey}`);
+        },
+      },
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────

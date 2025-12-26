@@ -165,22 +165,6 @@ export const settingsSchema: SettingsSchema = {
       default: 'catppuccin-frappe',
       description: 'Color theme to use',
     },
-    'workbench.sideBar.visible': {
-      type: 'boolean',
-      default: true,
-      description: 'Whether the sidebar is visible',
-    },
-    'workbench.sideBar.location': {
-      type: 'string',
-      default: 'left',
-      enum: ['left', 'right'],
-      description: 'Sidebar location',
-    },
-    'workbench.sideBar.focusedBackground': {
-      type: 'string',
-      default: '#2d3139',
-      description: 'Background color when sidebar is focused',
-    },
     'workbench.startupEditor': {
       type: 'string',
       default: '~/.ultra/BOOT.md',
@@ -201,6 +185,17 @@ export const settingsSchema: SettingsSchema = {
       type: 'boolean',
       default: true,
       description: 'Whether the sidebar is visible',
+    },
+    'tui.sidebar.location': {
+      type: 'string',
+      default: 'left',
+      enum: ['left', 'right'],
+      description: 'Sidebar location (left or right)',
+    },
+    'tui.sidebar.focusedBackground': {
+      type: 'string',
+      default: '#2d3139',
+      description: 'Background color when sidebar is focused',
     },
     'tui.terminal.height': {
       type: 'number',

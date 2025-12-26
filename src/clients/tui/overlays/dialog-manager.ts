@@ -14,6 +14,7 @@ import { FilePickerDialog, type FileEntry } from './file-picker.ts';
 import { GotoLineDialog, type GotoLineResult } from './goto-line-dialog.ts';
 import { CommitDialog, type CommitDialogOptions, type CommitResult, type StagedFile } from './commit-dialog.ts';
 import { SettingsDialog, type SettingsDialogOptions, type SettingItem } from './settings-dialog.ts';
+import { KeybindingsDialog, type KeybindingsDialogOptions, type KeybindingItem } from './keybindings-dialog.ts';
 
 // ============================================
 // Types
@@ -43,6 +44,11 @@ export type { CommitResult, StagedFile };
  * Setting item.
  */
 export type { SettingItem };
+
+/**
+ * Keybinding item.
+ */
+export type { KeybindingItem };
 
 /**
  * Options for command palette.
@@ -93,6 +99,7 @@ export class DialogManager {
   private gotoLineDialog: GotoLineDialog | null = null;
   private commitDialog: CommitDialog | null = null;
   private settingsDialog: SettingsDialog | null = null;
+  private keybindingsDialog: KeybindingsDialog | null = null;
 
   /** Currently active dialog ID */
   private activeDialogId: string | null = null;
@@ -329,6 +336,28 @@ export class DialogManager {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Keybindings Dialog
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the keybindings dialog.
+   */
+  async showKeybindings(options: Omit<KeybindingsDialogOptions, keyof import('./promise-dialog.ts').DialogConfig> & Partial<import('./promise-dialog.ts').DialogConfig>): Promise<DialogResult<KeybindingItem>> {
+    if (!this.keybindingsDialog) {
+      this.keybindingsDialog = new KeybindingsDialog('dialog-keybindings', this.callbacks);
+      this.overlayManager.addOverlay(this.keybindingsDialog);
+    }
+
+    this.activeDialogId = 'dialog-keybindings';
+
+    try {
+      return await this.keybindingsDialog.showWithKeybindings(options);
+    } finally {
+      this.activeDialogId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Cleanup
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -363,6 +392,10 @@ export class DialogManager {
     if (this.settingsDialog) {
       this.overlayManager.removeOverlay('dialog-settings');
       this.settingsDialog = null;
+    }
+    if (this.keybindingsDialog) {
+      this.overlayManager.removeOverlay('dialog-keybindings');
+      this.keybindingsDialog = null;
     }
     this.activeDialogId = null;
   }
