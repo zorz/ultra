@@ -3,6 +3,7 @@
   { "key": "ctrl+s", "command": "file.save" }, // Save current file
   { "key": "ctrl+shift+s", "command": "file.saveAs" }, // Save as new file
   { "key": "ctrl+o", "command": "file.open" }, // Open file
+  { "key": "meta+o", "command": "file.open" }, // Open file
   { "key": "ctrl+n", "command": "file.new" }, // New file
   { "key": "ctrl+w", "command": "file.close" }, // Close current file
 
@@ -17,7 +18,9 @@
 
   // Multi-cursor and selection
   { "key": "ctrl+d", "command": "edit.selectNextMatch" }, // Select next occurrence
+  { "key": "meta+d", "command": "edit.selectNextMatch" }, // Select next occurrence
   { "key": "ctrl+shift+l", "command": "edit.selectAllOccurrences" }, // Select all occurrences
+  { "key": "meta+d a", "command": "edit.selectAllOccurrences" }, // Select all occurrences
   { "key": "ctrl+alt+up", "command": "editor.addCursorAbove" }, // Add cursor above
   { "key": "ctrl+alt+down", "command": "editor.addCursorBelow" }, // Add cursor below
   { "key": "escape", "command": "editor.clearCursors", "when": "editorHasMultipleCursors" }, // Clear extra cursors
@@ -32,6 +35,7 @@
   // Navigation
   { "key": "ctrl+g", "command": "editor.gotoLine" }, // Go to line number
   { "key": "ctrl+p", "command": "workbench.quickOpen" }, // Quick open file
+  { "key": "meta+p", "command": "workbench.quickOpen" }, // Quick open file
   { "key": "ctrl+shift+p", "command": "workbench.commandPalette" }, // Command palette
   { "key": "shift+meta+p", "command": "workbench.commandPalette" }, // Command palette (macOS)
   { "key": "ctrl+shift+o", "command": "editor.gotoSymbol" }, // Go to symbol

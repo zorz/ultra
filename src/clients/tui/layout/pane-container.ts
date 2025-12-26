@@ -103,6 +103,9 @@ export class PaneContainer implements FocusResolver {
   /** Divider size in characters */
   private static readonly DIVIDER_SIZE = 1;
 
+  /** Reserved height at the bottom for terminal panel (only affects non-accordion panes) */
+  private bottomReservedHeight = 0;
+
   constructor(callbacks: PaneContainerCallbacks) {
     this.callbacks = callbacks;
   }
@@ -247,9 +250,37 @@ export class PaneContainer implements FocusResolver {
     return { ...this.bounds };
   }
 
+  /**
+   * Set reserved height at the bottom (for terminal panel).
+   * This height is subtracted only from non-accordion panes (editor area).
+   */
+  setBottomReservedHeight(height: number): void {
+    if (this.bottomReservedHeight === height) return;
+    this.bottomReservedHeight = height;
+    if (this.root) {
+      this.layoutNode(this.root, this.bounds);
+    }
+  }
+
+  /**
+   * Get the bottom reserved height.
+   */
+  getBottomReservedHeight(): number {
+    return this.bottomReservedHeight;
+  }
+
   private layoutNode(node: LayoutNode, bounds: Rect): void {
     if (node instanceof Pane) {
-      node.setBounds(bounds);
+      // For accordion panes (sidebar), use full height
+      // For other panes (editor), reduce height by bottom reserved space
+      let adjustedBounds = bounds;
+      if (node.getMode() !== 'accordion' && this.bottomReservedHeight > 0) {
+        adjustedBounds = {
+          ...bounds,
+          height: Math.max(1, bounds.height - this.bottomReservedHeight),
+        };
+      }
+      node.setBounds(adjustedBounds);
       return;
     }
 

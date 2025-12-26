@@ -46,7 +46,7 @@
   // Terminal
   "terminal.integrated.shell": "", // Shell path (empty uses $SHELL)
   "terminal.integrated.position": "bottom", // Panel position: "bottom", "top", "left", "right"
-  "terminal.integrated.defaultHeight": 12, // Default panel height in rows
+  "terminal.integrated.defaultHeight": 24, // Default panel height in rows
   "terminal.integrated.defaultWidth": 40, // Default panel width in columns
   "terminal.integrated.scrollback": 1000, // Scrollback buffer size in lines
   "terminal.integrated.openOnStartup": false, // Open terminal panel on startup

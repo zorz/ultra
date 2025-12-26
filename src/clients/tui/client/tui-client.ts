@@ -3212,10 +3212,14 @@ export class TUIClient {
    * Terminal panel aligns with editor area (excludes sidebar).
    */
   private layoutTerminalPanel(): void {
+    const panelHeight = this.terminalPanelVisible ? this.terminalPanelHeight : 0;
+
+    // Tell window about bottom panel height so it can shrink the pane container
+    this.window.setBottomPanelHeight(panelHeight);
+
     if (!this.terminalPanel) return;
 
     const size = this.getTerminalSize();
-    const panelHeight = this.terminalPanelVisible ? this.terminalPanelHeight : 0;
 
     // Calculate sidebar offset - terminal should align with editor area
     let sidebarOffset = 0;

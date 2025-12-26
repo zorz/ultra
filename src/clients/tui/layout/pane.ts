@@ -838,6 +838,17 @@ export class Pane {
   }
 
   private renderAccordion(buffer: ScreenBuffer): void {
+    // Get background color for clearing - use the sidebar background via callback
+    const bg = this.callbacks.getBackgroundForFocus('sidebar', false);
+    const fg = this.callbacks.getForegroundForFocus('sidebar', false);
+
+    // Clear the entire pane area first to remove any stale content
+    for (let row = 0; row < this.bounds.height; row++) {
+      for (let col = 0; col < this.bounds.width; col++) {
+        buffer.set(this.bounds.x + col, this.bounds.y + row, { char: ' ', fg, bg });
+      }
+    }
+
     let y = this.bounds.y;
 
     for (const element of this.elements) {

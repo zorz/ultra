@@ -27,6 +27,10 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "file.open"
   },
   {
+    "key": "meta+o",
+    "command": "file.open"
+  },
+  {
     "key": "ctrl+n",
     "command": "file.new"
   },
@@ -67,7 +71,15 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "edit.selectNextMatch"
   },
   {
+    "key": "meta+d",
+    "command": "edit.selectNextMatch"
+  },
+  {
     "key": "ctrl+shift+l",
+    "command": "edit.selectAllOccurrences"
+  },
+  {
+    "key": "meta+d a",
     "command": "edit.selectAllOccurrences"
   },
   {
@@ -109,6 +121,10 @@ export const defaultKeybindings: KeyBinding[] = [
   },
   {
     "key": "ctrl+p",
+    "command": "workbench.quickOpen"
+  },
+  {
+    "key": "meta+p",
     "command": "workbench.quickOpen"
   },
   {
@@ -294,7 +310,7 @@ export const defaultSettings: Record<string, any> = {
   "tui.terminal.height": 10,
   "terminal.integrated.shell": "",
   "terminal.integrated.position": "bottom",
-  "terminal.integrated.defaultHeight": 12,
+  "terminal.integrated.defaultHeight": 24,
   "terminal.integrated.defaultWidth": 40,
   "terminal.integrated.scrollback": 1000,
   "terminal.integrated.openOnStartup": false,

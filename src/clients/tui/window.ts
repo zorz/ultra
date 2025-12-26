@@ -112,6 +112,9 @@ export class Window {
   /** Status bar height (1 collapsed, more when expanded) */
   private statusBarHeight = 1;
 
+  /** Bottom panel height (terminal panel, etc.) */
+  private bottomPanelHeight = 0;
+
   constructor(config: WindowConfig) {
     this.size = { ...config.size };
     this.getThemeColor = config.getThemeColor;
@@ -219,6 +222,8 @@ export class Window {
    */
   private updateLayout(): void {
     // Calculate available space for pane container
+    // Don't subtract bottom panel height from bounds - the pane container handles it
+    // internally so that sidebar keeps full height while only editor panes shrink
     const paneContainerBounds: Rect = {
       x: 0,
       y: 0,
@@ -227,7 +232,10 @@ export class Window {
     };
     this.paneContainer.setBounds(paneContainerBounds);
 
-    // Position status bar at bottom
+    // Tell pane container about bottom reserved height (applies to non-accordion panes only)
+    this.paneContainer.setBottomReservedHeight(this.bottomPanelHeight);
+
+    // Position status bar at bottom (below bottom panel if present)
     const statusBarBounds: Rect = {
       x: 0,
       y: this.size.height - this.statusBarHeight,
@@ -235,6 +243,24 @@ export class Window {
       height: this.statusBarHeight,
     };
     this.statusBar.setBounds(statusBarBounds);
+  }
+
+  /**
+   * Set the bottom panel height (for terminal panel, etc.).
+   * This shrinks the pane container to make room for the bottom panel.
+   */
+  setBottomPanelHeight(height: number): void {
+    if (this.bottomPanelHeight === height) return;
+    this.bottomPanelHeight = height;
+    this.updateLayout();
+    this.markDirty();
+  }
+
+  /**
+   * Get the bottom panel height.
+   */
+  getBottomPanelHeight(): number {
+    return this.bottomPanelHeight;
   }
 
   /**
