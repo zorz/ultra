@@ -89,7 +89,7 @@ export interface TUISettings extends Partial<EditorSettings> {
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Number of lines to keep in terminal scrollback buffer */
-  'terminal.integrated.scrollback'?: number;
+  'tui.terminal.scrollback'?: number;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Git
@@ -108,15 +108,42 @@ export interface TUISettings extends Partial<EditorSettings> {
   'ai.defaultProvider'?: 'claude-code' | 'codex' | 'gemini';
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Timeline
+  // TUI Tab Bar
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Number of tabs to scroll when using scroll buttons */
+  'tui.tabBar.scrollAmount'?: number;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TUI Diff Viewer
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Auto-refresh diff when file changes */
+  'tui.diffViewer.autoRefresh'?: boolean;
+  /** Show diagnostics in diff viewer */
+  'tui.diffViewer.showDiagnostics'?: boolean;
+  /** Edit save mode: 'stage-modified', 'save-only', 'auto-stage' */
+  'tui.diffViewer.editMode'?: 'stage-modified' | 'save-only' | 'auto-stage';
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TUI Outline Panel
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Collapse outline panel on startup */
+  'tui.outline.collapsedOnStartup'?: boolean;
+  /** Auto-follow cursor position in outline */
+  'tui.outline.autoFollow'?: boolean;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TUI Timeline Panel
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Timeline mode: 'file' (current file) or 'repo' (all commits) */
-  'timeline.mode'?: 'file' | 'repo';
+  'tui.timeline.mode'?: 'file' | 'repo';
   /** Number of commits to show in timeline */
-  'timeline.commitCount'?: number;
+  'tui.timeline.commitCount'?: number;
   /** Whether to collapse timeline panel on startup */
-  'timeline.collapsedOnStartup'?: boolean;
+  'tui.timeline.collapsedOnStartup'?: boolean;
 }
 
 /**
@@ -270,20 +297,32 @@ export class TUIConfigManager {
   private async loadSettings(): Promise<void> {
     // Start with defaults
     this.settings = this.getDefaultSettings();
+    debugLog(`[TUIConfigManager] Loaded ${Object.keys(this.settings).length} default settings`);
 
     // Load user settings
     const userSettings = await this.loadJsonFile<TUISettings>(this.paths.userSettings);
     if (userSettings) {
+      const userKeys = Object.keys(userSettings);
+      debugLog(`[TUIConfigManager] Loaded ${userKeys.length} user settings from ${this.paths.userSettings}`);
       this.settings = { ...this.settings, ...userSettings };
+    } else {
+      debugLog(`[TUIConfigManager] No user settings found at ${this.paths.userSettings}`);
     }
 
     // Load workspace settings (override user)
     if (this.paths.workspaceSettings) {
       const workspaceSettings = await this.loadJsonFile<TUISettings>(this.paths.workspaceSettings);
       if (workspaceSettings) {
+        const wsKeys = Object.keys(workspaceSettings);
+        debugLog(`[TUIConfigManager] Loaded ${wsKeys.length} workspace settings from ${this.paths.workspaceSettings}`);
         this.settings = { ...this.settings, ...workspaceSettings };
       }
     }
+
+    // Log final settings count and key settings
+    debugLog(`[TUIConfigManager] Final settings: ${Object.keys(this.settings).length} keys`);
+    debugLog(`[TUIConfigManager] tui.terminal.height = ${this.settings['tui.terminal.height']}`);
+    debugLog(`[TUIConfigManager] tui.sidebar.width = ${this.settings['tui.sidebar.width']}`);
   }
 
   /**
@@ -318,16 +357,22 @@ export class TUIConfigManager {
     try {
       const file = Bun.file(path);
       const exists = await file.exists();
-      if (!exists) return null;
+      if (!exists) {
+        debugLog(`[TUIConfigManager] File does not exist: ${path}`);
+        return null;
+      }
 
       const content = await file.text();
+      debugLog(`[TUIConfigManager] Read ${content.length} bytes from ${path}`);
 
       // Remove comments (JSON with comments support)
       const cleanContent = content
         .replace(/\/\/.*$/gm, '') // Single line comments
         .replace(/\/\*[\s\S]*?\*\//g, ''); // Multi-line comments
 
-      return JSON.parse(cleanContent) as T;
+      const parsed = JSON.parse(cleanContent) as T;
+      debugLog(`[TUIConfigManager] Successfully parsed ${path}`);
+      return parsed;
     } catch (error) {
       debugLog(`[TUIConfigManager] Error loading ${path}: ${error}`);
       return null;

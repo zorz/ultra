@@ -248,7 +248,7 @@ export class TerminalPanel extends BaseElement {
    * Scroll tabs left by configured amount.
    */
   scrollTabsLeft(): void {
-    const scrollAmount = localSessionService.getSetting('tabBar.scrollAmount') ?? 1;
+    const scrollAmount = (localSessionService.getSetting('tui.tabBar.scrollAmount') as number) ?? 1;
     this.tabScrollOffset = Math.max(0, this.tabScrollOffset - scrollAmount);
     this.ctx.markDirty();
   }
@@ -257,7 +257,7 @@ export class TerminalPanel extends BaseElement {
    * Scroll tabs right by configured amount.
    */
   scrollTabsRight(): void {
-    const scrollAmount = localSessionService.getSetting('tabBar.scrollAmount') ?? 1;
+    const scrollAmount = (localSessionService.getSetting('tui.tabBar.scrollAmount') as number) ?? 1;
 
     // Calculate max offset so that the last tab is just visible
     const maxOffset = this.calculateMaxScrollOffset();

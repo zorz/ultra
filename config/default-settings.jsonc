@@ -41,16 +41,25 @@
   // TUI Layout
   "tui.sidebar.width": 36, // Sidebar width in characters
   "tui.sidebar.visible": true, // Sidebar visibility
-  "tui.terminal.height": 10, // Terminal panel height in rows
+  "tui.terminal.height": 24, // Terminal panel height in rows
+  "tui.terminal.scrollback": 1000, // Terminal scrollback buffer size in lines
 
-  // Terminal
-  "terminal.integrated.shell": "", // Shell path (empty uses $SHELL)
-  "terminal.integrated.position": "bottom", // Panel position: "bottom", "top", "left", "right"
-  "terminal.integrated.defaultHeight": 24, // Default panel height in rows
-  "terminal.integrated.defaultWidth": 40, // Default panel width in columns
-  "terminal.integrated.scrollback": 1000, // Scrollback buffer size in lines
-  "terminal.integrated.openOnStartup": false, // Open terminal panel on startup
-  "terminal.integrated.spawnOnStartup": false, // Spawn terminal process on startup
+  // TUI Tab Bar
+  "tui.tabBar.scrollAmount": 1, // Number of tabs to scroll when using scroll buttons
+
+  // TUI Diff Viewer
+  "tui.diffViewer.autoRefresh": true, // Auto-refresh diff when file changes
+  "tui.diffViewer.showDiagnostics": true, // Show diagnostics in diff viewer
+  "tui.diffViewer.editMode": "stage-modified", // Edit save mode: "stage-modified", "save-only", "auto-stage"
+
+  // TUI Outline Panel
+  "tui.outline.collapsedOnStartup": true, // Collapse outline panel on startup
+  "tui.outline.autoFollow": true, // Auto-follow cursor position in outline
+
+  // TUI Timeline Panel
+  "tui.timeline.collapsedOnStartup": true, // Collapse timeline panel on startup
+  "tui.timeline.mode": "file", // Timeline mode: "file" (current file) or "repo" (all commits)
+  "tui.timeline.commitCount": 50, // Number of commits to show in timeline
 
   // Git
   "git.statusInterval": 500, // Git status refresh interval in milliseconds

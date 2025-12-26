@@ -555,7 +555,7 @@ export class TUIClient {
       this.configureOutlinePanel(outlinePanel);
 
       // Collapse by default if configured
-      const collapseOnStartup = this.configManager.getWithDefault('outline.collapsedOnStartup', true);
+      const collapseOnStartup = this.configManager.getWithDefault('tui.outline.collapsedOnStartup', true);
       if (collapseOnStartup) {
         sidePane.collapseAccordionSection(outlinePanelId);
       }
@@ -569,7 +569,7 @@ export class TUIClient {
       this.configureGitTimelinePanel(timelinePanel);
 
       // Collapse by default if configured
-      const collapseOnStartup = this.configManager.getWithDefault('timeline.collapsedOnStartup', true);
+      const collapseOnStartup = this.configManager.getWithDefault('tui.timeline.collapsedOnStartup', true);
       if (collapseOnStartup) {
         sidePane.collapseAccordionSection(timelinePanelId);
       }
@@ -770,7 +770,7 @@ export class TUIClient {
    */
   private configureOutlinePanel(outlinePanel: OutlinePanel): void {
     // Set auto-follow from config
-    const autoFollow = this.configManager.getWithDefault('outline.autoFollow', true);
+    const autoFollow = this.configManager.getWithDefault('tui.outline.autoFollow', true);
     outlinePanel.setAutoFollow(autoFollow);
 
     const callbacks: OutlinePanelCallbacks = {
@@ -970,7 +970,7 @@ export class TUIClient {
    */
   private configureGitTimelinePanel(timelinePanel: GitTimelinePanel): void {
     // Set mode from config
-    const mode = this.configManager.getWithDefault('timeline.mode', 'file') as TimelineMode;
+    const mode = this.configManager.getWithDefault('tui.timeline.mode', 'file') as TimelineMode;
     timelinePanel.setMode(mode);
     timelinePanel.setRepoUri(`file://${this.workingDirectory}`);
 
@@ -1040,7 +1040,7 @@ export class TUIClient {
 
     // Get relative path from workspace root
     const filePath = uri.replace(/^file:\/\//, '').replace(this.workingDirectory + '/', '');
-    const count = this.configManager.getWithDefault('timeline.commitCount', 50);
+    const count = this.configManager.getWithDefault('tui.timeline.commitCount', 50);
 
     this.gitTimelinePanel.setLoading(true);
 
@@ -1058,7 +1058,7 @@ export class TUIClient {
   private async updateTimelineRepoMode(): Promise<void> {
     if (!this.gitTimelinePanel) return;
 
-    const count = this.configManager.getWithDefault('timeline.commitCount', 50);
+    const count = this.configManager.getWithDefault('tui.timeline.commitCount', 50);
 
     this.gitTimelinePanel.setLoading(true);
 

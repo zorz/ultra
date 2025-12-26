@@ -426,7 +426,7 @@ export class Pane {
    * Scroll tabs left by the configured amount.
    */
   scrollTabsLeft(): void {
-    const scrollAmount = this.callbacks.getSetting('tabBar.scrollAmount', 1);
+    const scrollAmount = this.callbacks.getSetting('tui.tabBar.scrollAmount', 1);
     this.tabScrollOffset = Math.max(0, this.tabScrollOffset - scrollAmount);
     this.markDirty();
   }
@@ -435,7 +435,7 @@ export class Pane {
    * Scroll tabs right by the configured amount.
    */
   scrollTabsRight(): void {
-    const scrollAmount = this.callbacks.getSetting('tabBar.scrollAmount', 1);
+    const scrollAmount = this.callbacks.getSetting('tui.tabBar.scrollAmount', 1);
 
     // Calculate max offset so that the last tab is just visible
     const maxOffset = this.calculateMaxScrollOffset();
