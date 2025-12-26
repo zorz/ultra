@@ -1,0 +1,189 @@
+/**
+ * Catppuccin Frappé theme for TypeDoc
+ * https://github.com/catppuccin/catppuccin
+ */
+
+:root {
+  /* Catppuccin Frappé palette */
+  --ctp-rosewater: #f2d5cf;
+  --ctp-flamingo: #eebebe;
+  --ctp-pink: #f4b8e4;
+  --ctp-mauve: #ca9ee6;
+  --ctp-red: #e78284;
+  --ctp-maroon: #ea999c;
+  --ctp-peach: #ef9f76;
+  --ctp-yellow: #e5c890;
+  --ctp-green: #a6d189;
+  --ctp-teal: #81c8be;
+  --ctp-sky: #99d1db;
+  --ctp-sapphire: #85c1dc;
+  --ctp-blue: #8caaee;
+  --ctp-lavender: #babbf1;
+  --ctp-text: #c6d0f5;
+  --ctp-subtext1: #b5bfe2;
+  --ctp-subtext0: #a5adce;
+  --ctp-overlay2: #949cbb;
+  --ctp-overlay1: #838ba7;
+  --ctp-overlay0: #737994;
+  --ctp-surface2: #626880;
+  --ctp-surface1: #51576d;
+  --ctp-surface0: #414559;
+  --ctp-base: #303446;
+  --ctp-mantle: #292c3c;
+  --ctp-crust: #232634;
+}
+
+/* Override TypeDoc dark theme */
+:root[data-theme="dark"] {
+  --color-background: var(--ctp-base);
+  --color-background-secondary: var(--ctp-mantle);
+  --color-background-warning: var(--ctp-yellow);
+  --color-warning-text: var(--ctp-crust);
+  --color-icon-background: var(--ctp-surface0);
+  --color-accent: var(--ctp-blue);
+  --color-active-menu-item: var(--ctp-surface0);
+  --color-text: var(--ctp-text);
+  --color-text-aside: var(--ctp-subtext0);
+  --color-link: var(--ctp-blue);
+
+  --color-ts-keyword: var(--ctp-mauve);
+  --color-ts-module: var(--ctp-peach);
+  --color-ts-namespace: var(--ctp-peach);
+  --color-ts-enum: var(--ctp-teal);
+  --color-ts-enum-member: var(--ctp-teal);
+  --color-ts-variable: var(--ctp-text);
+  --color-ts-function: var(--ctp-blue);
+  --color-ts-class: var(--ctp-yellow);
+  --color-ts-interface: var(--ctp-yellow);
+  --color-ts-constructor: var(--ctp-blue);
+  --color-ts-property: var(--ctp-lavender);
+  --color-ts-method: var(--ctp-blue);
+  --color-ts-call-signature: var(--ctp-blue);
+  --color-ts-index-signature: var(--ctp-blue);
+  --color-ts-constructor-signature: var(--ctp-blue);
+  --color-ts-parameter: var(--ctp-maroon);
+  --color-ts-type-parameter: var(--ctp-yellow);
+  --color-ts-accessor: var(--ctp-blue);
+  --color-ts-get-signature: var(--ctp-blue);
+  --color-ts-set-signature: var(--ctp-blue);
+  --color-ts-type-alias: var(--ctp-yellow);
+
+  /* Code blocks */
+  --color-code-background: var(--ctp-mantle);
+  --color-code: var(--ctp-text);
+}
+
+/* Also apply to light theme for consistency */
+:root[data-theme="light"] {
+  --color-background: var(--ctp-base);
+  --color-background-secondary: var(--ctp-mantle);
+  --color-background-warning: var(--ctp-yellow);
+  --color-warning-text: var(--ctp-crust);
+  --color-icon-background: var(--ctp-surface0);
+  --color-accent: var(--ctp-blue);
+  --color-active-menu-item: var(--ctp-surface0);
+  --color-text: var(--ctp-text);
+  --color-text-aside: var(--ctp-subtext0);
+  --color-link: var(--ctp-blue);
+
+  --color-ts-keyword: var(--ctp-mauve);
+  --color-ts-module: var(--ctp-peach);
+  --color-ts-namespace: var(--ctp-peach);
+  --color-ts-enum: var(--ctp-teal);
+  --color-ts-enum-member: var(--ctp-teal);
+  --color-ts-variable: var(--ctp-text);
+  --color-ts-function: var(--ctp-blue);
+  --color-ts-class: var(--ctp-yellow);
+  --color-ts-interface: var(--ctp-yellow);
+  --color-ts-constructor: var(--ctp-blue);
+  --color-ts-property: var(--ctp-lavender);
+  --color-ts-method: var(--ctp-blue);
+  --color-ts-call-signature: var(--ctp-blue);
+  --color-ts-index-signature: var(--ctp-blue);
+  --color-ts-constructor-signature: var(--ctp-blue);
+  --color-ts-parameter: var(--ctp-maroon);
+  --color-ts-type-parameter: var(--ctp-yellow);
+  --color-ts-accessor: var(--ctp-blue);
+  --color-ts-get-signature: var(--ctp-blue);
+  --color-ts-set-signature: var(--ctp-blue);
+  --color-ts-type-alias: var(--ctp-yellow);
+
+  /* Code blocks */
+  --color-code-background: var(--ctp-mantle);
+  --color-code: var(--ctp-text);
+}
+
+/* Navigation styling */
+.site-menu {
+  background: var(--ctp-mantle);
+}
+
+.tsd-navigation a {
+  color: var(--ctp-text);
+}
+
+.tsd-navigation a:hover {
+  color: var(--ctp-blue);
+}
+
+/* Code highlighting refinements */
+code, pre {
+  background: var(--ctp-mantle) !important;
+  border-radius: 6px;
+}
+
+/* Selection color */
+::selection {
+  background: var(--ctp-surface2);
+  color: var(--ctp-text);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ctp-mantle);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--ctp-surface1);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ctp-surface2);
+}
+
+/* Header/title styling */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--ctp-text);
+}
+
+/* Links */
+a {
+  color: var(--ctp-blue);
+}
+
+a:hover {
+  color: var(--ctp-sapphire);
+}
+
+/* Badges and tags */
+.tsd-tag {
+  background: var(--ctp-surface0);
+  color: var(--ctp-text);
+}
+
+/* Search */
+.tsd-filter-input input {
+  background: var(--ctp-surface0);
+  color: var(--ctp-text);
+  border-color: var(--ctp-surface1);
+}
+
+.tsd-filter-input input:focus {
+  border-color: var(--ctp-blue);
+}

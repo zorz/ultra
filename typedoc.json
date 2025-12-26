@@ -6,6 +6,7 @@
   "out": "docs/api",
   "name": "Ultra",
   "readme": "README.md",
+  "customCss": "docs/theme/catppuccin-frappe.css",
   "includeVersion": true,
   "categorizeByGroup": true,
   "defaultCategory": "Other",

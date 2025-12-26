@@ -2,9 +2,7 @@
 
 _v0.5.0_
 
-A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and modern IDE features. Built with Bun for maximum performance. AI is integrated directly into the UX and forms a core part of Ultra's value.
-
-
+A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and integrated AI capabilities. Built with Bun for maximum performance.
 
 ## Features
 
@@ -18,27 +16,36 @@ A terminal-native code editor with Sublime Text ergonomics, VS Code configuratio
 ### IDE Features
 - **Syntax Highlighting** - Shiki-powered highlighting with TextMate grammar support
 - **LSP Integration** - Language Server Protocol support for completions, hover, go-to-definition
-- **Git Integration** - Inline diff view, staging, gutter indicators, branch management
+- **Git Integration** - Inline diff view, staging, gutter indicators, branch management, timeline view
 - **File Tree** - Sidebar navigation with git status indicators
-- **Integrated Terminal** - Built-in terminal with PTY support
+- **Outline Panel** - Symbol navigation with LSP-powered document outline
+- **Integrated Terminal** - Built-in terminal with full PTY support
 - **Minimap** - Code overview with scroll position indicator
+- **Search** - Project-wide search with regex support
+
+### AI Integration
+- **Claude Code** - Integrated Claude AI chat with session persistence
+- **Codex** - OpenAI Codex integration for code assistance
+- **AI Terminal** - Dedicated AI chat panel with context awareness
 
 ### User Experience
 - **VS Code Keybindings** - Familiar keyboard shortcuts out of the box
-- **VS Code Themes** - Full compatibility with VS Code color themes
+- **VS Code Themes** - Full compatibility with VS Code color themes (Catppuccin, One Dark, etc.)
 - **Mouse Support** - Click positioning, drag selection, scroll wheel
-- **Command Palette** - Full API access via fuzzy-searchable command palette
+- **Command Palette** - Fuzzy-searchable command palette (`Ctrl+Shift+P`)
 - **Split Panes** - Horizontal and vertical editor splits
 - **Tab Management** - Multiple document tabs with dirty indicators
+- **Session Persistence** - Automatic session save/restore
 
 ### Configuration
-- **Hot-Reloadable Settings** - JSON-based configuration that updates live
-- **Custom Keybindings** - Full keybinding customization via JSON
+- **Hot-Reloadable Settings** - JSONC-based configuration that updates live
+- **Custom Keybindings** - Full keybinding customization with context-aware "when" clauses
 - **Per-Language Settings** - Language-specific editor configurations
 
 ## Requirements
 
 - [Bun](https://bun.sh) v1.0 or later
+- macOS, Linux, or Windows with WSL
 
 ## Installation
 
@@ -65,10 +72,7 @@ bun run dev path/to/file.ts
 # Open a directory
 bun run dev /path/to/project
 
-# Run with hot reload
-bun --watch run src/index.ts file.ts
-
-# Enable debug logging
+# Enable debug logging (writes to debug.log)
 bun run dev --debug
 ```
 
@@ -82,10 +86,17 @@ bun run build
 ./ultra file.ts
 ```
 
-### Type Checking
+### Other Commands
 
 ```bash
+# Type checking
 bun run typecheck
+
+# Run tests
+bun test
+
+# Generate API documentation
+bun run docs
 ```
 
 ## Keyboard Shortcuts
@@ -111,8 +122,6 @@ bun run typecheck
 | `Ctrl+A` | Select all |
 | `Ctrl+D` | Select word / Add cursor at next occurrence |
 | `Ctrl+/` | Toggle line comment |
-| `Ctrl+]` | Indent line |
-| `Ctrl+[` | Outdent line |
 
 ### Navigation
 | Shortcut | Action |
@@ -120,14 +129,9 @@ bun run typecheck
 | `Ctrl+G` | Go to line |
 | `Ctrl+P` | Quick open file |
 | `Ctrl+Shift+P` | Command palette |
-| `Ctrl+Home` | Go to start of file |
-| `Ctrl+End` | Go to end of file |
-| `Home` | Go to start of line |
-| `End` | Go to end of line |
-| `Ctrl+Left` | Move word left |
-| `Ctrl+Right` | Move word right |
-| `F12` | Go to definition |
-| `Shift+F12` | Find references |
+| `Ctrl+Shift+O` | Go to symbol |
+| `Ctrl+K` | Show hover info |
+| `Ctrl+Shift+K` | Go to definition |
 
 ### Multi-Cursor
 | Shortcut | Action |
@@ -140,192 +144,151 @@ bun run typecheck
 ### View
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+B` | Toggle sidebar |
-| `Ctrl+\`` | Toggle terminal |
-| `Ctrl+Shift+G` | Toggle git panel |
-| `Ctrl+Tab` | Next tab |
-| `Ctrl+Shift+Tab` | Previous tab |
-| `Ctrl+\` | Split editor |
-| `Ctrl+K Ctrl+[` | Fold region |
-| `Ctrl+K Ctrl+]` | Unfold region |
+| `Ctrl+Shift+B` | Toggle sidebar |
+| `` Ctrl+` `` | Toggle terminal |
+| `Ctrl+Shift+G` | Focus git panel |
+| `Ctrl+Tab` | Next pane |
+| `Ctrl+Shift+Tab` | Previous pane |
+| `Ctrl+\` | Split editor vertically |
 
 ### Search
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+F` | Find in file |
 | `Ctrl+H` | Find and replace |
+| `Ctrl+Shift+F` | Find in all files |
 | `F3` | Find next |
 | `Shift+F3` | Find previous |
+
+### Sidebar Panels (when focused)
+| Shortcut | Action |
+|----------|--------|
+| `j` / `Arrow Down` | Move down |
+| `k` / `Arrow Up` | Move up |
+| `Enter` / `Space` | Open/Select |
+| `h` / `Arrow Left` | Collapse |
+| `l` / `Arrow Right` | Expand |
 
 ## Project Structure
 
 ```
-ultra-editor/
+ultra/
 ├── src/
-│   ├── index.ts              # Entry point
-│   ├── app.ts                # Main application orchestrator
-│   ├── constants.ts          # Centralized configuration constants
-│   ├── core/
-│   │   ├── buffer.ts         # Piece table text buffer
-│   │   ├── cursor.ts         # Multi-cursor management
-│   │   ├── document.ts       # Document model with file I/O
-│   │   ├── undo.ts           # Undo/redo system
-│   │   ├── fold.ts           # Code folding manager
-│   │   ├── event-emitter.ts  # Typed event emitter base class
-│   │   ├── result.ts         # Result type for error handling
-│   │   ├── cache.ts          # Cache manager with TTL
-│   │   ├── errors.ts         # Error handling infrastructure
-│   │   ├── auto-indent.ts    # Auto-indentation
-│   │   ├── auto-pair.ts      # Auto-pairing brackets
-│   │   └── bracket-match.ts  # Bracket matching
-│   ├── ui/
-│   │   ├── renderer.ts       # Terminal rendering engine
-│   │   ├── render-scheduler.ts # Priority-based render batching
-│   │   ├── colors.ts         # Shared color utilities
-│   │   ├── mouse.ts          # Mouse event handling
-│   │   ├── components/
-│   │   │   ├── pane.ts       # Main editor pane
-│   │   │   ├── pane-manager.ts # Multi-pane orchestration
-│   │   │   ├── pane/         # Decomposed pane components
-│   │   │   │   ├── pane-gutter.ts
-│   │   │   │   └── inline-diff.ts
-│   │   │   ├── tab-bar.ts
-│   │   │   ├── status-bar.ts
-│   │   │   ├── file-tree.ts
-│   │   │   ├── git-panel.ts
-│   │   │   ├── terminal-pane.ts
-│   │   │   ├── minimap.ts
-│   │   │   ├── command-palette.ts
-│   │   │   ├── search-widget.ts
-│   │   │   └── ...
-│   │   └── themes/
-│   │       └── theme-loader.ts
-│   ├── state/
-│   │   └── editor-state.ts   # Centralized state management
-│   ├── input/
-│   │   ├── commands.ts       # Command registry
-│   │   ├── keymap.ts         # Keybinding system
-│   │   └── keybindings-loader.ts
-│   ├── config/
-│   │   ├── settings.ts       # Settings manager
-│   │   ├── settings-loader.ts
-│   │   └── defaults.ts       # Default themes and settings
-│   ├── terminal/
-│   │   ├── pty.ts            # PTY management
-│   │   └── input.ts          # Terminal input handling
-│   └── features/
-│       ├── syntax/           # Shiki syntax highlighting
-│       ├── lsp/              # Language Server Protocol
-│       ├── search/           # File and project search
-│       └── git/              # Git integration
+│   ├── index.ts                 # Entry point
+│   ├── constants.ts             # Centralized configuration constants
+│   ├── debug.ts                 # Debug logging utility
+│   ├── core/                    # Core editing primitives
+│   │   ├── buffer.ts            # Piece table text buffer
+│   │   ├── cursor.ts            # Multi-cursor management
+│   │   ├── undo.ts              # Undo/redo system
+│   │   ├── fold.ts              # Code folding manager
+│   │   └── ...
+│   ├── services/                # ECP Services (modular backends)
+│   │   ├── document/            # Buffer, cursor, undo operations
+│   │   ├── file/                # File system abstraction
+│   │   ├── git/                 # Version control
+│   │   ├── lsp/                 # Language server integration
+│   │   ├── session/             # Settings, keybindings, state
+│   │   ├── syntax/              # Syntax highlighting
+│   │   ├── search/              # Project-wide search
+│   │   └── terminal/            # PTY management
+│   ├── clients/
+│   │   └── tui/                 # Terminal UI client
+│   │       ├── client/          # Main TUI orchestrator
+│   │       ├── elements/        # UI elements (editor, terminal, panels)
+│   │       ├── overlays/        # Modal dialogs and popups
+│   │       ├── layout/          # Pane and split management
+│   │       ├── config/          # TUI configuration
+│   │       └── rendering/       # Screen buffer and renderer
+│   ├── terminal/                # PTY backends
+│   └── config/                  # Global configuration
 ├── config/
-│   ├── default-settings.json
-│   ├── default-keybindings.json
-│   └── themes/
-├── docs/
-│   └── REFACTORING-RECOMMENDATIONS.md
-├── package.json
-└── tsconfig.json
+│   ├── default-settings.jsonc   # Default settings
+│   ├── default-keybindings.jsonc # Default keybindings
+│   └── themes/                  # Color themes
+├── tests/
+│   ├── unit/                    # Unit tests
+│   └── integration/             # Integration tests
+└── docs/                        # Documentation
 ```
 
 ## Configuration
 
-Ultra uses VS Code-compatible configuration files:
+Ultra stores configuration in `~/.ultra/`:
 
-### Settings (`~/.config/ultra/settings.json`)
+### Settings (`~/.ultra/settings.jsonc`)
 
-```json
+```jsonc
 {
+  // Editor
   "editor.tabSize": 2,
   "editor.insertSpaces": true,
-  "editor.wordWrap": "off",
+  "editor.wordWrap": "on",
   "editor.lineNumbers": "on",
-  "editor.cursorStyle": "line",
-  "editor.cursorBlinking": "blink",
   "editor.minimap.enabled": true,
   "editor.folding": true,
-  "workbench.colorTheme": "One Dark Pro"
+
+  // Theme
+  "workbench.colorTheme": "catppuccin-frappe",
+
+  // Sidebar
+  "tui.sidebar.width": 36,
+  "tui.sidebar.visible": true,
+  "tui.sidebar.location": "left",
+
+  // Terminal
+  "tui.terminal.height": 24,
+
+  // AI
+  "ai.defaultProvider": "claude-code"
 }
 ```
 
-### Keybindings (`~/.config/ultra/keybindings.json`)
+### Keybindings (`~/.ultra/keybindings.jsonc`)
 
-```json
+```jsonc
 [
-  {
-    "key": "ctrl+s",
-    "command": "file.save"
-  },
-  {
-    "key": "ctrl+shift+p",
-    "command": "command-palette.show"
-  },
-  {
-    "key": "ctrl+`",
-    "command": "terminal.toggle"
-  }
+  // Override default keybindings
+  { "key": "ctrl+s", "command": "file.save" },
+  { "key": "ctrl+shift+p", "command": "workbench.commandPalette" },
+
+  // Context-aware keybindings
+  { "key": "s", "command": "gitPanel.stage", "when": "gitPanelFocus" },
+  { "key": "Enter", "command": "fileTree.open", "when": "fileTreeFocus" }
 ]
 ```
 
 ### Themes
 
-Place VS Code-compatible theme JSON files in `~/.config/ultra/themes/`.
-
-Built-in themes include:
-- One Dark Pro
-- GitHub Dark
+Built-in themes:
+- Catppuccin Frappé (default)
 - Catppuccin Mocha
-- Solarized Dark
-- Nord
+- Catppuccin Macchiato
+- Catppuccin Latte
+- One Dark
 
 ## Architecture
 
-Ultra is built on several key architectural patterns:
+Ultra uses an **Editor Command Protocol (ECP)** architecture:
 
-- **Piece Table Buffer**: Efficient text storage using a piece table data structure
+- **Services**: Modular backends (Document, File, Git, LSP, Session, Syntax, Terminal)
+- **Clients**: UI implementations (TUI client, future GUI/remote clients)
+- **Abstracted I/O**: File system, git, etc. are pluggable backends
+
+Key patterns:
+- **Piece Table Buffer**: Efficient text storage
 - **Event-Driven UI**: Components communicate via typed event emitters
-- **Centralized State**: EditorStateManager provides a single source of truth
 - **Priority Rendering**: RenderScheduler batches updates by priority
-- **Result Types**: Explicit error handling without exceptions
-- **Cache Management**: Coordinated caching with TTL and dependency tracking
+- **Dirty Tracking**: Screen buffer tracks changed cells for efficient rendering
 
-## Development Roadmap
+## Development
 
-- [x] **Phase 1**: Core Editor
-  - [x] Piece table buffer
-  - [x] Multi-cursor editing
-  - [x] Basic UI (editor, tabs, status bar)
-  - [x] Keybinding system
-  - [x] File I/O
-
-- [x] **Phase 2**: Enhanced Editing
-  - [x] Syntax highlighting (Shiki)
-  - [x] Auto-indent
-  - [x] Bracket matching & auto-pairing
-  - [x] Code folding
-  - [x] Word wrap
-
-- [x] **Phase 3**: IDE Features
-  - [x] LSP integration
-  - [x] File tree sidebar
-  - [x] Git integration with inline diff
-  - [x] Integrated terminal
-  - [x] Split panes
-  - [x] Minimap
-
-- [ ] **Phase 4**: Polish & Performance
-  - [ ] Project-wide search
-  - [ ] Symbol search
-  - [ ] Performance profiling
-  - [ ] Plugin system
-
-- [ ] **Phase 5**: AI Integration
-  - [ ] Claude API integration
-  - [ ] Inline code suggestions
-  - [ ] Chat panel
-  - [ ] Context-aware completions
+See [CLAUDE.md](./CLAUDE.md) for development guidelines including:
+- Code patterns and conventions
+- Service architecture
+- Testing requirements
+- Debugging tips
 
 ## License
 
 Copyright 2025, Zorz LLC, All Rights Reserved
-
