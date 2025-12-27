@@ -351,60 +351,88 @@ export class StatusBar {
   private renderCollapsed(buffer: ScreenBuffer): void {
     const y = this.bounds.y;
     const { width } = this.bounds;
+    const startX = this.bounds.x;
 
     const bg = this.callbacks.getThemeColor('statusBar.background', '#007acc');
     const fg = this.callbacks.getThemeColor('statusBar.foreground', '#ffffff');
     const separatorChar = '│';
 
-    // Fill background - explicitly set all attributes to ensure clean state
-    for (let x = this.bounds.x; x < this.bounds.x + width; x++) {
-      buffer.set(x, y, { char: ' ', fg, bg, bold: false, dim: false, italic: false, underline: false, strikethrough: false });
+    // Fill entire background first with a single consistent color
+    const emptyCell = { char: ' ', fg, bg, bold: false, dim: false, italic: false, underline: false, strikethrough: false };
+    for (let x = startX; x < startX + width; x++) {
+      buffer.set(x, y, emptyCell);
     }
 
-    // Render left-aligned items with separators
-    let leftX = this.bounds.x;
+    // Build left side string with separators (compact: single space between items)
     const leftItems = this.getItemsSorted('left');
+    let leftStr = '';
     for (let idx = 0; idx < leftItems.length; idx++) {
       const item = leftItems[idx]!;
-      if (leftX >= this.bounds.x + width - 10) break;
-
-      const text = ` ${item.content} `;
-      for (let i = 0; i < text.length && leftX + i < this.bounds.x + width; i++) {
-        buffer.set(leftX + i, y, { char: text[i]!, fg, bg, bold: false, dim: false, italic: false, underline: false, strikethrough: false });
-      }
-      leftX += text.length;
-
-      // Add separator after item (except last)
-      if (idx < leftItems.length - 1 && leftX < this.bounds.x + width) {
-        buffer.set(leftX, y, { char: separatorChar, fg, bg, bold: false, dim: true, italic: false, underline: false, strikethrough: false });
-        leftX++;
+      if (idx === 0) {
+        leftStr += ` ${item.content}`;
+      } else {
+        leftStr += ` ${separatorChar} ${item.content}`;
       }
     }
 
-    // Render right-aligned items with separators
-    let rightX = this.bounds.x + width - 1;
-    const rightItems = this.getItemsSorted('right').reverse();
+    // Build right side string with separators (compact: single space between items)
+    const rightItems = this.getItemsSorted('right');
+    let rightStr = '';
     for (let idx = 0; idx < rightItems.length; idx++) {
       const item = rightItems[idx]!;
-      const text = ` ${item.content} `;
-
-      // Account for separator before item (except first)
-      const separatorWidth = idx > 0 ? 1 : 0;
-      rightX -= text.length + separatorWidth;
-
-      if (rightX < leftX + 3) break;
-
-      // Add separator before item (except first)
-      if (idx > 0) {
-        buffer.set(rightX, y, { char: separatorChar, fg, bg, bold: false, dim: true, italic: false, underline: false, strikethrough: false });
-      }
-
-      // Render item content
-      const textStart = rightX + separatorWidth;
-      for (let i = 0; i < text.length; i++) {
-        buffer.set(textStart + i, y, { char: text[i]!, fg, bg, bold: false, dim: false, italic: false, underline: false, strikethrough: false });
+      if (idx === 0) {
+        rightStr += `${item.content}`;
+      } else {
+        rightStr += ` ${separatorChar} ${item.content}`;
       }
     }
+    if (rightStr) {
+      rightStr += ' '; // Trailing space for right side
+    }
+
+    // Calculate right side starting position
+    const rightStartX = startX + width - this.getDisplayWidth(rightStr);
+
+    // Render left side (use writeString for proper Unicode handling)
+    if (leftStr) {
+      buffer.writeString(startX, y, leftStr, fg, bg);
+    }
+
+    // Render right side if it doesn't overlap with left
+    const leftEndX = startX + this.getDisplayWidth(leftStr);
+    if (rightStr && rightStartX >= leftEndX + 1) {
+      buffer.writeString(rightStartX, y, rightStr, fg, bg);
+    }
+  }
+
+  /**
+   * Get display width of a string (handles emoji/wide chars).
+   */
+  private getDisplayWidth(str: string): number {
+    let width = 0;
+    for (const char of str) {
+      const code = char.codePointAt(0) ?? 0;
+      if (code < 32) continue; // Control chars
+      if (code < 127) { width++; continue; } // ASCII
+      // Emoji and CJK are 2 cells wide
+      if (
+        (code >= 0x1F300 && code <= 0x1F9FF) ||
+        (code >= 0x2600 && code <= 0x26FF) ||
+        (code >= 0x2700 && code <= 0x27BF) ||
+        (code >= 0x1F600 && code <= 0x1F64F) ||
+        (code >= 0x1F680 && code <= 0x1F6FF) ||
+        (code >= 0x1F1E0 && code <= 0x1F1FF) ||
+        (code >= 0x4E00 && code <= 0x9FFF) ||
+        (code >= 0x3400 && code <= 0x4DBF) ||
+        (code >= 0xF900 && code <= 0xFAFF) ||
+        (code >= 0xFF00 && code <= 0xFFEF)
+      ) {
+        width += 2;
+      } else {
+        width++;
+      }
+    }
+    return width;
   }
 
   private renderExpanded(buffer: ScreenBuffer): void {
