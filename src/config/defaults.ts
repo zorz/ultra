@@ -613,6 +613,7 @@ export const defaultSettings: Record<string, any> = {
   "tui.sidebar.focusedBackground": "#2d3139",
   "tui.terminal.height": 24,
   "tui.terminal.scrollback": 1000,
+  "tui.fileTree.showGitStatus": true,
   "tui.tabBar.scrollAmount": 1,
   "tui.diffViewer.autoRefresh": true,
   "tui.diffViewer.showDiagnostics": true,

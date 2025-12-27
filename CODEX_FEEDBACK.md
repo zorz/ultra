@@ -1,59 +1,58 @@
 # CODEX Feedback for Ultra 1.0
 
 ## Scope & Approach
-Reviewed changes since commit `5bec89f` plus the current working tree (`src/clients/tui/elements/ai-terminal-chat.ts`, `src/terminal/screen-buffer.ts`). No tests were executed.
+Reviewed the current `ux-fixes-20251226.3` worktree with a focus on the new ECP server, git timeline UI, AI/terminal tooling, and configuration plumbing. No automated tests were run in this pass.
 
 ## Key Findings & Risks (Ordered by Severity)
 
-### 1) Git timeline uses workspace-relative paths, not repo-relative
-- **Where**: `src/clients/tui/client/tui-client.ts:905`, `src/clients/tui/client/tui-client.ts:949`.
-- **What**: `loadTimelineForEditor` strips `this.workingDirectory` to build `filePath`, then passes that to `gitCliService.fileLog` and `gitCliService.show`. Those helpers expect paths relative to the repo root.
-- **Impact**: If the workspace is a subdirectory of a repo, timeline history is empty and `openFileAtCommit` fails to resolve file content. This is a functional break for nested workspaces.
-- **Recommendation**: Resolve `repoRoot = await gitCliService.getRoot(this.workingDirectory)` and use `path.relative(repoRoot, absoluteFilePath)` before calling `fileLog/show`. Handle the `null` root case gracefully.
+### 1) ECP session APIs never persist to disk
+- **Where**: `src/ecp/server.ts:74-101`, `src/services/session/local.ts:257-300`.
+- **What**: `ECPServer` constructs `LocalSessionService` but never calls `setSessionPaths`, so `saveSession/listSessions/tryLoadLastSession` skip disk writes because `sessionPaths` stays `null`.
+- **Impact**: Remote clients using ECP think sessions were saved, yet nothing hits disk. Session restores, `session/list`, and `session/delete` silently fail after the process restarts.
+- **Recommendation**: Accept session path settings in `ECPServerOptions` (defaulting to `~/.ultra/sessions/...`) and call `sessionService.setSessionPaths()` before exposing the adapter. Add coverage around `session/save` to guard against future regressions.
 
-### 2) "Open file at commit" creates an untracked editor with no URI
-- **Where**: `src/clients/tui/client/tui-client.ts:949`.
-- **What**: `openFileAtCommit` creates a `DocumentEditor`, sets content, and focuses it without a URI or registration in `openDocuments`.
-- **Impact**: Save flows, LSP integration, status bar metadata, and git indicators are inconsistent. Users can edit content with no persistence model.
-- **Recommendation**: Treat commit views as read-only or register a virtual URI (for example, `ultra://git/<hash>/<path>`) and ensure save attempts are handled intentionally.
+### 2) Git timeline still uses workspace-relative paths
+- **Where**: `src/clients/tui/client/tui-client.ts:1067-1076`.
+- **What**: `loadTimelineForEditor` strips `this.workingDirectory` from document URIs and hands the remainder to `gitCliService.fileLog/show`. That only works when the workspace root *is* the repo root; nested workspaces produce invalid repo-relative paths.
+- **Impact**: In monorepos the timeline always renders empty and “open file @ commit” fails with `fatal: Path '...' does not exist in 'commit'`. Users cannot inspect history for files outside the repo root.
+- **Recommendation**: Resolve the actual repo root via `gitCliService.getRoot`, compute `relative(root, filePath)`, and fall back gracefully when the file is outside the repo. Add a regression test for workspaces rooted below the repo.
 
-### 3) PTY cursor visibility is ignored when rendering terminals
-- **Where**: `src/clients/tui/elements/terminal-session.ts:813`.
-- **What**: The screen buffer tracks DECTCEM, but `TerminalSession` always renders a cursor when focused.
-- **Impact**: Apps that intentionally hide the cursor (fzf, htop, full-screen TUIs) will show a cursor block, causing visual glitches and potential alignment issues.
-- **Recommendation**: Gate cursor rendering on `this.pty.isCursorVisible()` (or equivalent) when using the PTY buffer.
+### 3) Settings schema drops the `tui.` prefix
+- **Where**: `src/services/session/schema.ts:200-250`.
+- **What**: The schema entries for tab bar, outline, and timeline settings are named `tabBar.scrollAmount`, `outline.*`, `timeline.*` instead of `tui.tabBar.scrollAmount`, `tui.outline.*`, `tui.timeline.*`.
+- **Impact**: `validateSetting` rejects the real keys (`tui.outline.autoFollow`, etc.), so ECP `config/set`, CLI tools, or any consumer of `SessionService` cannot change those settings (“Unknown setting”). Defaults also drift if schema-derived helpers are ever used.
+- **Recommendation**: Rename the schema properties to match the actual keys (or add aliases) and add validation tests for the `tui.*` settings so the mismatch cannot reappear.
 
-### 4) Integrated terminal forces `-il` flags for all shells
-- **Where**: `src/terminal/backends/node-pty.ts:57`, `src/terminal/pty.ts:87`.
-- **What**: Both PTY backends now default to `-il` regardless of shell.
-- **Impact**: Shells that do not support `-il` (or expect different flags) may fail to spawn. Users also cannot override args for the bun-pty path.
-- **Recommendation**: Add a `terminal.integrated.shellArgs` setting (or detect `zsh`/`bash` and only apply `-il` there). Preserve user-configured args for both backends.
+### 4) Commit viewers create untracked editors with no URI
+- **Where**: `src/clients/tui/client/tui-client.ts:1099-1123`.
+- **What**: `openFileAtCommit` creates a `DocumentEditor`, injects text, and focuses it without assigning a URI or marking the buffer read-only.
+- **Impact**: The editor status bar shows “Untitled”, save attempts overwrite nothing, diagnostics/LSP ignore the document, and users can edit a historical snapshot believing it’s tied to a file. The buffer is also invisible to session restore.
+- **Recommendation**: Use a virtual URI like `ultra://git/<hash>/<relativePath>` and call `editor.setUri()` with a read-only flag or wiring to a temp file. Hook save attempts to reopen the diff or warn the user.
 
-### 5) Scroll region support does not constrain IL/DL to margins
-- **Where**: `src/terminal/screen-buffer.ts:446`, `src/terminal/screen-buffer.ts:457`.
-- **What**: `insertLines` and `deleteLines` operate on the full buffer and ignore the current scroll region set by DECSTBM.
-- **Impact**: TUIs that rely on fixed headers/footers can corrupt lines outside the scroll region. This undermines the new DECSTBM support for oh-my-zsh and similar prompts.
-- **Recommendation**: Apply IL/DL within `scrollTop` and `scrollBottom` when the cursor is inside the region, and avoid mutating lines outside those margins.
+### 5) Terminal backends force `-il` shell flags with no override
+- **Where**: `src/terminal/pty.ts:97-103`, `src/terminal/backends/node-pty.ts:56-61`.
+- **What**: Both bun-pty and node-pty backends append `['-il']` regardless of the configured shell, and `PTYBackendOptions` exposes no setting to change or remove the flags.
+- **Impact**: Shells that don’t support `-il` (fish, nu, Windows shells, custom binaries) fail to spawn. Even supported shells can’t run with user-specified args (e.g., login vs. non-login) because the code overwrites them.
+- **Recommendation**: Respect `options.args`, add a `terminal.integrated.shellArgs` setting, and default to `['-il']` only when the shell is zsh/bash. Validate by spawning at least one non-POSIX shell in CI.
 
-### 6) Outline setting `outline.showIcons` is defined but unused
-- **Where**: `src/config/settings.ts:38`, `src/services/session/schema.ts:233`, `src/clients/tui/elements/outline-panel.ts:725`.
-- **What**: The setting exists, but the outline renderer always shows icons and expanders.
-- **Impact**: Users can toggle the setting but see no effect, which undermines configuration trust.
-- **Recommendation**: Wire the setting into `OutlinePanel` rendering or remove the setting until it is supported.
+### 6) `tui.outline.showIcons` setting still unused
+- **Where**: Setting definition `src/config/settings.ts:38-42`; rendering `src/clients/tui/elements/outline-panel.ts:716-780`.
+- **What**: The Outline panel always renders the symbol icon (`SYMBOL_ICONS`), and no code path consults `tui.outline.showIcons`.
+- **Impact**: Users editing settings see no effect, which undermines trust and clutters the settings schema. Also, ECP/CLI tooling will continue to reject this setting because of the schema bug above.
+- **Recommendation**: Gate the icon drawing on `this.ctx.getSetting('tui.outline.showIcons', true)` (and adjust layout when icons are hidden) or remove the setting entirely until it’s supported.
 
-### 7) AITerminalChat overlays a cursor even when ink owns it
-- **Where**: `src/clients/tui/elements/ai-terminal-chat.ts:392`.
-- **What**: `AITerminalChat` draws a cursor block unconditionally when focused. Ink-based apps (Claude/Gemini, and likely Codex) hide the terminal cursor and draw their own caret as styled characters.
-- **Impact**: Cursor appears in the wrong place or flickers between render passes, because PTY cursor coordinates reflect ink’s paint operations, not the logical input location.
-- **Recommendation**: Skip overlay cursor rendering for ink providers, or gate it on `this.pty.isCursorVisible()`. That lets ink’s own cursor glyph remain the only caret and avoids mispositioned overlays. Consider a `usesInkCursor()` hook on subclasses so non-ink providers keep the overlay behavior.
+### 7) Tab-bar scroll amount ignores user settings
+- **Where**: `src/clients/tui/elements/terminal-panel.ts:250-266`, `src/clients/tui/client/tui-client.ts:290-302`.
+- **What**: The terminal panel directly calls `localSessionService.getSetting('tui.tabBar.scrollAmount')`, but `LocalSessionService` never ingests values from `TUIConfigManager` (no `setSetting`/`updateSettings` calls). All other UI components read from the config manager provided via `ElementContext`.
+- **Impact**: Editing `tui.tabBar.scrollAmount` in settings changes editor tab scrolling but not the terminal tabs, so the UI behaves inconsistently and user expectations are violated.
+- **Recommendation**: Use the element context (`this.ctx.getSetting`) for the tab scroll amount, or synchronize `localSessionService` with the loaded settings once during startup.
 
 ## Coverage & Testing Gaps
-- No tests added for the new outline/timeline panels, tab bar scrolling, or PTY ANSI sequences (DECSTBM, IL/DL, ICH/DCH/ECH). These changes are stateful and UI-heavy; targeted tests would reduce regression risk.
+- The newly introduced ECP stack (document/file/git/session/terminal adapters) lacks integration tests; the missing session-path wiring would have been caught by a simple `session/save` → restart → `session/list` test.
+- Git timeline regressions still have no automated coverage for nested repos or commit-open flows.
+- PTY backends don’t have even smoke tests for spawning non-zsh shells, so the forced `-il` regression went unnoticed.
 
-## Suggested Next Steps (Actionable)
-1. Normalize git timeline paths by resolving repo root and using repo-relative file paths.
-2. Decide on a read-only or virtual-document model for commit views and align save/LSP behavior.
-3. Respect PTY cursor visibility when rendering terminal sessions.
-4. Make shell args configurable or conditional so non-zsh shells can spawn reliably.
-5. Constrain IL/DL to the active scroll region and add tests for DECSTBM interactions.
-6. Wire `outline.showIcons` into rendering or remove it until it is supported.
+## Suggested Next Steps
+1. Fix the ECP session-path plumbing and extend the E2E ECP tests to cover session save/load/list flows.
+2. Normalize git timeline paths using the repo root, and add a regression test so nested workspaces don’t break again.
+3. Audit configuration handling so schema keys, context getters, and UI usage stay in sync (outline/timeline/tabBar settings plus terminal tab scroll).

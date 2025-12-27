@@ -105,6 +105,13 @@ export interface TUISettings extends Partial<EditorSettings> {
   'git.inlineDiff.contextLines'?: number;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // File Tree
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Show git status colors on files in the file tree */
+  'tui.fileTree.showGitStatus'?: boolean;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // AI
   // ─────────────────────────────────────────────────────────────────────────
 

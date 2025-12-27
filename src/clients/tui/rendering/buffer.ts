@@ -15,6 +15,49 @@ import {
 } from '../types.ts';
 
 // ============================================
+// Display Width Utilities
+// ============================================
+
+/**
+ * Get the display width of a character in terminal cells.
+ * Most emojis are 2 cells wide, ASCII chars are 1 cell.
+ */
+function getCharDisplayWidth(char: string): number {
+  const code = char.codePointAt(0) ?? 0;
+
+  // ASCII control chars
+  if (code < 32) return 0;
+
+  // Basic ASCII (most common case)
+  if (code < 127) return 1;
+
+  // Common emoji ranges (simplified - most emojis are 2 cells wide)
+  if (
+    (code >= 0x1F300 && code <= 0x1F9FF) || // Misc Symbols, Emoticons, etc.
+    (code >= 0x2600 && code <= 0x26FF) ||   // Misc Symbols
+    (code >= 0x2700 && code <= 0x27BF) ||   // Dingbats
+    (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
+    (code >= 0x1F680 && code <= 0x1F6FF) || // Transport/Map
+    (code >= 0x1F1E0 && code <= 0x1F1FF)    // Flags
+  ) {
+    return 2;
+  }
+
+  // CJK characters (2 cells wide)
+  if (
+    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
+    (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
+    (code >= 0xF900 && code <= 0xFAFF) ||   // CJK Compatibility
+    (code >= 0xFF00 && code <= 0xFFEF)      // Fullwidth Forms
+  ) {
+    return 2;
+  }
+
+  // Default to 1 for other characters
+  return 1;
+}
+
+// ============================================
 // ScreenBuffer Class
 // ============================================
 
@@ -134,6 +177,7 @@ export class ScreenBuffer {
 
   /**
    * Write a string starting at position.
+   * Properly handles Unicode characters including emoji (which may be 2 cells wide).
    */
   writeString(
     x: number,
@@ -150,14 +194,21 @@ export class ScreenBuffer {
     } = {}
   ): number {
     let written = 0;
-    for (let i = 0; i < text.length; i++) {
-      const px = x + i;
+    let px = x;
+
+    // Use for...of to properly iterate Unicode code points (not UTF-16 code units)
+    for (const char of text) {
       if (px >= this.width) break;
-      if (px < 0) continue;
+      if (px < 0) {
+        px += getCharDisplayWidth(char);
+        continue;
+      }
       if (y < 0 || y >= this.height) continue;
 
+      const charWidth = getCharDisplayWidth(char);
+
       this.set(px, y, {
-        char: text[i]!,
+        char,
         fg,
         bg,
         bold: options.bold,
@@ -167,6 +218,23 @@ export class ScreenBuffer {
         dim: options.dim,
       });
       written++;
+      px++;
+
+      // For wide characters (emoji, CJK), fill the next cell with empty
+      // to prevent it from being overwritten with stale content
+      if (charWidth === 2 && px < this.width) {
+        this.set(px, y, {
+          char: '', // Empty placeholder for second cell of wide char
+          fg,
+          bg,
+          bold: options.bold,
+          italic: options.italic,
+          underline: options.underline,
+          strikethrough: options.strikethrough,
+          dim: options.dim,
+        });
+        px++;
+      }
     }
     return written;
   }

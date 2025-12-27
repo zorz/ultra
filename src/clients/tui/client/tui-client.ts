@@ -2368,9 +2368,78 @@ export class TUIClient {
         merging: false,
         rebasing: false,
       });
+      // Also update file tree with git status if enabled
+      if (this.configManager.getWithDefault('tui.fileTree.showGitStatus', true)) {
+        this.updateFileTreeGitStatus(status);
+      }
     } catch (error) {
       this.log(`Failed to load git status: ${error}`);
     }
+  }
+
+  /**
+   * Update file tree nodes with git status colors.
+   */
+  private updateFileTreeGitStatus(status: import('../../../services/git/types.ts').GitStatus): void {
+    if (!this.fileTree) return;
+
+    // Build a map of relative paths to git status codes
+    const statusMap = new Map<string, string>();
+
+    // Add staged files (prefer staged status)
+    for (const file of status.staged) {
+      statusMap.set(file.path, file.status);
+    }
+
+    // Add unstaged files (only if not already staged)
+    for (const file of status.unstaged) {
+      if (!statusMap.has(file.path)) {
+        statusMap.set(file.path, file.status);
+      }
+    }
+
+    // Add untracked files
+    for (const path of status.untracked) {
+      statusMap.set(path, '?');
+    }
+
+    // Update file tree nodes recursively
+    const updateNode = (node: FileNode, parentPath: string): void => {
+      // Calculate relative path from workspace root
+      const relativePath = node.path.replace(this.workingDirectory + '/', '');
+
+      // Check if this file has git status
+      const gitStatus = statusMap.get(relativePath);
+      if (gitStatus) {
+        node.gitStatus = gitStatus;
+      } else {
+        // Clear git status if file is now clean
+        node.gitStatus = undefined;
+      }
+
+      // For directories, check if any children have status
+      if (node.isDirectory && node.children) {
+        let hasModifiedChild = false;
+        for (const child of node.children) {
+          updateNode(child, node.path);
+          if (child.gitStatus) {
+            hasModifiedChild = true;
+          }
+        }
+        // Optionally mark directory if it contains modified files
+        if (hasModifiedChild && !node.gitStatus) {
+          node.gitStatus = 'M'; // Mark as modified if children are modified
+        }
+      }
+    };
+
+    // Process all root nodes
+    for (const root of this.fileTree.getRoots()) {
+      updateNode(root, this.workingDirectory);
+    }
+
+    // Mark file tree dirty to re-render
+    this.fileTree['ctx'].markDirty();
   }
 
   /**
