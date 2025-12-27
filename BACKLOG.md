@@ -147,6 +147,16 @@ Issues and improvements to address in future sessions.
 
 ## Services
 
+### Database Service
+
+- [ ] **Incremental query result streaming** - For very large result sets (100k+ rows), implement incremental streaming instead of pagination. This allows the UI to display results as they arrive rather than waiting for full page fetches. Requires:
+  - Cursor-based result iteration in Postgres backend
+  - WebSocket or Server-Sent Events for real-time row delivery to clients
+  - Backpressure handling when UI can't keep up with data rate
+  - Memory-efficient buffering (don't hold all rows in memory)
+  - Integration with existing Paginator component (streaming as an alternative mode)
+  - Consider using Postgres `COPY TO STDOUT` for maximum throughput
+
 ## ECP
 
 ## Testing

@@ -45,7 +45,9 @@ export type ElementType =
   | 'ProjectSearch'
   | 'DiagnosticsView'
   | 'OutlinePanel'
-  | 'GitTimelinePanel';
+  | 'GitTimelinePanel'
+  | 'SQLEditor'
+  | 'QueryResults';
 
 export interface ElementConfig {
   type: ElementType;
