@@ -152,3 +152,9 @@ export {
   type ReferenceItem,
   type ReferencePreviewLoader,
 } from './references-picker.ts';
+
+export {
+  ConnectionPickerDialog,
+  createConnectionPicker,
+  type ConnectionPickerResult,
+} from './connection-picker.ts';

@@ -6,15 +6,14 @@
  */
 
 import { $ } from 'bun';
+import { appendFile } from 'node:fs/promises';
 import { randomUUID } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
 import { debugLog } from '../../debug.ts';
 import type { QueryHistoryEntry } from './types.ts';
 
-const HISTORY_DIR = join(homedir(), '.ultra', 'database', 'query-history');
-const HISTORY_FILE = join(HISTORY_DIR, 'history.jsonl');
-const FAVORITES_FILE = join(HISTORY_DIR, 'favorites.json');
+const DEFAULT_HISTORY_DIR = join(homedir(), '.ultra', 'database', 'query-history');
 
 const MAX_HISTORY_ENTRIES = 10000;
 const GIT_COMMIT_THRESHOLD = 10; // Commit after this many new entries
@@ -24,6 +23,16 @@ const GIT_COMMIT_THRESHOLD = 10; // Commit after this many new entries
  */
 interface FavoritesData {
   favorites: string[]; // Array of history entry IDs
+}
+
+/**
+ * Configuration options for QueryHistoryManager.
+ */
+export interface QueryHistoryConfig {
+  /** Override the history directory (for testing). */
+  historyDir?: string;
+  /** Disable git versioning (for testing). */
+  disableGit?: boolean;
 }
 
 /**
@@ -38,6 +47,17 @@ export class QueryHistoryManager {
   private entriesSinceCommit = 0;
   private initialized = false;
   private favorites = new Set<string>();
+  private historyDir: string;
+  private historyFile: string;
+  private favoritesFile: string;
+  private disableGit: boolean;
+
+  constructor(config?: QueryHistoryConfig) {
+    this.historyDir = config?.historyDir ?? DEFAULT_HISTORY_DIR;
+    this.historyFile = join(this.historyDir, 'history.jsonl');
+    this.favoritesFile = join(this.historyDir, 'favorites.json');
+    this.disableGit = config?.disableGit ?? false;
+  }
 
   /**
    * Initialize the history manager.
@@ -49,25 +69,35 @@ export class QueryHistoryManager {
 
     try {
       // Ensure directory exists
-      await $`mkdir -p ${HISTORY_DIR}`.quiet();
+      await $`mkdir -p ${this.historyDir}`.quiet();
 
-      // Initialize git repo if needed
-      const gitDir = join(HISTORY_DIR, '.git');
-      const gitExists = await Bun.file(gitDir).exists();
+      // Initialize git repo if needed (unless disabled)
+      if (!this.disableGit) {
+        const gitDir = join(this.historyDir, '.git');
+        const gitExists = await Bun.file(gitDir).exists();
 
-      if (!gitExists) {
-        await $`git -C ${HISTORY_DIR} init`.quiet();
-        await $`git -C ${HISTORY_DIR} config user.email "ultra@localhost"`.quiet();
-        await $`git -C ${HISTORY_DIR} config user.name "Ultra Editor"`.quiet();
+        if (!gitExists) {
+          await $`git -C ${this.historyDir} init`.quiet();
+          await $`git -C ${this.historyDir} config user.email "ultra@localhost"`.quiet();
+          await $`git -C ${this.historyDir} config user.name "Ultra Editor"`.quiet();
 
-        // Create initial files
-        await Bun.write(HISTORY_FILE, '');
-        await Bun.write(FAVORITES_FILE, JSON.stringify({ favorites: [] }));
+          // Create initial files
+          await Bun.write(this.historyFile, '');
+          await Bun.write(this.favoritesFile, JSON.stringify({ favorites: [] }));
 
-        await $`git -C ${HISTORY_DIR} add .`.quiet();
-        await $`git -C ${HISTORY_DIR} commit -m "Initialize query history"`.quiet();
+          await $`git -C ${this.historyDir} add .`.quiet();
+          await $`git -C ${this.historyDir} commit -m "Initialize query history"`.quiet();
 
-        debugLog('[QueryHistory] Initialized new git repository');
+          debugLog('[QueryHistory] Initialized new git repository');
+        }
+      } else {
+        // Without git, just create files if they don't exist
+        if (!await Bun.file(this.historyFile).exists()) {
+          await Bun.write(this.historyFile, '');
+        }
+        if (!await Bun.file(this.favoritesFile).exists()) {
+          await Bun.write(this.favoritesFile, JSON.stringify({ favorites: [] }));
+        }
       }
 
       // Load favorites
@@ -107,7 +137,7 @@ export class QueryHistoryManager {
       error: fullEntry.error,
     }) + '\n';
 
-    await Bun.write(HISTORY_FILE, line, { append: true });
+    await appendFile(this.historyFile, line);
 
     this.entriesSinceCommit++;
 
@@ -184,7 +214,7 @@ export class QueryHistoryManager {
       await this.writeAllEntries(kept);
     } else {
       // Clear all
-      await Bun.write(HISTORY_FILE, '');
+      await Bun.write(this.historyFile, '');
       this.favorites.clear();
       await this.saveFavorites();
     }
@@ -247,7 +277,7 @@ export class QueryHistoryManager {
 
   private async loadAllEntries(): Promise<QueryHistoryEntry[]> {
     try {
-      const file = Bun.file(HISTORY_FILE);
+      const file = Bun.file(this.historyFile);
       const exists = await file.exists();
 
       if (!exists) {
@@ -306,12 +336,12 @@ export class QueryHistoryManager {
       error: e.error,
     })).join('\n') + (entries.length > 0 ? '\n' : '');
 
-    await Bun.write(HISTORY_FILE, lines);
+    await Bun.write(this.historyFile, lines);
   }
 
   private async loadFavorites(): Promise<void> {
     try {
-      const file = Bun.file(FAVORITES_FILE);
+      const file = Bun.file(this.favoritesFile);
       const exists = await file.exists();
 
       if (exists) {
@@ -328,20 +358,25 @@ export class QueryHistoryManager {
       const data: FavoritesData = {
         favorites: Array.from(this.favorites),
       };
-      await Bun.write(FAVORITES_FILE, JSON.stringify(data, null, 2));
+      await Bun.write(this.favoritesFile, JSON.stringify(data, null, 2));
     } catch (error) {
       debugLog(`[QueryHistory] Failed to save favorites: ${error}`);
     }
   }
 
   private async commitHistory(message = 'Update query history'): Promise<void> {
+    if (this.disableGit) {
+      this.entriesSinceCommit = 0;
+      return;
+    }
+
     try {
-      await $`git -C ${HISTORY_DIR} add .`.quiet();
+      await $`git -C ${this.historyDir} add .`.quiet();
 
       // Check if there are changes to commit
-      const status = await $`git -C ${HISTORY_DIR} status --porcelain`.quiet();
+      const status = await $`git -C ${this.historyDir} status --porcelain`.quiet();
       if (status.text().trim()) {
-        await $`git -C ${HISTORY_DIR} commit -m ${message}`.quiet();
+        await $`git -C ${this.historyDir} commit -m ${message}`.quiet();
         debugLog(`[QueryHistory] Committed: ${message}`);
       }
 

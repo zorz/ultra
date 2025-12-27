@@ -128,6 +128,19 @@ export {
   hasSymbolParser,
 } from './outline-parsers.ts';
 
+export {
+  SQLEditor,
+  type SQLEditorState,
+  type SQLEditorCallbacks,
+} from './sql-editor.ts';
+
+export {
+  QueryResults,
+  type ResultViewMode,
+  type QueryResultsState,
+  type QueryResultsCallbacks,
+} from './query-results.ts';
+
 // ============================================
 // Element Registration
 // ============================================
@@ -143,6 +156,8 @@ import { GitDiffBrowser } from './git-diff-browser.ts';
 import { SearchResultBrowser } from './search-result-browser.ts';
 import { OutlinePanel } from './outline-panel.ts';
 import { GitTimelinePanel } from './git-timeline-panel.ts';
+import { SQLEditor } from './sql-editor.ts';
+import { QueryResults } from './query-results.ts';
 
 /**
  * Register all built-in elements with the factory.
@@ -209,5 +224,21 @@ export function registerBuiltinElements(): void {
       panel.setState(state as import('./git-timeline-panel.ts').GitTimelinePanelState);
     }
     return panel;
+  });
+
+  registerElement('SQLEditor', (id, title, ctx, state) => {
+    const editor = new SQLEditor(id, ctx);
+    if (state && typeof state === 'object') {
+      editor.setState(state as import('./sql-editor.ts').SQLEditorState);
+    }
+    return editor;
+  });
+
+  registerElement('QueryResults', (id, title, ctx, state) => {
+    const results = new QueryResults(id, ctx);
+    if (state && typeof state === 'object') {
+      results.setState(state as import('./query-results.ts').QueryResultsState);
+    }
+    return results;
   });
 }
