@@ -2765,8 +2765,13 @@ export class TUIClient {
       return true;
     });
 
-    this.commandHandlers.set('editor.gotoSymbol', () => {
-      this.window.showNotification('Go to symbol not yet implemented', 'info');
+    this.commandHandlers.set('editor.gotoSymbol', async () => {
+      await this.showSymbolPicker();
+      return true;
+    });
+
+    this.commandHandlers.set('editor.gotoWorkspaceSymbol', async () => {
+      await this.showWorkspaceSymbolPicker();
       return true;
     });
 
@@ -4547,7 +4552,8 @@ export class TUIClient {
     'search.findInFiles': { label: 'Find in Files', category: 'Search' },
     // Editor
     'editor.gotoLine': { label: 'Go to Line...', category: 'Editor' },
-    'editor.gotoSymbol': { label: 'Go to Symbol...', category: 'Editor' },
+    'editor.gotoSymbol': { label: 'Go to Symbol in File...', category: 'Editor' },
+    'editor.gotoWorkspaceSymbol': { label: 'Go to Symbol in Workspace...', category: 'Editor' },
     'editor.fold': { label: 'Fold Region', category: 'Editor' },
     'editor.unfold': { label: 'Unfold Region', category: 'Editor' },
     'editor.foldAll': { label: 'Fold All Regions', category: 'Editor' },
@@ -4750,8 +4756,10 @@ export class TUIClient {
     // Build file list from file service using glob
     try {
       const baseUri = `file://${this.workingDirectory}`;
+      const maxFiles = this.configManager.get('tui.filePicker.maxFiles') ?? 10000;
       const fileUris = await this.fileService.glob('**/*', {
         baseUri,
+        maxResults: maxFiles,
         excludePatterns: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/build/**'],
       });
 
@@ -4794,6 +4802,161 @@ export class TUIClient {
     } catch (error) {
       this.log(`Failed to list files: ${error}`);
       this.window.showNotification('Failed to list files', 'error');
+    }
+  }
+
+  /**
+   * Show symbol picker for go-to-symbol in the current file.
+   */
+  private async showSymbolPicker(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    const focusedElement = this.window.getFocusedElement();
+    if (!(focusedElement instanceof DocumentEditor)) {
+      this.window.showNotification('No active editor', 'warning');
+      return;
+    }
+
+    const uri = focusedElement.getUri();
+    if (!uri) {
+      this.window.showNotification('No file open', 'warning');
+      return;
+    }
+
+    try {
+      // Get document symbols from LSP
+      const lspSymbols = await localLSPService.getDocumentSymbols(uri);
+
+      if (!lspSymbols || lspSymbols.length === 0) {
+        this.window.showNotification('No symbols found', 'info');
+        return;
+      }
+
+      // Flatten symbols into SymbolEntry array
+      const flattenSymbols = (
+        symbols: typeof lspSymbols,
+        containerName?: string
+      ): import('../overlays/symbol-picker.ts').SymbolEntry[] => {
+        const result: import('../overlays/symbol-picker.ts').SymbolEntry[] = [];
+
+        for (const sym of symbols) {
+          // Handle both DocumentSymbol and SymbolInformation formats
+          const name = sym.name;
+          const kind = sym.kind;
+          const detail = 'detail' in sym ? sym.detail : undefined;
+          const container = 'containerName' in sym ? sym.containerName : containerName;
+
+          // Get position - DocumentSymbol has selectionRange, SymbolInformation has location
+          let line = 0;
+          let column = 0;
+          if ('selectionRange' in sym) {
+            line = sym.selectionRange.start.line;
+            column = sym.selectionRange.start.character;
+          } else if ('location' in sym) {
+            line = (sym.location as { range: { start: { line: number; character: number } } }).range.start.line;
+            column = (sym.location as { range: { start: { line: number; character: number } } }).range.start.character;
+          }
+
+          result.push({
+            name,
+            kind,
+            detail,
+            containerName: container,
+            uri,
+            line,
+            column,
+          });
+
+          // Recurse into children (DocumentSymbol only)
+          if ('children' in sym && sym.children) {
+            result.push(...flattenSymbols(sym.children, name));
+          }
+        }
+
+        return result;
+      };
+
+      const symbolEntries = flattenSymbols(lspSymbols);
+
+      const result = await this.dialogManager.showSymbolPicker({
+        symbols: symbolEntries,
+        currentUri: uri,
+        placeholder: 'Search symbols in file...',
+      });
+
+      if (result.confirmed && result.value) {
+        // Navigate to the symbol
+        focusedElement.setCursorPosition(
+          { line: result.value.line, column: result.value.column },
+          false
+        );
+        focusedElement.scrollToLine(result.value.line);
+        this.scheduleRender();
+      }
+    } catch (error) {
+      this.log(`Failed to get symbols: ${error}`);
+      this.window.showNotification('Failed to get symbols', 'error');
+    }
+  }
+
+  /**
+   * Show workspace symbol picker for go-to-symbol across all files.
+   */
+  private async showWorkspaceSymbolPicker(): Promise<void> {
+    if (!this.dialogManager) return;
+
+    try {
+      // Get workspace symbols with an empty query first to show all
+      // The LSP will return symbols matching the query as user types
+      const lspSymbols = await localLSPService.getWorkspaceSymbols('');
+
+      if (!lspSymbols || lspSymbols.length === 0) {
+        this.window.showNotification('No symbols found in workspace', 'info');
+        return;
+      }
+
+      // Convert to SymbolEntry array
+      const symbolEntries: import('../overlays/symbol-picker.ts').SymbolEntry[] = lspSymbols.map((sym) => {
+        // SymbolInformation has location property
+        const location = sym.location as { uri: string; range: { start: { line: number; character: number } } };
+
+        return {
+          name: sym.name,
+          kind: sym.kind,
+          containerName: sym.containerName,
+          uri: location.uri,
+          line: location.range.start.line,
+          column: location.range.start.character,
+        };
+      });
+
+      const result = await this.dialogManager.showSymbolPicker({
+        title: 'Go to Symbol in Workspace',
+        symbols: symbolEntries,
+        placeholder: 'Search symbols in workspace...',
+        showFilePaths: true,
+        workspaceRoot: this.workingDirectory,
+      });
+
+      if (result.confirmed && result.value) {
+        // Open the file and navigate to the symbol
+        const uri = result.value.uri;
+        await this.openFile(uri);
+
+        // After opening, navigate to the symbol position
+        const focusedElement = this.window.getFocusedElement();
+        if (focusedElement instanceof DocumentEditor) {
+          focusedElement.setCursorPosition(
+            { line: result.value.line, column: result.value.column },
+            false
+          );
+          focusedElement.scrollToLine(result.value.line);
+          this.scheduleRender();
+        }
+      }
+    } catch (error) {
+      this.log(`Failed to get workspace symbols: ${error}`);
+      this.window.showNotification('Failed to get workspace symbols', 'error');
     }
   }
 

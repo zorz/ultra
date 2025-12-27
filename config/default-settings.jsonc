@@ -49,6 +49,9 @@
   // TUI Tab Bar
   "tui.tabBar.scrollAmount": 1, // Number of tabs to scroll when using scroll buttons
 
+  // TUI File Picker
+  "tui.filePicker.maxFiles": 10000, // Maximum number of files to show in file picker
+
   // TUI Diff Viewer
   "tui.diffViewer.autoRefresh": true, // Auto-refresh diff when file changes
   "tui.diffViewer.showDiagnostics": true, // Show diagnostics in diff viewer

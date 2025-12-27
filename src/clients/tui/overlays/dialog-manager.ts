@@ -11,6 +11,7 @@ import { InputDialog, type InputDialogOptions } from './input-dialog.ts';
 import { ConfirmDialog, type ConfirmDialogOptions } from './confirm-dialog.ts';
 import { CommandPaletteDialog, type Command } from './command-palette.ts';
 import { FilePickerDialog, type FileEntry } from './file-picker.ts';
+import { SymbolPickerDialog, type SymbolEntry } from './symbol-picker.ts';
 import { GotoLineDialog, type GotoLineResult } from './goto-line-dialog.ts';
 import { CommitDialog, type CommitDialogOptions, type CommitResult, type StagedFile } from './commit-dialog.ts';
 import { SettingsDialog, type SettingsDialogOptions, type SettingItem } from './settings-dialog.ts';
@@ -29,6 +30,11 @@ export type { Command };
  * File entry for file picker.
  */
 export type { FileEntry };
+
+/**
+ * Symbol entry for symbol picker.
+ */
+export type { SymbolEntry };
 
 /**
  * Goto line result.
@@ -80,6 +86,24 @@ export interface FilePickerOptions {
   onLoadMore?: () => Promise<FileEntry[]>;
 }
 
+/**
+ * Options for symbol picker.
+ */
+export interface SymbolPickerOptions {
+  /** Optional title */
+  title?: string;
+  /** Symbols to display */
+  symbols: SymbolEntry[];
+  /** Current file URI for context */
+  currentUri?: string;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Whether to show file paths (for workspace symbols) */
+  showFilePaths?: boolean;
+  /** Workspace root for making paths relative */
+  workspaceRoot?: string;
+}
+
 // ============================================
 // Dialog Manager
 // ============================================
@@ -96,6 +120,7 @@ export class DialogManager {
   private confirmDialog: ConfirmDialog | null = null;
   private commandPaletteDialog: CommandPaletteDialog | null = null;
   private filePickerDialog: FilePickerDialog | null = null;
+  private symbolPickerDialog: SymbolPickerDialog | null = null;
   private gotoLineDialog: GotoLineDialog | null = null;
   private commitDialog: CommitDialog | null = null;
   private settingsDialog: SettingsDialog | null = null;
@@ -270,6 +295,46 @@ export class DialogManager {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Symbol Picker
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Show the symbol picker for go-to-symbol.
+   */
+  async showSymbolPicker(options: SymbolPickerOptions): Promise<DialogResult<SymbolEntry>> {
+    if (!this.symbolPickerDialog) {
+      this.symbolPickerDialog = new SymbolPickerDialog('dialog-symbol-picker', this.callbacks);
+      this.overlayManager.addOverlay(this.symbolPickerDialog);
+    }
+
+    if (options.currentUri) {
+      this.symbolPickerDialog.setCurrentUri(options.currentUri);
+    }
+
+    // Configure file path display for workspace symbols
+    this.symbolPickerDialog.setShowFilePaths(
+      options.showFilePaths ?? false,
+      options.workspaceRoot
+    );
+
+    this.activeDialogId = 'dialog-symbol-picker';
+
+    try {
+      return await this.symbolPickerDialog.showWithItems(
+        {
+          title: options.title ?? 'Go to Symbol',
+          placeholder: options.placeholder ?? 'Search symbols...',
+          width: 70,
+          height: 20,
+        },
+        options.symbols
+      );
+    } finally {
+      this.activeDialogId = null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Goto Line Dialog
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -380,6 +445,10 @@ export class DialogManager {
     if (this.filePickerDialog) {
       this.overlayManager.removeOverlay('dialog-file-picker');
       this.filePickerDialog = null;
+    }
+    if (this.symbolPickerDialog) {
+      this.overlayManager.removeOverlay('dialog-symbol-picker');
+      this.symbolPickerDialog = null;
     }
     if (this.gotoLineDialog) {
       this.overlayManager.removeOverlay('dialog-goto-line');

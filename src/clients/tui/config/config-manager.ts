@@ -112,6 +112,13 @@ export interface TUISettings extends Partial<EditorSettings> {
   'tui.fileTree.showGitStatus'?: boolean;
 
   // ─────────────────────────────────────────────────────────────────────────
+  // File Picker
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Maximum number of files to show in file picker */
+  'tui.filePicker.maxFiles'?: number;
+
+  // ─────────────────────────────────────────────────────────────────────────
   // AI
   // ─────────────────────────────────────────────────────────────────────────
 

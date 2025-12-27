@@ -65,6 +65,11 @@ export {
 } from './file-picker.ts';
 
 export {
+  SymbolPickerDialog,
+  type SymbolEntry,
+} from './symbol-picker.ts';
+
+export {
   CommitDialog,
   type CommitDialogOptions,
   type CommitResult,

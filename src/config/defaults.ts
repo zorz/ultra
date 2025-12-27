@@ -136,8 +136,20 @@ export const defaultKeybindings: KeyBinding[] = [
     "command": "workbench.commandPalette"
   },
   {
-    "key": "ctrl+shift+o",
+    "key": "ctrl+r",
     "command": "editor.gotoSymbol"
+  },
+  {
+    "key": "meta+r",
+    "command": "editor.gotoSymbol"
+  },
+  {
+    "key": "ctrl+shift+r",
+    "command": "editor.gotoWorkspaceSymbol"
+  },
+  {
+    "key": "shift+meta+r",
+    "command": "editor.gotoWorkspaceSymbol"
   },
   {
     "key": "ctrl+tab",
@@ -615,6 +627,7 @@ export const defaultSettings: Record<string, any> = {
   "tui.terminal.scrollback": 1000,
   "tui.fileTree.showGitStatus": true,
   "tui.tabBar.scrollAmount": 1,
+  "tui.filePicker.maxFiles": 10000,
   "tui.diffViewer.autoRefresh": true,
   "tui.diffViewer.showDiagnostics": true,
   "tui.diffViewer.editMode": "stage-modified",

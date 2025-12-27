@@ -381,6 +381,24 @@ export class LocalLSPService implements LSPService {
     }
   }
 
+  async getWorkspaceSymbols(query: string): Promise<LSPSymbolInformation[]> {
+    // Query all running clients and merge results
+    const allSymbols: LSPSymbolInformation[] = [];
+
+    for (const client of this.clients.values()) {
+      if (client.isInitialized()) {
+        try {
+          const symbols = await client.getWorkspaceSymbols(query);
+          allSymbols.push(...symbols);
+        } catch (error) {
+          this.debugLog(`getWorkspaceSymbols error for client: ${error}`);
+        }
+      }
+    }
+
+    return allSymbols;
+  }
+
   async rename(uri: string, position: LSPPosition, newName: string): Promise<WorkspaceEdit | null> {
     const client = this.getClientForDocument(uri);
     if (!client) {

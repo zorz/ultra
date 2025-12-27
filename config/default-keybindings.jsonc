@@ -38,7 +38,10 @@
   { "key": "meta+p", "command": "workbench.quickOpen" }, // Quick open file
   { "key": "ctrl+shift+p", "command": "workbench.commandPalette" }, // Command palette
   { "key": "shift+meta+p", "command": "workbench.commandPalette" }, // Command palette (macOS)
-  { "key": "ctrl+shift+o", "command": "editor.gotoSymbol" }, // Go to symbol
+  { "key": "ctrl+r", "command": "editor.gotoSymbol" }, // Go to symbol in file
+  { "key": "meta+r", "command": "editor.gotoSymbol" }, // Go to symbol in file (macOS)
+  { "key": "ctrl+shift+r", "command": "editor.gotoWorkspaceSymbol" }, // Go to symbol in workspace
+  { "key": "shift+meta+r", "command": "editor.gotoWorkspaceSymbol" }, // Go to symbol in workspace (macOS)
   { "key": "ctrl+tab", "command": "workbench.focusNextPane" }, // Focus next pane
   { "key": "ctrl+shift+tab", "command": "workbench.focusPreviousPane" }, // Focus previous pane
   { "key": "ctrl+]", "command": "editor.nextTab" }, // Next tab

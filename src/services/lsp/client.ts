@@ -721,6 +721,21 @@ export class LSPClient {
   }
 
   /**
+   * Get workspace symbols matching a query
+   */
+  async getWorkspaceSymbols(query: string): Promise<LSPSymbolInformation[]> {
+    try {
+      const result = await this.request<LSPSymbolInformation[] | null>(
+        'workspace/symbol',
+        { query }
+      );
+      return result || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Get definition location
    */
   async getDefinition(uri: string, position: LSPPosition): Promise<LSPLocation | LSPLocation[] | null> {
