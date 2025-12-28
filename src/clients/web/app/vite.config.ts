@@ -2,7 +2,15 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [
+    svelte({
+      compilerOptions: {
+        // Ensure we're compiling for DOM, not SSR
+        generate: 'dom',
+        hydratable: false,
+      },
+    }),
+  ],
 
   server: {
     port: 5173,
@@ -22,6 +30,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // Force client-only build
+    ssr: false,
     // Optimize Monaco Editor chunks
     rollupOptions: {
       output: {
@@ -35,5 +45,12 @@ export default defineConfig({
 
   optimizeDeps: {
     include: ['monaco-editor', '@xterm/xterm'],
+    // Exclude SSR-only modules
+    exclude: [],
+  },
+
+  // Ensure we're building for browser only
+  resolve: {
+    conditions: ['browser', 'import', 'module', 'default'],
   },
 });

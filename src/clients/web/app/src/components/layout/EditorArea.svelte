@@ -2,6 +2,10 @@
   import { panes, activePane, layoutStore } from '../../lib/stores/layout';
   import Editor from '../editor/Editor.svelte';
 
+  // Debug: log activePane changes
+  $: console.log('EditorArea activePane:', $activePane);
+  $: console.log('EditorArea panes:', $panes);
+
   function handleTabClick(paneId: string) {
     layoutStore.setActivePane(paneId);
   }

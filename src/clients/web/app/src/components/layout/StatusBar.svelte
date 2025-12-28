@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { activeDocument } from '../../lib/stores/documents';
   import { gitStore } from '../../lib/stores/git';
   import { ecpClient } from '../../lib/ecp/client';
 
-  let gitStatus = $state<{ branch: string; ahead: number; behind: number } | null>(null);
-  let isConnected = $state(true);
+  let gitStatus: { branch: string; ahead: number; behind: number } | null = null;
+  let isConnected = true;
 
   // Subscribe to git status
   gitStore.subscribe((status) => {
@@ -20,7 +21,7 @@
   });
 
   // Track connection state
-  $effect(() => {
+  onMount(() => {
     const unsubConnect = ecpClient.onConnect(() => {
       isConnected = true;
     });

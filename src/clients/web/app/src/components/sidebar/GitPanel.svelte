@@ -1,7 +1,7 @@
 <script lang="ts">
   import { gitStore, changedFiles, stagedCount, type GitFileChange } from '../../lib/stores/git';
 
-  let status = $state<{
+  let status: {
     branch: string;
     ahead: number;
     behind: number;
@@ -9,10 +9,10 @@
     unstaged: GitFileChange[];
     untracked: GitFileChange[];
     conflicts: GitFileChange[];
-  } | null>(null);
+  } | null = null;
 
-  let commitMessage = $state('');
-  let isCommitting = $state(false);
+  let commitMessage = '';
+  let isCommitting = false;
 
   // Subscribe to git status
   gitStore.subscribe((value) => {

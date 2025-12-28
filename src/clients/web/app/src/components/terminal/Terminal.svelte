@@ -126,13 +126,10 @@
   });
 
   // Update theme when it changes
-  $effect(() => {
-    const theme = $themeStore;
-    if (theme && xterm) {
-      const xtermTheme = toXtermTheme(theme);
-      xterm.options.theme = xtermTheme as Record<string, string>;
-    }
-  });
+  $: if ($themeStore && xterm) {
+    const xtermTheme = toXtermTheme($themeStore);
+    xterm.options.theme = xtermTheme as Record<string, string>;
+  }
 </script>
 
 <div class="terminal-wrapper" bind:this={terminalContainer}></div>

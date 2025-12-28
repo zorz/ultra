@@ -3,20 +3,32 @@
   import { documentsStore } from '../../lib/stores/documents';
   import { layoutStore } from '../../lib/stores/layout';
 
-  let tree = $state<FileEntry[]>([]);
+  export let entries: FileEntry[] | null = null;
+  export let depth: number = 0;
 
-  // Subscribe to file tree updates
-  filesStore.subscribe((value) => {
-    tree = value;
-  });
+  let tree: FileEntry[] = [];
 
-  async function handleClick(entry: FileEntry) {
+  // Subscribe to file tree updates (only at root level)
+  if (depth === 0) {
+    filesStore.subscribe((value) => {
+      tree = value;
+    });
+  }
+
+  // Use entries prop if provided (for recursive calls), otherwise use tree
+  $: displayEntries = entries ?? tree;
+
+  function handleClick(entry: FileEntry) {
     filesStore.select(entry.path);
 
+    // Single click on directory toggles it
     if (entry.type === 'directory') {
-      await filesStore.toggleDirectory(entry.path);
-    } else {
-      // Open file in editor
+      filesStore.toggleDirectory(entry.path);
+    }
+  }
+
+  async function handleDoubleClick(entry: FileEntry) {
+    if (entry.type === 'file') {
       await openFile(entry);
     }
   }
@@ -44,52 +56,47 @@
     }
   }
 
-  function getIndent(depth: number): string {
-    return `${depth * 16 + 8}px`;
+  function getIndent(d: number): string {
+    return `${d * 16 + 8}px`;
   }
 </script>
 
-<div class="file-tree">
-  {#each tree as entry}
-    <TreeNode {entry} depth={0} onselect={handleClick} selectedPath={$selectedFile?.path} />
+<div class="file-tree" class:root={depth === 0}>
+  {#each displayEntries as entry}
+    <div
+      class="tree-item"
+      class:selected={entry.path === $selectedFile?.path}
+      class:directory={entry.type === 'directory'}
+      style="padding-left: {getIndent(depth)}"
+      on:click={() => handleClick(entry)}
+      on:dblclick={() => handleDoubleClick(entry)}
+      on:keydown={(e) => e.key === 'Enter' && handleDoubleClick(entry)}
+      role="treeitem"
+      tabindex="0"
+      aria-expanded={entry.type === 'directory' ? entry.isExpanded : undefined}
+      aria-selected={entry.path === $selectedFile?.path}
+    >
+      <span class="icon">
+        {#if entry.type === 'directory'}
+          {entry.isExpanded ? '📂' : '📁'}
+        {:else}
+          📄
+        {/if}
+      </span>
+      <span class="name">{entry.name}</span>
+      {#if entry.isLoading}
+        <span class="loading">...</span>
+      {/if}
+    </div>
+
+    {#if entry.type === 'directory' && entry.isExpanded && entry.children}
+      <svelte:self entries={entry.children} depth={depth + 1} />
+    {/if}
   {/each}
 </div>
 
-{#snippet TreeNode(props: { entry: FileEntry; depth: number; onselect: (e: FileEntry) => void; selectedPath: string | undefined })}
-  {@const { entry, depth, onselect, selectedPath } = props}
-  <div
-    class="tree-item"
-    class:selected={entry.path === selectedPath}
-    class:directory={entry.type === 'directory'}
-    style="padding-left: {getIndent(depth)}"
-    onclick={() => onselect(entry)}
-    onkeydown={(e) => e.key === 'Enter' && onselect(entry)}
-    role="treeitem"
-    tabindex="0"
-    aria-expanded={entry.type === 'directory' ? entry.isExpanded : undefined}
-  >
-    <span class="icon">
-      {#if entry.type === 'directory'}
-        {entry.isExpanded ? '📂' : '📁'}
-      {:else}
-        📄
-      {/if}
-    </span>
-    <span class="name">{entry.name}</span>
-    {#if entry.isLoading}
-      <span class="loading">...</span>
-    {/if}
-  </div>
-
-  {#if entry.type === 'directory' && entry.isExpanded && entry.children}
-    {#each entry.children as child}
-      {@render TreeNode({ entry: child, depth: depth + 1, onselect, selectedPath })}
-    {/each}
-  {/if}
-{/snippet}
-
 <style>
-  .file-tree {
+  .file-tree.root {
     padding: 4px 0;
   }
 

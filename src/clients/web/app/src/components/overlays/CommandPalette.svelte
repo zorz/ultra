@@ -1,15 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, createEventDispatcher } from 'svelte';
   import { filesStore } from '../../lib/stores/files';
   import { documentsStore } from '../../lib/stores/documents';
   import { layoutStore } from '../../lib/stores/layout';
   import { ecpClient } from '../../lib/ecp/client';
 
-  interface Props {
-    onclose: () => void;
-  }
-
-  let { onclose }: Props = $props();
+  export let onclose: () => void;
 
   interface CommandItem {
     id: string;
@@ -26,11 +22,11 @@
   }
 
   let inputElement: HTMLInputElement;
-  let query = $state('');
-  let selectedIndex = $state(0);
-  let mode = $state<'commands' | 'files'>('files');
-  let items = $state<(CommandItem | FileItem)[]>([]);
-  let isLoading = $state(false);
+  let query = '';
+  let selectedIndex = 0;
+  let mode: 'commands' | 'files' = 'files';
+  let items: (CommandItem | FileItem)[] = [];
+  let isLoading = false;
 
   // Commands list
   const commands: CommandItem[] = [

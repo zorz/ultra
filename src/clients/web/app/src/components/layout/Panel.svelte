@@ -14,8 +14,8 @@
     { id: 'problems', title: 'Problems', icon: '⚠️' },
   ];
 
-  let terminalIds = $state<string[]>([]);
-  let activeTerminalId = $state<string | null>(null);
+  let terminalIds: string[] = [];
+  let activeTerminalId: string | null = null;
 
   function setTab(tabId: string) {
     layoutStore.setPanelTab(tabId);

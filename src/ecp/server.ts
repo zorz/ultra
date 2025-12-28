@@ -307,6 +307,11 @@ export class ECPServer {
     method: string,
     params: unknown
   ): Promise<HandlerResult> {
+    // Workspace info
+    if (method === 'workspace/root') {
+      return { result: { root: this.workspaceRoot } };
+    }
+
     // Document service
     if (method.startsWith('document/')) {
       return this.handleDocumentRequest(method, params);

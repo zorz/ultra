@@ -63,30 +63,43 @@ function createDocumentsStore() {
      * Open a document.
      */
     async open(uri: string): Promise<string> {
-      const result = await ecpClient.request<{
+      // Open the document
+      const openResult = await ecpClient.request<{
         documentId: string;
-        content: string;
-        version: number;
-        language: string;
+        info: {
+          documentId: string;
+          uri: string;
+          languageId: string;
+          version: number;
+          isDirty: boolean;
+        };
       }>('document/open', { uri });
 
+      const documentId = openResult.documentId;
+
+      // Get the content
+      const contentResult = await ecpClient.request<{ content: string }>(
+        'document/content',
+        { documentId }
+      );
+
       const docState: DocumentState = {
-        id: result.documentId,
+        id: documentId,
         uri,
-        content: result.content,
-        version: result.version,
-        isDirty: false,
-        language: result.language,
+        content: contentResult.content,
+        version: openResult.info.version,
+        isDirty: openResult.info.isDirty,
+        language: openResult.info.languageId,
         cursors: [{ position: { line: 0, column: 0 } }],
       };
 
       documents.update((docs) => {
-        docs.set(result.documentId, docState);
+        docs.set(documentId, docState);
         return docs;
       });
 
-      activeDocumentId.set(result.documentId);
-      return result.documentId;
+      activeDocumentId.set(documentId);
+      return documentId;
     },
 
     /**

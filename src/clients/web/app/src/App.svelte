@@ -5,8 +5,8 @@
   import { gitStore } from './lib/stores/git';
   import { ecpClient } from './lib/ecp/client';
 
-  let isConnected = $state(true);
-  let workspaceRoot = $state('');
+  let isConnected = true;
+  let workspaceRoot = '';
 
   onMount(() => {
     // Track connection state
@@ -30,12 +30,10 @@
   async function initWorkspace() {
     try {
       // Get workspace root from server
-      const result = await ecpClient.request<{ cwd: string }>('config/get', {
-        key: 'workspaceRoot',
-      });
+      const result = await ecpClient.request<{ root: string }>('workspace/root', {});
 
-      // If no specific workspace, use current working directory
-      workspaceRoot = result.cwd || process.cwd?.() || '/';
+      // Use workspace root from server, fallback to root
+      workspaceRoot = result.root || '/';
 
       // Initialize file tree
       await filesStore.init(workspaceRoot);
@@ -44,6 +42,8 @@
       await gitStore.init(workspaceRoot);
     } catch (error) {
       console.error('Failed to initialize workspace:', error);
+      // Use a sensible default
+      workspaceRoot = '/';
     }
   }
 </script>

@@ -59,8 +59,56 @@ export async function startWebServer(config: WebServerConfig = {}): Promise<{
   const wsTransport = new WebSocketTransport(ecpServer, config.wsConfig);
 
   // Get static file path
-  const distPath = new URL('../app/dist', import.meta.url).pathname;
-  const publicPath = new URL('../app/public', import.meta.url).pathname;
+  // When running from source: use import.meta.url
+  // When running from compiled binary: use path relative to cwd or executable
+  let distPath: string;
+  let publicPath: string;
+
+  // Try multiple locations for the dist folder
+  const possibleDistPaths = [
+    // Relative to source (for bun run dev)
+    new URL('../app/dist', import.meta.url).pathname,
+    // Relative to cwd (for compiled binary running from project root)
+    `${process.cwd()}/src/clients/web/app/dist`,
+    // Relative to executable location
+    `${import.meta.dir}/../app/dist`,
+  ];
+
+  const possiblePublicPaths = [
+    new URL('../app/public', import.meta.url).pathname,
+    `${process.cwd()}/src/clients/web/app/public`,
+    `${import.meta.dir}/../app/public`,
+  ];
+
+  // Find the first path that exists
+  distPath = possibleDistPaths[0];
+  publicPath = possiblePublicPaths[0];
+
+  for (const p of possibleDistPaths) {
+    try {
+      const file = Bun.file(`${p}/index.html`);
+      if (await file.exists()) {
+        distPath = p;
+        break;
+      }
+    } catch {
+      // Path doesn't exist, try next
+    }
+  }
+
+  for (const p of possiblePublicPaths) {
+    try {
+      const file = Bun.file(`${p}/favicon.svg`);
+      if (await file.exists()) {
+        publicPath = p;
+        break;
+      }
+    } catch {
+      // Path doesn't exist, try next
+    }
+  }
+
+  log(`Serving static files from: ${distPath}`);
 
   // Create Bun server
   const server = Bun.serve<ClientData>({

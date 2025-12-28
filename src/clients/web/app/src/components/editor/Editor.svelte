@@ -1,16 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
   import * as monaco from 'monaco-editor';
   import { documentsStore, activeDocument } from '../../lib/stores/documents';
   import { themeStore } from '../../lib/stores/theme';
   import { toMonacoTheme } from '../../lib/theme/loader';
   import { ecpClient } from '../../lib/ecp/client';
 
-  interface Props {
-    documentId: string;
-  }
-
-  let { documentId }: Props = $props();
+  export let documentId: string;
 
   let editorContainer: HTMLDivElement;
   let editor: monaco.editor.IStandaloneCodeEditor | null = null;
@@ -19,14 +16,24 @@
 
   // Initialize editor
   onMount(async () => {
-    if (!editorContainer) return;
+    console.log('Editor mounting, container:', editorContainer, 'documentId:', documentId);
+
+    if (!editorContainer) {
+      console.error('No editor container');
+      return;
+    }
 
     // Get document content
     const doc = documentsStore.get(documentId);
-    if (!doc) return;
+    console.log('Document from store:', doc);
+
+    if (!doc) {
+      console.error('Document not found in store:', documentId);
+      return;
+    }
 
     // Set up Monaco theme from Ultra theme
-    const theme = $themeStore;
+    const theme = get(themeStore);
     if (theme) {
       const monacoTheme = toMonacoTheme(theme);
       monaco.editor.defineTheme('ultra-theme', monacoTheme as monaco.editor.IStandaloneThemeData);
@@ -41,6 +48,7 @@
     );
 
     // Create editor
+    console.log('Creating Monaco editor...');
     editor = monaco.editor.create(editorContainer, {
       model,
       theme: 'ultra-theme',
@@ -60,6 +68,7 @@
       smoothScrolling: true,
       padding: { top: 8 },
     });
+    console.log('Monaco editor created:', editor);
 
     // Handle content changes
     model.onDidChangeContent((event) => {
@@ -136,14 +145,9 @@
   });
 
   // Update content when documentId changes
-  $effect(() => {
-    if (!editor || !documentId) return;
-
+  $: if (editor && documentId) {
     const doc = documentsStore.get(documentId);
-    if (!doc) return;
-
-    // Check if we need a new model
-    if (model?.uri.toString() !== doc.uri) {
+    if (doc && model?.uri.toString() !== doc.uri) {
       model?.dispose();
       model = monaco.editor.createModel(
         doc.content,
@@ -152,7 +156,7 @@
       );
       editor.setModel(model);
     }
-  });
+  }
 </script>
 
 <div class="editor-container" bind:this={editorContainer}></div>

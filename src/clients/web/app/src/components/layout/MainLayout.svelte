@@ -6,9 +6,9 @@
   import StatusBar from './StatusBar.svelte';
   import CommandPalette from '../overlays/CommandPalette.svelte';
 
-  let showCommandPalette = $state(false);
-  let sidebarResizing = $state(false);
-  let panelResizing = $state(false);
+  let showCommandPalette = false;
+  let sidebarResizing = false;
+  let panelResizing = false;
 
   // Handle keyboard shortcuts
   function handleKeydown(event: KeyboardEvent) {
