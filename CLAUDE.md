@@ -539,6 +539,55 @@ export { LocalExampleService } from './local.ts';
 export { ExampleServiceAdapter } from './adapter.ts';
 ```
 
+### ECP Server Registration (REQUIRED)
+
+**When creating a new service, you MUST register it with the ECP server** in `src/ecp/server.ts`:
+
+1. **Import the service and adapter**:
+   ```typescript
+   import { LocalExampleService } from '../services/example/local.ts';
+   import { ExampleServiceAdapter } from '../services/example/adapter.ts';
+   ```
+
+2. **Add service and adapter as class properties**:
+   ```typescript
+   private exampleService: LocalExampleService;
+   private exampleAdapter: ExampleServiceAdapter;
+   ```
+
+3. **Initialize in constructor**:
+   ```typescript
+   this.exampleService = new LocalExampleService();
+   this.exampleAdapter = new ExampleServiceAdapter(this.exampleService);
+   ```
+
+4. **Add routing in `routeRequest()`**:
+   ```typescript
+   if (method.startsWith('example/')) {
+     return { result: await this.exampleAdapter.handleRequest(method, params) };
+   }
+   ```
+
+5. **Add async init in `initialize()`** (if service has init):
+   ```typescript
+   await this.exampleService.init();
+   ```
+
+6. **Add cleanup in `shutdown()`** (if service has shutdown):
+   ```typescript
+   await this.exampleService.shutdown();
+   ```
+
+7. **Add to `getService()` type and switch**:
+   ```typescript
+   getService<T>(name: '...' | 'example'): T {
+     case 'example':
+       return this.exampleService as unknown as T;
+   }
+   ```
+
+Without ECP registration, the service cannot be tested via `TestECPClient` or used by clients.
+
 ### ECP Method Naming
 
 ECP methods use namespaced naming:

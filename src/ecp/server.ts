@@ -21,6 +21,10 @@ import { LocalSyntaxService } from '../services/syntax/service.ts';
 import { SyntaxServiceAdapter } from '../services/syntax/adapter.ts';
 import { LocalTerminalService } from '../services/terminal/service.ts';
 import { TerminalServiceAdapter } from '../services/terminal/adapter.ts';
+import { LocalSecretService } from '../services/secret/local.ts';
+import { SecretServiceAdapter } from '../services/secret/adapter.ts';
+import { LocalDatabaseService } from '../services/database/local.ts';
+import { DatabaseServiceAdapter } from '../services/database/adapter.ts';
 
 // Types
 import {
@@ -55,6 +59,8 @@ export class ECPServer {
   private lspService: LocalLSPService;
   private syntaxService: LocalSyntaxService;
   private terminalService: LocalTerminalService;
+  private secretService: LocalSecretService;
+  private databaseService: LocalDatabaseService;
 
   // Adapters
   private documentAdapter: DocumentServiceAdapter;
@@ -64,6 +70,8 @@ export class ECPServer {
   private lspAdapter: LSPServiceAdapter;
   private syntaxAdapter: SyntaxServiceAdapter;
   private terminalAdapter: TerminalServiceAdapter;
+  private secretAdapter: SecretServiceAdapter;
+  private databaseAdapter: DatabaseServiceAdapter;
 
   // Notification listeners
   private notificationListeners: Set<NotificationListener> = new Set();
@@ -94,6 +102,8 @@ export class ECPServer {
     this.lspService.setWorkspaceRoot(this.workspaceRoot);
     this.syntaxService = new LocalSyntaxService();
     this.terminalService = new LocalTerminalService();
+    this.secretService = new LocalSecretService();
+    this.databaseService = new LocalDatabaseService();
 
     // Initialize adapters
     this.documentAdapter = new DocumentServiceAdapter(this.documentService);
@@ -103,6 +113,8 @@ export class ECPServer {
     this.lspAdapter = new LSPServiceAdapter(this.lspService);
     this.syntaxAdapter = new SyntaxServiceAdapter(this.syntaxService);
     this.terminalAdapter = new TerminalServiceAdapter(this.terminalService);
+    this.secretAdapter = new SecretServiceAdapter(this.secretService);
+    this.databaseAdapter = new DatabaseServiceAdapter(this.databaseService);
 
     // Set up notification forwarding
     this.setupNotificationHandlers();
@@ -207,6 +219,8 @@ export class ECPServer {
    */
   async initialize(): Promise<void> {
     await this.sessionService.init(this.workspaceRoot);
+    await this.secretService.init();
+    await this.databaseService.init(this.workspaceRoot);
     this.debugLog('Async initialization complete');
   }
 
@@ -237,6 +251,10 @@ export class ECPServer {
     // Close all terminals
     this.terminalService.closeAll();
 
+    // Shutdown secret and database services
+    await this.secretService.shutdown();
+    await this.databaseService.shutdown();
+
     // Clear listeners
     this.notificationListeners.clear();
 
@@ -252,7 +270,7 @@ export class ECPServer {
    * Use this sparingly - prefer using request() for most operations.
    */
   getService<T>(
-    name: 'document' | 'file' | 'git' | 'session' | 'lsp' | 'syntax' | 'terminal'
+    name: 'document' | 'file' | 'git' | 'session' | 'lsp' | 'syntax' | 'terminal' | 'secret' | 'database'
   ): T {
     switch (name) {
       case 'document':
@@ -269,6 +287,10 @@ export class ECPServer {
         return this.syntaxService as unknown as T;
       case 'terminal':
         return this.terminalService as unknown as T;
+      case 'secret':
+        return this.secretService as unknown as T;
+      case 'database':
+        return this.databaseService as unknown as T;
       default:
         throw new Error(`Unknown service: ${name}`);
     }
@@ -323,6 +345,16 @@ export class ECPServer {
     // Terminal service
     if (method.startsWith('terminal/')) {
       return this.terminalAdapter.handleRequest(method, params);
+    }
+
+    // Secret service
+    if (method.startsWith('secret/')) {
+      return { result: await this.secretAdapter.handleRequest(method, params) };
+    }
+
+    // Database service
+    if (method.startsWith('database/')) {
+      return { result: await this.databaseAdapter.handleRequest(method, params) };
     }
 
     // Method not found
