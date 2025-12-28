@@ -43,6 +43,7 @@ type ConnectionFormFieldName =
   | 'username'
   | 'password'
   | 'ssl'
+  | 'sslAllowSelfSigned'
   | 'readOnly'
   | 'scope'
   | 'supabaseUrl'
@@ -57,6 +58,7 @@ interface ConnectionFormData {
   username: string;
   password: string;
   ssl: boolean;
+  sslAllowSelfSigned: boolean;
   readOnly: boolean;
   scope: 'global' | 'project';
   // Supabase-specific
@@ -105,6 +107,7 @@ const FORM_FIELDS: FormField[] = [
   { key: 'supabaseUrl', label: 'Supabase URL', type: 'text', placeholder: 'https://xxx.supabase.co', hidden: (d) => d.type !== 'supabase' },
   { key: 'supabaseKey', label: 'Supabase Key', type: 'password', hidden: (d) => d.type !== 'supabase' },
   { key: 'ssl', label: 'Use SSL', type: 'boolean' },
+  { key: 'sslAllowSelfSigned', label: 'Allow Self-Signed', type: 'boolean', hidden: (d) => !d.ssl },
   { key: 'readOnly', label: 'Read Only', type: 'boolean' },
   { key: 'scope', label: 'Scope', type: 'select', options: ['global', 'project'] },
 ];
@@ -161,6 +164,15 @@ export class ConnectionEditDialog extends PromiseDialog<ConnectionEditResult> {
     if (options.existingConnection) {
       // Editing existing connection
       this.connectionId = options.existingConnection.id;
+
+      // Extract SSL settings from existing config
+      const sslConfig = options.existingConnection.ssl;
+      const sslEnabled = !!sslConfig;
+      // If ssl is an object, check if rejectUnauthorized is false (meaning allow self-signed)
+      const allowSelfSigned = typeof sslConfig === 'object' && sslConfig !== null
+        ? sslConfig.rejectUnauthorized === false
+        : false;
+
       this.formData = {
         name: options.existingConnection.name,
         type: options.existingConnection.type,
@@ -169,7 +181,8 @@ export class ConnectionEditDialog extends PromiseDialog<ConnectionEditResult> {
         database: options.existingConnection.database,
         username: options.existingConnection.username,
         password: options.existingPassword || '',
-        ssl: !!options.existingConnection.ssl,
+        ssl: sslEnabled,
+        sslAllowSelfSigned: allowSelfSigned,
         readOnly: !!options.existingConnection.readOnly,
         scope: options.existingConnection.scope,
         supabaseUrl: options.existingConnection.supabaseUrl || '',
@@ -206,6 +219,7 @@ export class ConnectionEditDialog extends PromiseDialog<ConnectionEditResult> {
       username: 'postgres',
       password: '',
       ssl: false, // Default to false for local development; enable for remote/production
+      sslAllowSelfSigned: false,
       readOnly: false,
       scope: 'global',
       supabaseUrl: '',
@@ -295,6 +309,17 @@ export class ConnectionEditDialog extends PromiseDialog<ConnectionEditResult> {
     const hasPassword = this.formData.password.trim().length > 0;
     const passwordSecretKey = hasPassword ? `database.${this.connectionId || 'new'}.password` : undefined;
 
+    // Build SSL config
+    // - If SSL is disabled: false
+    // - If SSL is enabled but allow self-signed is off: true (default SSL)
+    // - If SSL is enabled and allow self-signed is on: { rejectUnauthorized: false }
+    let sslConfig: boolean | { rejectUnauthorized: boolean } = false;
+    if (this.formData.ssl) {
+      sslConfig = this.formData.sslAllowSelfSigned
+        ? { rejectUnauthorized: false }
+        : true;
+    }
+
     const config: ConnectionConfig = {
       id: this.connectionId,
       name: this.formData.name.trim(),
@@ -304,7 +329,7 @@ export class ConnectionEditDialog extends PromiseDialog<ConnectionEditResult> {
       database: this.formData.database.trim(),
       username: this.formData.username.trim(),
       passwordSecret: passwordSecretKey,
-      ssl: this.formData.ssl,
+      ssl: sslConfig,
       readOnly: this.formData.readOnly,
       scope: this.formData.scope,
       projectPath: this.formData.scope === 'project' ? this.projectPath : undefined,

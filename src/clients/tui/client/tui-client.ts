@@ -7221,7 +7221,10 @@ export class TUIClient {
   private setupSqlEditorCallbacks(editor: SQLEditor): void {
     editor.setCallbacks({
       onExecuteQuery: async (sql: string, connectionId: string): Promise<QueryResult> => {
-        return this.executeSqlQuery(sql, connectionId);
+        const result = await this.executeSqlQuery(sql, connectionId);
+        // Show results in a QueryResults element
+        this.showQueryResults(result, editor.id);
+        return result;
       },
       onPickConnection: async (): Promise<ConnectionInfo | null> => {
         const connId = await this.showDatabaseConnectionPicker();
@@ -7232,6 +7235,35 @@ export class TUIClient {
         return localDatabaseService.getConnection(connectionId);
       },
     });
+  }
+
+  /**
+   * Show query results in a QueryResults element.
+   * Creates or reuses a results element associated with the SQL editor.
+   */
+  private showQueryResults(result: QueryResult, editorId: string): void {
+    const activePane = this.window.getFocusedPane();
+    if (!activePane) return;
+
+    // Look for existing results element for this editor
+    const resultsId = `results-${editorId}`;
+    let resultsElement = activePane.getElement(resultsId);
+
+    if (!resultsElement) {
+      // Create new QueryResults element
+      const newId = activePane.addElement('QueryResults', 'Query Results');
+      if (newId) {
+        resultsElement = activePane.getElement(newId);
+      }
+    }
+
+    if (resultsElement && resultsElement instanceof QueryResults) {
+      resultsElement.setResult(result);
+      // Focus the results element
+      activePane.setActiveElement(resultsElement.id);
+    }
+
+    this.scheduleRender();
   }
 
   /**

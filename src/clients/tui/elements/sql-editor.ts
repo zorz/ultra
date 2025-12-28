@@ -150,7 +150,19 @@ export class SQLEditor extends BaseElement {
    * Execute the current query.
    */
   async executeQuery(): Promise<void> {
+    // If no connection, prompt user to pick one first
     if (!this.connectionId) {
+      const picked = await this.pickConnection();
+      if (!picked) {
+        this.lastError = 'No connection selected';
+        this.ctx.markDirty();
+        return;
+      }
+    }
+
+    // Re-check after async operation (TypeScript needs this)
+    const connectionId = this.connectionId;
+    if (!connectionId) {
       this.lastError = 'No connection selected';
       this.ctx.markDirty();
       return;
@@ -172,7 +184,7 @@ export class SQLEditor extends BaseElement {
 
     try {
       if (this.callbacks.onExecuteQuery) {
-        this.lastResult = await this.callbacks.onExecuteQuery(sql, this.connectionId);
+        this.lastResult = await this.callbacks.onExecuteQuery(sql, connectionId);
       }
     } catch (error) {
       this.lastError = error instanceof Error ? error.message : String(error);
@@ -318,8 +330,10 @@ export class SQLEditor extends BaseElement {
       }
     }
 
-    // Hint for execute
-    const hint = 'Ctrl+Enter: Run';
+    // Hint for execute or connection
+    const hint = this.connectionId
+      ? 'Ctrl+Enter: Run'
+      : 'Ctrl+Shift+C: Select Connection';
     const hintStart = Math.floor((width - hint.length) / 2);
     if (hintStart > statusStart + statusText.length && hintStart + hint.length < posStart) {
       for (let i = 0; i < hint.length; i++) {
@@ -468,13 +482,24 @@ export class SQLEditor extends BaseElement {
 
   override handleMouse(event: MouseEvent): boolean {
     if (event.type === 'press') {
-      // Click to position cursor
-      const relX = event.x - this.bounds.x - this.GUTTER_WIDTH;
+      const relX = event.x - this.bounds.x;
       const relY = event.y - this.bounds.y;
 
-      if (relX >= 0 && relY < this.bounds.height - this.STATUS_HEIGHT) {
+      // Click on status bar (last row)
+      if (relY === this.bounds.height - 1) {
+        // Click on connection status area (left part of status bar)
+        const connStatus = this.connectionId ? `[${this.connectionName}]` : '[No Connection]';
+        if (relX < connStatus.length) {
+          this.pickConnection();
+          return true;
+        }
+      }
+
+      // Click to position cursor in editor area
+      const editorRelX = relX - this.GUTTER_WIDTH;
+      if (editorRelX >= 0 && relY < this.bounds.height - this.STATUS_HEIGHT) {
         const line = this.scrollTop + relY;
-        const column = this.scrollLeft + relX;
+        const column = this.scrollLeft + editorRelX;
 
         if (line < this.lines.length) {
           this.cursor.line = line;
@@ -586,13 +611,15 @@ export class SQLEditor extends BaseElement {
     this.callbacks.onContentChange?.(this.getContent());
   }
 
-  private async pickConnection(): Promise<void> {
+  private async pickConnection(): Promise<boolean> {
     if (this.callbacks.onPickConnection) {
       const conn = await this.callbacks.onPickConnection();
       if (conn) {
         this.setConnection(conn.id, conn.name);
+        return true;
       }
     }
+    return false;
   }
 
   private updateTitle(): void {
