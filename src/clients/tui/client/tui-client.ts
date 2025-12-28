@@ -7135,19 +7135,18 @@ export class TUIClient {
     const activePane = this.window.getActivePane();
     if (!activePane) return;
 
-    // Show connection picker first
-    const connectionId = await this.showDatabaseConnectionPicker();
-    if (!connectionId) return;
+    // For now, skip connection picker and just open the editor
+    // TODO: Show connection picker first once dialogs are implemented
+    // const connectionId = await this.showDatabaseConnectionPicker();
+    // if (!connectionId) return;
 
-    // Create SQL editor element
-    const element = this.createElement('SQLEditor');
-    if (!element) {
+    // Create SQL editor element using the pane's addElement method
+    const editorId = activePane.addElement('SQLEditor', 'New Query');
+    if (!editorId) {
       this.window.showNotification('Failed to create SQL editor', 'error');
       return;
     }
 
-    activePane.addElement(element);
-    activePane.setActiveElement(element);
     this.scheduleRender();
   }
 
