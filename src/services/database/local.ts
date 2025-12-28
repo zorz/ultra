@@ -488,16 +488,18 @@ export class LocalDatabaseService implements DatabaseService {
   }
 
   async listTables(connectionId: string, schema = 'public'): Promise<TableInfo[]> {
+    // Use pg_tables for reliable table listing (pg_stat_user_tables only shows tables with activity)
     const result = await this.executeQuery(connectionId, `
       SELECT
-        schemaname as schema,
-        tablename as name,
+        t.schemaname as schema,
+        t.tablename as name,
         'table' as type,
-        n_live_tup as row_count,
-        pg_total_relation_size(schemaname || '.' || tablename) as size_bytes,
-        obj_description((schemaname || '.' || tablename)::regclass) as comment
-      FROM pg_stat_user_tables
-      WHERE schemaname = $1
+        s.n_live_tup as row_count,
+        pg_total_relation_size(quote_ident(t.schemaname) || '.' || quote_ident(t.tablename)) as size_bytes,
+        obj_description((quote_ident(t.schemaname) || '.' || quote_ident(t.tablename))::regclass) as comment
+      FROM pg_tables t
+      LEFT JOIN pg_stat_user_tables s ON t.schemaname = s.schemaname AND t.tablename = s.relname
+      WHERE t.schemaname = $1
 
       UNION ALL
 
@@ -507,7 +509,7 @@ export class LocalDatabaseService implements DatabaseService {
         'view' as type,
         NULL as row_count,
         NULL as size_bytes,
-        obj_description((schemaname || '.' || viewname)::regclass) as comment
+        obj_description((quote_ident(schemaname) || '.' || quote_ident(viewname))::regclass) as comment
       FROM pg_views
       WHERE schemaname = $1
 
@@ -518,8 +520,8 @@ export class LocalDatabaseService implements DatabaseService {
         matviewname as name,
         'materialized_view' as type,
         NULL as row_count,
-        pg_total_relation_size(schemaname || '.' || matviewname) as size_bytes,
-        obj_description((schemaname || '.' || matviewname)::regclass) as comment
+        pg_total_relation_size(quote_ident(schemaname) || '.' || quote_ident(matviewname)) as size_bytes,
+        obj_description((quote_ident(schemaname) || '.' || quote_ident(matviewname))::regclass) as comment
       FROM pg_matviews
       WHERE schemaname = $1
 

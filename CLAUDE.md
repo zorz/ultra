@@ -281,6 +281,7 @@ src/
 │       │   └── config-manager.ts  # Settings + keybindings
 │       └── window.ts              # Window/pane management
 ├── services/           # ECP services
+│   ├── database/       # Database connections and queries
 │   ├── document/       # Buffer, cursor, undo
 │   ├── file/           # File system abstraction
 │   ├── git/            # Version control
@@ -751,6 +752,7 @@ src/services/<service-name>/
 ```
 
 Available services:
+- **DatabaseService**: Database connections, queries, and schema browsing (PostgreSQL, Supabase)
 - **DocumentService**: Buffer, cursor, undo operations
 - **FileService**: File system abstraction (local, SSH, cloud)
 - **GitService**: Version control operations

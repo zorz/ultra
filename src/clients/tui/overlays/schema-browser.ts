@@ -79,29 +79,6 @@ export interface SchemaBrowserConfig extends DialogConfig {
 }
 
 // ============================================
-// Icons
-// ============================================
-
-const ICONS: Record<NodeType | 'expanded' | 'collapsed', string> = {
-  connection: '',
-  schema: '',
-  tables_folder: '',
-  views_folder: '',
-  functions_folder: 'ƒ',
-  triggers_folder: '⚡',
-  indexes_folder: '',
-  policies_folder: '',
-  table: '',
-  view: '',
-  function: 'ƒ',
-  trigger: '⚡',
-  index: '',
-  policy: '',
-  expanded: '',
-  collapsed: '',
-};
-
-// ============================================
 // Schema Browser
 // ============================================
 
@@ -130,6 +107,12 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
   /** Loading state */
   private loading: boolean = false;
 
+  /** Search/filter string */
+  private searchQuery: string = '';
+
+  /** Whether search input is focused */
+  private searchFocused: boolean = false;
+
   constructor(id: string, callbacks: OverlayManagerCallbacks) {
     super(id, callbacks);
     this.zIndex = 200;
@@ -154,14 +137,16 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
     this.selectedIndex = 0;
     this.scrollOffset = 0;
     this.loading = true;
+    this.searchQuery = '';
+    this.searchFocused = false;
 
     // Start loading asynchronously
     this.loadTree();
 
     return this.showAsync({
       title: config.title ?? 'Schema Browser',
-      width: config.width ?? 60,
-      height: config.height ?? 25,
+      width: config.width ?? 80,
+      height: config.height ?? 35,
     });
   }
 
@@ -197,7 +182,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
         id: this.connectionId,
         type: 'connection',
         name: connection.name,
-        icon: ICONS.connection,
+        icon: '@',
         depth: 0,
         expanded: true,
         children: [],
@@ -239,7 +224,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `schema:${schema.name}`,
       type: 'schema',
       name: schema.name,
-      icon: ICONS.schema,
+      icon: "#",
       depth,
       expanded: schema.name === 'public',
       children: [],
@@ -251,7 +236,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `tables:${schema.name}`,
       type: 'tables_folder',
       name: 'Tables',
-      icon: ICONS.tables_folder,
+      icon: "T",
       depth: depth + 1,
       expanded: schema.name === 'public',
       children: [],
@@ -262,7 +247,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `views:${schema.name}`,
       type: 'views_folder',
       name: 'Views',
-      icon: ICONS.views_folder,
+      icon: "V",
       depth: depth + 1,
       expanded: false,
       children: [],
@@ -273,7 +258,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `functions:${schema.name}`,
       type: 'functions_folder',
       name: 'Functions',
-      icon: ICONS.functions_folder,
+      icon: "f",
       depth: depth + 1,
       expanded: false,
       children: [],
@@ -284,7 +269,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `triggers:${schema.name}`,
       type: 'triggers_folder',
       name: 'Triggers',
-      icon: ICONS.triggers_folder,
+      icon: "!",
       depth: depth + 1,
       expanded: false,
       children: [],
@@ -295,7 +280,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `indexes:${schema.name}`,
       type: 'indexes_folder',
       name: 'Indexes',
-      icon: ICONS.indexes_folder,
+      icon: "i",
       depth: depth + 1,
       expanded: false,
       children: [],
@@ -306,7 +291,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       id: `policies:${schema.name}`,
       type: 'policies_folder',
       name: 'RLS Policies',
-      icon: ICONS.policies_folder,
+      icon: "P",
       depth: depth + 1,
       expanded: false,
       children: [],
@@ -326,7 +311,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
             id: `${nodeType}:${schema.name}.${table.name}`,
             type: nodeType,
             name: table.name,
-            icon: ICONS[nodeType],
+            icon: nodeType === "view" ? "V" : "T",
             depth: depth + 2,
             expanded: false,
             children: [],
@@ -350,7 +335,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
             id: `function:${schema.name}.${func.name}(${func.arguments})`,
             type: 'function',
             name: displayName,
-            icon: ICONS.function,
+            icon: "f",
             depth: depth + 2,
             expanded: false,
             children: [],
@@ -373,7 +358,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
             id: `trigger:${schema.name}.${trigger.table}.${trigger.name}`,
             type: 'trigger',
             name: displayName,
-            icon: ICONS.trigger,
+            icon: "!",
             depth: depth + 2,
             expanded: false,
             children: [],
@@ -397,7 +382,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
             id: `index:${schema.name}.${idx.table}.${idx.name}`,
             type: 'index',
             name: displayName,
-            icon: ICONS.index,
+            icon: "i",
             depth: depth + 2,
             expanded: false,
             children: [],
@@ -421,7 +406,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
             id: `policy:${schema.name}.${policy.table}.${policy.name}`,
             type: 'policy',
             name: displayName,
-            icon: ICONS.policy,
+            icon: "P",
             depth: depth + 2,
             expanded: false,
             children: [],
@@ -478,7 +463,12 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
    */
   private rebuildVisibleNodes(): void {
     this.visibleNodes = [];
-    this.flattenNodes(this.rootNodes);
+    if (this.searchQuery.trim()) {
+      // When searching, show all matching nodes with their parents expanded
+      this.flattenNodesFiltered(this.rootNodes, this.searchQuery.toLowerCase());
+    } else {
+      this.flattenNodes(this.rootNodes);
+    }
   }
 
   /**
@@ -491,6 +481,39 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
         this.flattenNodes(node.children);
       }
     }
+  }
+
+  /**
+   * Flatten tree nodes with search filter - shows matching nodes and their parents.
+   */
+  private flattenNodesFiltered(nodes: TreeNode[], query: string): void {
+    for (const node of nodes) {
+      const matches = node.name.toLowerCase().includes(query);
+      const hasMatchingChildren = this.hasMatchingDescendant(node, query);
+
+      if (matches || hasMatchingChildren) {
+        this.visibleNodes.push(node);
+        // When filtering, always show children of nodes that have matching descendants
+        if (node.children.length > 0) {
+          this.flattenNodesFiltered(node.children, query);
+        }
+      }
+    }
+  }
+
+  /**
+   * Check if node or any descendant matches the query.
+   */
+  private hasMatchingDescendant(node: TreeNode, query: string): boolean {
+    for (const child of node.children) {
+      if (child.name.toLowerCase().includes(query)) {
+        return true;
+      }
+      if (this.hasMatchingDescendant(child, query)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -509,6 +532,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
   protected override handleKeyInput(event: KeyEvent): boolean {
     const { key, ctrl } = event;
 
+    // Navigation keys work regardless of search
     switch (key) {
       case 'ArrowUp':
         this.moveSelection(-1);
@@ -537,7 +561,6 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       }
 
       case 'Enter':
-      case ' ':
         this.handleSelect();
         return true;
 
@@ -564,6 +587,38 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
           this.callbacks.onDirty();
         }
         return true;
+
+      case 'Backspace':
+        // Remove last character from search
+        if (this.searchQuery.length > 0) {
+          this.searchQuery = this.searchQuery.slice(0, -1);
+          this.selectedIndex = 0;
+          this.scrollOffset = 0;
+          this.rebuildVisibleNodes();
+          this.callbacks.onDirty();
+        }
+        return true;
+
+      case 'Delete':
+        // Clear search
+        if (this.searchQuery.length > 0) {
+          this.searchQuery = '';
+          this.selectedIndex = 0;
+          this.scrollOffset = 0;
+          this.rebuildVisibleNodes();
+          this.callbacks.onDirty();
+        }
+        return true;
+    }
+
+    // Handle printable characters for search (not space, as that could toggle)
+    if (key.length === 1 && !ctrl && key !== ' ') {
+      this.searchQuery += key;
+      this.selectedIndex = 0;
+      this.scrollOffset = 0;
+      this.rebuildVisibleNodes();
+      this.callbacks.onDirty();
+      return true;
     }
 
     return false;
@@ -663,7 +718,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
    * Get number of visible rows in the dialog.
    */
   private getVisibleRowCount(): number {
-    return this.bounds.height - 5; // Account for border, title, and hints
+    return this.bounds.height - 7; // Account for border, title, search bar, and hints
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -679,12 +734,47 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
     const selectedBg = this.callbacks.getThemeColor('list.activeSelectionBackground', '#094771');
     const selectedFg = this.callbacks.getThemeColor('list.activeSelectionForeground', '#ffffff');
     const dimColor = this.callbacks.getThemeColor('descriptionForeground', '#858585');
+    const inputBg = this.callbacks.getThemeColor('input.background', '#3c3c3c');
+    const inputFg = this.callbacks.getThemeColor('input.foreground', '#cccccc');
 
-    // Draw content
     const contentX = x + 1;
-    const contentY = y + 2;
     const contentWidth = width - 2;
-    const contentHeight = height - 4;
+
+    // Draw search bar
+    const searchY = y + 2;
+    const searchLabel = 'Filter: ';
+    for (let i = 0; i < searchLabel.length; i++) {
+      buffer.set(contentX + i, searchY, { char: searchLabel[i] ?? ' ', fg: dimColor, bg: bgColor });
+    }
+    // Draw search input box
+    const inputX = contentX + searchLabel.length;
+    const inputWidth = contentWidth - searchLabel.length;
+    for (let i = 0; i < inputWidth; i++) {
+      const char = this.searchQuery[i] ?? ' ';
+      buffer.set(inputX + i, searchY, { char, fg: inputFg, bg: inputBg });
+    }
+    // Draw cursor in search box
+    if (this.searchQuery.length < inputWidth) {
+      buffer.set(inputX + this.searchQuery.length, searchY, { char: '_', fg: inputFg, bg: inputBg });
+    }
+
+    // Draw separator line
+    const sepY = y + 3;
+    for (let i = 0; i < contentWidth; i++) {
+      buffer.set(contentX + i, sepY, { char: '─', fg: dimColor, bg: bgColor });
+    }
+
+    // Draw content area (below search bar)
+    const contentY = y + 4;
+    const contentHeight = height - 6;
+
+    // Always clear the entire content area first to prevent artifacts
+    for (let row = 0; row < contentHeight; row++) {
+      const rowY = contentY + row;
+      for (let cx = 0; cx < contentWidth; cx++) {
+        buffer.set(contentX + cx, rowY, { char: ' ', fg: fgColor, bg: bgColor });
+      }
+    }
 
     if (this.loading) {
       // Draw loading message
@@ -696,7 +786,7 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       }
     } else if (this.visibleNodes.length === 0) {
       // No nodes message
-      const emptyMsg = 'No database objects found';
+      const emptyMsg = this.searchQuery ? 'No matching items' : 'No database objects found';
       const emptyX = x + Math.floor((width - emptyMsg.length) / 2);
       const emptyY = y + Math.floor(height / 2);
       for (let i = 0; i < emptyMsg.length; i++) {
@@ -704,74 +794,119 @@ export class SchemaBrowser extends PromiseDialog<SchemaBrowserResult> {
       }
     } else {
       // Draw visible nodes
-      for (let i = 0; i < contentHeight - 1; i++) {
+      const maxRows = contentHeight - 1;
+      for (let i = 0; i < maxRows; i++) {
         const nodeIndex = this.scrollOffset + i;
-        const rowY = contentY + i;
-
-        // Clear row
-        for (let cx = 0; cx < contentWidth; cx++) {
-          buffer.set(contentX + cx, rowY, { char: ' ', fg: fgColor, bg: bgColor });
-        }
-
-        if (nodeIndex >= this.visibleNodes.length) continue;
+        if (nodeIndex >= this.visibleNodes.length) break;
 
         const node = this.visibleNodes[nodeIndex];
         if (!node) continue;
 
+        const rowY = contentY + i;
         const isSelected = nodeIndex === this.selectedIndex;
         const rowBg = isSelected ? selectedBg : bgColor;
         const rowFg = isSelected ? selectedFg : fgColor;
 
-        // Fill selected row background
+        // Fill row background for selected item
         if (isSelected) {
           for (let cx = 0; cx < contentWidth; cx++) {
             buffer.set(contentX + cx, rowY, { char: ' ', fg: rowFg, bg: rowBg });
           }
         }
 
-        // Build display string: indent + expand icon + icon + name
-        let displayX = contentX;
+        // Build the line as a string first, then render character by character
+        // This ensures consistent positioning regardless of icon width
+        const indent = '  '.repeat(node.depth);
+        const isExpandable = node.children.length > 0 || node.type.endsWith('_folder') || node.type === 'schema' || node.type === 'connection';
+        const expandChar = isExpandable ? (node.expanded ? '-' : '+') : ' ';
 
-        // Indent based on depth
-        for (let d = 0; d < node.depth * 2; d++) {
-          buffer.set(displayX++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        // Format: [indent][expand] [icon] [name]
+        let col = contentX;
+
+        // Draw indent
+        for (let d = 0; d < indent.length && col < contentX + contentWidth; d++) {
+          buffer.set(col++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
         }
 
-        // Expansion indicator for expandable nodes
-        if (node.children.length > 0 || node.type.endsWith('_folder') || node.type === 'schema' || node.type === 'connection') {
-          const expandIcon = node.expanded ? ICONS.expanded : ICONS.collapsed;
-          buffer.set(displayX++, rowY, { char: expandIcon, fg: dimColor, bg: rowBg });
-        } else {
-          buffer.set(displayX++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        // Draw expand indicator
+        if (col < contentX + contentWidth) {
+          buffer.set(col++, rowY, { char: expandChar, fg: dimColor, bg: rowBg });
         }
 
-        // Space
-        buffer.set(displayX++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        // Space after expand
+        if (col < contentX + contentWidth) {
+          buffer.set(col++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        }
 
-        // Node icon
-        buffer.set(displayX++, rowY, { char: node.icon, fg: this.getIconColor(node.type), bg: rowBg });
+        // Draw icon (use a simple character representation)
+        const iconChar = this.getSimpleIcon(node.type);
+        if (col < contentX + contentWidth) {
+          buffer.set(col++, rowY, { char: iconChar, fg: this.getIconColor(node.type), bg: rowBg });
+        }
 
-        // Space
-        buffer.set(displayX++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        // Space after icon
+        if (col < contentX + contentWidth) {
+          buffer.set(col++, rowY, { char: ' ', fg: rowFg, bg: rowBg });
+        }
 
-        // Node name
-        const maxNameLen = contentWidth - (displayX - contentX) - 1;
-        const displayName = node.name.length > maxNameLen
-          ? node.name.slice(0, maxNameLen - 1) + '…'
+        // Node name (remaining width)
+        const remainingWidth = contentX + contentWidth - col - 1;
+        const displayName = node.name.length > remainingWidth
+          ? node.name.slice(0, remainingWidth - 1) + '~'
           : node.name;
 
-        for (let ci = 0; ci < displayName.length; ci++) {
-          buffer.set(displayX + ci, rowY, { char: displayName[ci] ?? ' ', fg: rowFg, bg: rowBg });
+        for (let ci = 0; ci < displayName.length && col < contentX + contentWidth; ci++) {
+          buffer.set(col++, rowY, { char: displayName[ci] ?? ' ', fg: rowFg, bg: rowBg });
         }
       }
     }
 
     // Draw hints at bottom
     const hintsY = y + height - 2;
-    const hints = 'Enter: Select  ←→: Expand/Collapse  Esc: Cancel';
-    const hintsX = x + Math.floor((width - hints.length) / 2);
-    for (let i = 0; i < hints.length; i++) {
-      buffer.set(hintsX + i, hintsY, { char: hints[i] ?? ' ', fg: dimColor, bg: bgColor });
+    const hints = 'Type to filter | Enter: Select | ←→: Expand/Collapse | Del: Clear | Esc: Cancel';
+    const displayHints = hints.length > contentWidth ? hints.slice(0, contentWidth - 1) + '~' : hints;
+    const hintsX = x + Math.floor((width - displayHints.length) / 2);
+    for (let i = 0; i < displayHints.length; i++) {
+      buffer.set(hintsX + i, hintsY, { char: displayHints[i] ?? ' ', fg: dimColor, bg: bgColor });
+    }
+  }
+
+  /**
+   * Get a simple single-character icon for consistent rendering.
+   * Using ASCII characters to avoid double-width unicode issues.
+   */
+  private getSimpleIcon(type: NodeType): string {
+    switch (type) {
+      case 'connection':
+        return '@';
+      case 'schema':
+        return '#';
+      case 'tables_folder':
+        return 'T';
+      case 'views_folder':
+        return 'V';
+      case 'functions_folder':
+        return 'f';
+      case 'triggers_folder':
+        return '!';
+      case 'indexes_folder':
+        return 'i';
+      case 'policies_folder':
+        return 'P';
+      case 'table':
+        return 'T';
+      case 'view':
+        return 'V';
+      case 'function':
+        return 'f';
+      case 'trigger':
+        return '!';
+      case 'index':
+        return 'i';
+      case 'policy':
+        return 'P';
+      default:
+        return '?';
     }
   }
 
