@@ -95,7 +95,12 @@ import { createLSPIntegration, type LSPIntegration } from './lsp-integration.ts'
 import { localLSPService, type LSPDocumentSymbol } from '../../../services/lsp/index.ts';
 
 // Database
-import { localDatabaseService } from '../../../services/database/index.ts';
+import {
+  localDatabaseService,
+  getSQLCompletionProvider,
+  type SQLCompletionItem,
+  SQLCompletionKind,
+} from '../../../services/database/index.ts';
 import { localSecretService } from '../../../services/secret/index.ts';
 import type { ConnectionInfo, QueryResult } from '../../../services/database/types.ts';
 import {
@@ -6888,7 +6893,16 @@ export class TUIClient {
     startColumn: number
   ): void {
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) {
+
+    // Get the DocumentEditor - either directly or from SQLEditor
+    let editor: DocumentEditor | null = null;
+    if (element instanceof DocumentEditor) {
+      editor = element;
+    } else if (element instanceof SQLEditor) {
+      editor = element.getDocumentEditor();
+    }
+
+    if (!editor) {
       debugLog('[TUIClient] No document editor focused for completion');
       return;
     }
@@ -6897,7 +6911,7 @@ export class TUIClient {
     const insertText = item.insertText ?? item.label;
 
     // Get the current cursor position
-    const cursors = element.getCursors();
+    const cursors = editor.getCursors();
     if (cursors.length === 0) return;
 
     const cursor = cursors[0]!;
@@ -6910,12 +6924,12 @@ export class TUIClient {
     if (deleteLength > 0) {
       // Delete the typed prefix first
       for (let i = 0; i < deleteLength; i++) {
-        element.deleteBackward();
+        editor.deleteBackward();
       }
     }
 
     // Insert the completion text
-    element.insertText(insertText);
+    editor.insertText(insertText);
 
     debugLog(`[TUIClient] Applied completion: "${insertText}" (replaced ${deleteLength} chars)`);
     this.scheduleRender();
@@ -6923,28 +6937,39 @@ export class TUIClient {
 
   /**
    * Get the current document info for LSP.
+   * Works with both DocumentEditor and SQLEditor (which embeds a DocumentEditor).
    */
   private getCurrentEditorInfo(): {
     uri: string;
     position: { line: number; character: number };
     screenX: number;
     screenY: number;
+    editor: DocumentEditor;
   } | null {
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) {
+
+    // Get the DocumentEditor - either directly or from SQLEditor
+    let editor: DocumentEditor | null = null;
+    if (element instanceof DocumentEditor) {
+      editor = element;
+    } else if (element instanceof SQLEditor) {
+      editor = element.getDocumentEditor();
+    }
+
+    if (!editor) {
       return null;
     }
 
-    const uri = element.getUri();
+    const uri = editor.getUri();
     if (!uri) return null;
 
-    const cursor = element.getPrimaryCursor();
-    const bounds = element.getBounds();
+    const cursor = editor.getPrimaryCursor();
+    const bounds = editor.getBounds();
 
     // Calculate screen position from cursor
     // The cursor position is relative to the document, not the screen
-    const screenX = bounds.x + element.getGutterWidth() + cursor.position.column - element.getScrollLeft();
-    const screenY = bounds.y + cursor.position.line - element.getScrollTop();
+    const screenX = bounds.x + editor.getGutterWidth() + cursor.position.column - editor.getScrollLeft();
+    const screenY = bounds.y + cursor.position.line - editor.getScrollTop();
 
     return {
       uri,
@@ -6954,6 +6979,7 @@ export class TUIClient {
       },
       screenX,
       screenY,
+      editor,
     };
   }
 
@@ -6999,16 +7025,22 @@ export class TUIClient {
    * Trigger completion at current cursor position.
    */
   private async lspTriggerCompletion(): Promise<void> {
-    if (!this.lspIntegration) return;
-
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) return;
+
+    // Check if this is a SQL editor - use SQL completion provider
+    if (element instanceof SQLEditor) {
+      await this.triggerSQLCompletion(element);
+      return;
+    }
+
+    // Regular LSP completion
+    if (!this.lspIntegration) return;
 
     const info = this.getCurrentEditorInfo();
     if (!info) return;
 
-    // Calculate prefix and startColumn
-    const line = element.getLines()[info.position.line];
+    // Calculate prefix and startColumn using the editor from info
+    const line = info.editor.getLines()[info.position.line];
     let prefix = '';
     let startColumn = info.position.character;
 
@@ -7032,6 +7064,70 @@ export class TUIClient {
       prefix,
       startColumn
     );
+  }
+
+  /**
+   * Trigger SQL-specific completion for a SQL editor.
+   */
+  private async triggerSQLCompletion(sqlEditor: SQLEditor): Promise<void> {
+    if (!this.lspIntegration) return;
+
+    const docEditor = sqlEditor.getDocumentEditor();
+    const connectionId = sqlEditor.getConnectionId();
+
+    // Get cursor position and screen coordinates
+    const cursor = docEditor.getPrimaryCursor();
+    const bounds = docEditor.getBounds();
+    const screenX = bounds.x + docEditor.getGutterWidth() + cursor.position.column - docEditor.getScrollLeft();
+    const screenY = bounds.y + cursor.position.line - docEditor.getScrollTop();
+
+    // Calculate prefix and startColumn
+    const line = docEditor.getLines()[cursor.position.line];
+    let prefix = '';
+    let startColumn = cursor.position.column;
+
+    if (line) {
+      for (let i = cursor.position.column - 1; i >= 0; i--) {
+        const ch = line.text[i];
+        if (ch && /[\w_$.]/.test(ch)) { // Include . for schema.table
+          prefix = ch + prefix;
+          startColumn = i;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Get SQL completions
+    const sqlProvider = getSQLCompletionProvider(localDatabaseService);
+    const sqlContent = docEditor.getContent();
+    const sqlCompletions = await sqlProvider.getCompletions(
+      connectionId || '',
+      sqlContent,
+      cursor.position.line,
+      cursor.position.column
+    );
+
+    // Convert SQL completions to LSP format
+    const lspCompletions = sqlCompletions.map((item: SQLCompletionItem) => ({
+      label: item.label,
+      kind: item.kind,
+      detail: item.detail,
+      documentation: item.documentation,
+      insertText: item.insertText,
+      sortText: item.sortText,
+      filterText: item.filterText,
+    }));
+
+    if (lspCompletions.length === 0) {
+      this.lspIntegration.dismissCompletion();
+      return;
+    }
+
+    // Show in autocomplete popup
+    const popup = this.lspIntegration.getAutocompletePopup();
+    popup.showCompletions(lspCompletions, screenX, screenY, prefix, startColumn);
+    this.scheduleRender();
   }
 
   /**

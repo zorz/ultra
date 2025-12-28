@@ -57,5 +57,14 @@ export { PostgresBackend } from './backends/postgres.ts';
 // History
 export { QueryHistoryManager, queryHistoryManager } from './history.ts';
 
+// SQL Completion
+export {
+  SQLCompletionProvider,
+  SQLCompletionKind,
+  getSQLCompletionProvider,
+  clearSQLCompletionProvider,
+  type SQLCompletionItem,
+} from './sql-completion.ts';
+
 // Default export
 export { localDatabaseService as default } from './local.ts';
