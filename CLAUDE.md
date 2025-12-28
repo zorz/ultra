@@ -588,6 +588,31 @@ export { ExampleServiceAdapter } from './adapter.ts';
 
 Without ECP registration, the service cannot be tested via `TestECPClient` or used by clients.
 
+### Command Palette Integration (REQUIRED for User-Facing Features)
+
+When adding user-facing features, you MUST add commands to the command palette in `src/clients/tui/client/tui-client.ts`:
+
+1. **Register command handlers in `registerCommands()`**:
+   ```typescript
+   // Example commands
+   this.commandHandlers.set('example.doSomething', async () => {
+     await this.doSomething();
+     return true;
+   });
+   ```
+
+2. **Implement the handler methods** (at the end of the TUIClient class):
+   ```typescript
+   private async doSomething(): Promise<void> {
+     // Implementation or show "coming soon" notification
+     this.window.showNotification('Feature coming soon', 'info');
+   }
+   ```
+
+3. **Use consistent command naming**: `category.action` (e.g., `database.newQuery`, `git.commit`)
+
+Commands automatically appear in the command palette (Ctrl+Shift+P) once registered.
+
 ### ECP Method Naming
 
 ECP methods use namespaced naming:

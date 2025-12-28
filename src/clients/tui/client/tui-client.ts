@@ -3434,6 +3434,32 @@ export class TUIClient {
       await this.lspTriggerSignatureHelp();
       return true;
     });
+
+    // Database commands
+    this.commandHandlers.set('database.newQuery', async () => {
+      await this.openNewSqlEditor();
+      return true;
+    });
+
+    this.commandHandlers.set('database.connect', async () => {
+      await this.showDatabaseConnectionPicker();
+      return true;
+    });
+
+    this.commandHandlers.set('database.newConnection', async () => {
+      await this.showNewDatabaseConnectionDialog();
+      return true;
+    });
+
+    this.commandHandlers.set('database.viewHistory', async () => {
+      await this.showDatabaseQueryHistory();
+      return true;
+    });
+
+    this.commandHandlers.set('database.browseSchema', async () => {
+      await this.showDatabaseSchemaBrowser();
+      return true;
+    });
   }
 
   /**
@@ -7096,6 +7122,67 @@ export class TUIClient {
         }
       }
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Database Commands
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Open a new SQL editor tab.
+   */
+  private async openNewSqlEditor(): Promise<void> {
+    const activePane = this.window.getActivePane();
+    if (!activePane) return;
+
+    // Show connection picker first
+    const connectionId = await this.showDatabaseConnectionPicker();
+    if (!connectionId) return;
+
+    // Create SQL editor element
+    const element = this.createElement('SQLEditor');
+    if (!element) {
+      this.window.showNotification('Failed to create SQL editor', 'error');
+      return;
+    }
+
+    activePane.addElement(element);
+    activePane.setActiveElement(element);
+    this.scheduleRender();
+  }
+
+  /**
+   * Show database connection picker.
+   */
+  private async showDatabaseConnectionPicker(): Promise<string | null> {
+    // TODO: Implement connection picker dialog
+    // For now, show a notification
+    this.window.showNotification('Database connection picker coming soon', 'info');
+    return null;
+  }
+
+  /**
+   * Show new database connection dialog.
+   */
+  private async showNewDatabaseConnectionDialog(): Promise<void> {
+    // TODO: Implement new connection dialog
+    this.window.showNotification('New database connection dialog coming soon', 'info');
+  }
+
+  /**
+   * Show database query history.
+   */
+  private async showDatabaseQueryHistory(): Promise<void> {
+    // TODO: Implement query history dialog
+    this.window.showNotification('Query history coming soon', 'info');
+  }
+
+  /**
+   * Show database schema browser.
+   */
+  private async showDatabaseSchemaBrowser(): Promise<void> {
+    // TODO: Implement schema browser
+    this.window.showNotification('Schema browser coming soon', 'info');
   }
 }
 
