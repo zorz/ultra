@@ -7132,7 +7132,7 @@ export class TUIClient {
    * Open a new SQL editor tab.
    */
   private async openNewSqlEditor(): Promise<void> {
-    const activePane = this.window.getActivePane();
+    const activePane = this.window.getFocusedPane();
     if (!activePane) return;
 
     // For now, skip connection picker and just open the editor
