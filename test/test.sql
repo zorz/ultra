@@ -1,1 +1,1 @@
-select * from haro_queries;
+select * from table1;
