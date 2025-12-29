@@ -4,66 +4,58 @@ This guide explains how to add new commands to Ultra.
 
 ## Overview
 
-Commands in Ultra are named actions that can be:
-- Executed from the command palette
+Commands in Ultra are actions that can be:
+- Executed from the command palette (`Ctrl+Shift+P`)
 - Bound to keyboard shortcuts
 - Called programmatically
 
-## Basic Command
+## Adding a Command
 
-### Step 1: Register the Command
+### Step 1: Register the Command Handler
 
-In `src/app.ts`, add to the command registration section:
+In `src/clients/tui/client/tui-client.ts`, add to the `registerCommands()` method:
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.myCommand',
-  title: 'My Category: My Command',
-  handler: () => {
-    // Your command logic here
-    statusBar.setMessage('Command executed!', 2000);
-  }
-});
+private registerCommands(): void {
+  // ... existing commands ...
+
+  this.commandHandlers.set('myFeature.doSomething', async () => {
+    await this.doSomething();
+    return true;
+  });
+}
+
+// Add the implementation method
+private async doSomething(): Promise<void> {
+  this.window.showNotification('Command executed!', 'info');
+}
 ```
 
-### Command Properties
+### Command Naming
 
-| Property | Required | Description |
-|----------|----------|-------------|
-| `id` | Yes | Unique identifier (e.g., `ultra.myCommand`) |
-| `title` | Yes | Display name (e.g., `Category: Action`) |
-| `handler` | Yes | Function to execute |
-| `category` | No | Category for grouping |
+Use consistent naming: `category.action`
 
-### Naming Conventions
-
-**Command ID**: `ultra.<category>.<action>`
 ```
-ultra.file.save
-ultra.edit.undo
-ultra.view.toggleSidebar
-```
-
-**Title**: `Category: Action Name`
-```
-File: Save
-Edit: Undo
-View: Toggle Sidebar
+file.save
+file.saveAs
+edit.undo
+edit.redo
+git.commit
+git.push
+view.toggleSidebar
 ```
 
 ## Step 2: Add Keybinding (Optional)
 
-Edit `config/default-keybindings.json`:
+Edit `config/default-keybindings.jsonc`:
 
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+shift+m",
-      "command": "ultra.myCommand"
-    }
-  ]
-}
+```jsonc
+[
+  {
+    "key": "ctrl+shift+m",
+    "command": "myFeature.doSomething"
+  }
+]
 ```
 
 ### Key Format
@@ -76,341 +68,192 @@ Examples:
   ctrl+shift+p
   alt+ArrowLeft
   F12
+  ctrl+k ctrl+c   // Chord (multi-key)
 ```
+
+### Context-Aware Keybindings
+
+Use `when` clauses for context-specific bindings:
+
+```jsonc
+{
+  "key": "s",
+  "command": "gitPanel.stage",
+  "when": "gitPanelFocus"
+}
+```
+
+Available contexts:
+- `editorFocus` - Editor has focus
+- `sidebarFocus` - Sidebar panel focused
+- `gitPanelFocus` - Git panel focused
+- `terminalFocus` - Terminal focused
 
 ## Examples
 
 ### Simple Command
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.insertTimestamp',
-  title: 'Edit: Insert Timestamp',
-  handler: () => {
-    const pane = paneManager.activePane;
-    if (pane) {
-      const timestamp = new Date().toISOString();
-      pane.insertText(timestamp);
-    }
-  }
+this.commandHandlers.set('edit.insertTimestamp', async () => {
+  const editor = this.window.getActiveEditor();
+  if (!editor) return false;
+
+  const timestamp = new Date().toISOString();
+  editor.insertText(timestamp);
+  return true;
 });
 ```
 
-### Async Command
+### Command Using Services
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.formatDocument',
-  title: 'Edit: Format Document',
-  handler: async () => {
-    const pane = paneManager.activePane;
-    if (!pane) return;
-
-    statusBar.setMessage('Formatting...', 0);
-
-    try {
-      await lspManager.formatDocument(pane.document);
-      statusBar.setMessage('Document formatted', 2000);
-    } catch (error) {
-      statusBar.setMessage(`Format failed: ${error.message}`, 3000);
-    }
-  }
+this.commandHandlers.set('git.stageAll', async () => {
+  const gitService = this.ecpServer.getService<LocalGitService>('git');
+  await gitService.stageAll();
+  this.window.showNotification('All files staged', 'info');
+  return true;
 });
 ```
 
-### Command with Input
+### Command with User Input
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.goToLine',
-  title: 'Go: Go to Line',
-  handler: () => {
-    inputDialog.show({
-      title: 'Go to Line',
-      prompt: 'Enter line number:',
-      placeholder: '1',
-      onConfirm: (value) => {
-        const line = parseInt(value, 10);
-        if (!isNaN(line) && line > 0) {
-          paneManager.activePane?.goToLine(line - 1);
-        }
-      }
-    });
-  }
-});
-```
-
-### Command with Confirmation
-
-```typescript
-commandRegistry.register({
-  id: 'ultra.deleteFile',
-  title: 'File: Delete Current File',
-  handler: () => {
-    const pane = paneManager.activePane;
-    if (!pane?.document.filePath) return;
-
-    confirmDialog.show({
-      title: 'Delete File',
-      message: `Delete ${pane.document.filename}?`,
-      confirmText: 'Delete',
-      onConfirm: async () => {
-        await Bun.file(pane.document.filePath).unlink();
-        paneManager.closePane(pane);
-      }
-    });
-  }
+this.commandHandlers.set('navigation.goToLine', async () => {
+  // Show go-to-line dialog
+  this.goToLineDialog.show();
+  return true;
 });
 ```
 
 ### Toggle Command
 
 ```typescript
-let featureEnabled = false;
-
-commandRegistry.register({
-  id: 'ultra.toggleFeature',
-  title: 'View: Toggle Feature',
-  handler: () => {
-    featureEnabled = !featureEnabled;
-
-    const state = featureEnabled ? 'enabled' : 'disabled';
-    statusBar.setMessage(`Feature ${state}`, 2000);
-
-    renderScheduler.scheduleRender();
-  }
-});
-```
-
-## Context-Aware Commands
-
-### Check Active Pane
-
-```typescript
-commandRegistry.register({
-  id: 'ultra.duplicateLine',
-  title: 'Edit: Duplicate Line',
-  handler: () => {
-    const pane = paneManager.activePane;
-    if (!pane) {
-      statusBar.setMessage('No active editor', 2000);
-      return;
-    }
-
-    pane.duplicateCurrentLine();
-  }
-});
-```
-
-### Check Selection
-
-```typescript
-commandRegistry.register({
-  id: 'ultra.uppercase',
-  title: 'Edit: Transform to Uppercase',
-  handler: () => {
-    const pane = paneManager.activePane;
-    if (!pane?.hasSelection()) {
-      statusBar.setMessage('No text selected', 2000);
-      return;
-    }
-
-    const selected = pane.getSelectedText();
-    pane.replaceSelection(selected.toUpperCase());
-  }
-});
-```
-
-### Check File Type
-
-```typescript
-commandRegistry.register({
-  id: 'ultra.runTypeScript',
-  title: 'Run: Execute TypeScript',
-  handler: () => {
-    const pane = paneManager.activePane;
-    const path = pane?.document.filePath;
-
-    if (!path?.endsWith('.ts')) {
-      statusBar.setMessage('Not a TypeScript file', 2000);
-      return;
-    }
-
-    terminalPane.execute(`bun ${path}`);
-  }
-});
-```
-
-## Command Groups
-
-### Multi-Step Commands (Chords)
-
-For commands that require multiple key presses:
-
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+k ctrl+c",
-      "command": "ultra.commentLine"
-    },
-    {
-      "key": "ctrl+k ctrl+u",
-      "command": "ultra.uncommentLine"
-    }
-  ]
-}
-```
-
-### Related Commands
-
-Group related commands with consistent naming:
-
-```typescript
-// Selection commands
-commandRegistry.register({
-  id: 'ultra.selection.expandToWord',
-  title: 'Selection: Expand to Word',
-  handler: () => { /* ... */ }
-});
-
-commandRegistry.register({
-  id: 'ultra.selection.expandToLine',
-  title: 'Selection: Expand to Line',
-  handler: () => { /* ... */ }
-});
-
-commandRegistry.register({
-  id: 'ultra.selection.expandToBrackets',
-  title: 'Selection: Expand to Brackets',
-  handler: () => { /* ... */ }
+this.commandHandlers.set('view.toggleMinimap', async () => {
+  const current = this.sessionService.getSetting('editor.minimap.enabled');
+  await this.sessionService.setSetting('editor.minimap.enabled', !current);
+  this.window.requestRender();
+  return true;
 });
 ```
 
 ## Best Practices
 
-### 1. Handle Errors Gracefully
+### 1. Return Success Status
+
+Commands should return `true` on success, `false` on failure:
 
 ```typescript
-handler: async () => {
+this.commandHandlers.set('file.save', async () => {
+  const editor = this.window.getActiveEditor();
+  if (!editor) return false;
+
   try {
-    await doSomething();
+    await editor.save();
+    return true;
   } catch (error) {
-    statusBar.setMessage(`Error: ${error.message}`, 3000);
-    debugLog('Command error:', error);
+    this.window.showNotification(`Save failed: ${error}`, 'error');
+    return false;
   }
-}
+});
 ```
 
-### 2. Provide Feedback
+### 2. Use Services for Logic
+
+Don't implement business logic in command handlers. Use services:
 
 ```typescript
-handler: () => {
-  // Show progress for long operations
-  statusBar.setMessage('Working...', 0);
+// Good - uses service
+this.commandHandlers.set('git.commit', async () => {
+  const gitService = this.ecpServer.getService('git');
+  await gitService.commit(message);
+  return true;
+});
 
-  // Show result
-  statusBar.setMessage('Done!', 2000);
-}
+// Bad - implements logic directly
+this.commandHandlers.set('git.commit', async () => {
+  await $`git commit -m ${message}`.quiet();  // Don't do this
+  return true;
+});
 ```
 
-### 3. Check Prerequisites
+### 3. Provide User Feedback
 
 ```typescript
-handler: () => {
-  // Check for required state
-  if (!paneManager.activePane) {
-    statusBar.setMessage('No active editor', 2000);
-    return;
+this.commandHandlers.set('format.document', async () => {
+  this.window.showNotification('Formatting...', 'info');
+
+  try {
+    await this.lspService.formatDocument(documentId);
+    this.window.showNotification('Document formatted', 'info');
+    return true;
+  } catch (error) {
+    this.window.showNotification('Format failed', 'error');
+    return false;
+  }
+});
+```
+
+### 4. Check Prerequisites
+
+```typescript
+this.commandHandlers.set('lsp.goToDefinition', async () => {
+  const editor = this.window.getActiveEditor();
+  if (!editor) {
+    this.window.showNotification('No active editor', 'warning');
+    return false;
   }
 
   // Proceed with command
-}
-```
-
-### 4. Make Commands Idempotent
-
-Commands should be safe to run multiple times:
-
-```typescript
-// ✅ Good - toggle state
-handler: () => {
-  sidebar.toggle();
-}
-
-// ❌ Bad - only shows, never hides
-handler: () => {
-  sidebar.show();
-}
-```
-
-### 5. Use Async for I/O
-
-```typescript
-// ✅ Good - async for file operations
-handler: async () => {
-  const content = await Bun.file(path).text();
-}
-
-// ❌ Bad - blocking I/O
-handler: () => {
-  const content = require('fs').readFileSync(path);
-}
+});
 ```
 
 ## Testing Commands
+
+### Using TestECPClient
+
+```typescript
+import { TestECPClient } from '@test/ecp-client.ts';
+
+test('command executes successfully', async () => {
+  const client = new TestECPClient();
+
+  // Commands are executed via the TUI client
+  // For service-level testing, use the service directly
+  const gitService = client.getService('git');
+  await gitService.stageAll();
+
+  await client.shutdown();
+});
+```
 
 ### Manual Testing
 
 1. Run Ultra with debug mode:
    ```bash
-   bun src/index.ts --debug
+   bun run dev --debug
    ```
 
-2. Open command palette (`Ctrl+P`)
+2. Open command palette (`Ctrl+Shift+P`)
 
 3. Find and execute your command
 
 4. Check `debug.log` for errors
-
-### Automated Testing
-
-```typescript
-import { test, expect } from 'bun:test';
-import { commandRegistry } from '../src/input/commands.ts';
-
-test('my command is registered', () => {
-  expect(commandRegistry.has('ultra.myCommand')).toBe(true);
-});
-
-test('my command executes', async () => {
-  await commandRegistry.execute('ultra.myCommand');
-  // Assert expected state change
-});
-```
 
 ## Troubleshooting
 
 ### Command Not Found
 
 - Check the command ID matches exactly
-- Ensure the command is registered before use
-- Check for typos in keybinding config
-
-### Keybinding Not Working
-
-- Check for conflicts with existing bindings
-- Verify the key format is correct
-- Test with command palette first
+- Ensure the command is registered in `registerCommands()`
+- Verify keybinding config syntax
 
 ### Command Fails Silently
 
-- Add debug logging
+- Add debug logging with `debugLog()`
 - Check for missing null checks
 - Wrap in try/catch
 
 ## Related Documentation
 
-- [Commands Module](../modules/commands.md) - Command system details
-- [Keybindings](../architecture/keybindings.md) - Key handling
-- [Contributing](contributing.md) - Code standards
+- [Architecture Overview](../architecture/overview.md) - ECP architecture
+- [Keybindings](../architecture/keybindings.md) - Key handling system

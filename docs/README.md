@@ -1,33 +1,31 @@
 # Ultra Documentation
 
-Ultra is a terminal-native code editor with modern IDE features, built with TypeScript and Bun.
+Ultra is a terminal-native code editor built with TypeScript and Bun, using an Editor Command Protocol (ECP) architecture.
 
 ## Quick Links
 
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](getting-started.md) | Installation, first run, basic usage |
-| [Architecture Overview](architecture/overview.md) | High-level system design |
+| [Architecture Overview](architecture/overview.md) | ECP architecture and services |
+| [ECP Protocol](architecture/ecp.md) | Editor Command Protocol details |
+| [Data Flow](architecture/data-flow.md) | How data flows through Ultra |
 | [Keybindings](architecture/keybindings.md) | Keyboard handling system |
-| [Data Flow](architecture/data-flow.md) | How data moves through the app |
 | [Rendering](architecture/rendering.md) | Terminal rendering pipeline |
 
 ## Module Documentation
 
 | Module | Description |
 |--------|-------------|
-| [Buffer](modules/buffer.md) | Piece table text buffer implementation |
-| [Editor](modules/editor.md) | Main editor state and orchestration |
-| [LSP](modules/lsp.md) | Language Server Protocol integration |
-| [Syntax](modules/syntax.md) | Syntax highlighting with Shiki |
-| [Commands](modules/commands.md) | Command system and registration |
-| [UI Components](modules/ui-components.md) | Dialogs, panels, and widgets |
+| [Buffer](modules/buffer.md) | Piece table text storage |
+| [Commands](modules/commands.md) | Command registration and execution |
+| [LSP](modules/lsp.md) | Language server integration |
+| [UI Components](modules/ui-components.md) | TUI elements, overlays, and panels |
 
 ## Developer Guides
 
 | Guide | Description |
 |-------|-------------|
-| [Contributing](guides/contributing.md) | How to contribute to Ultra |
 | [Adding Commands](guides/adding-commands.md) | Creating new editor commands |
 | [Adding Languages](guides/adding-languages.md) | Adding language support |
 
@@ -42,84 +40,129 @@ bun run docs
 ## Project Structure
 
 ```
-ultra-editor/
+ultra/
 ├── src/
 │   ├── index.ts              # Entry point
-│   ├── app.ts                # Main application class
 │   ├── constants.ts          # Shared constants
-│   ├── debug.ts              # Debug logging utilities
-│   ├── core/                 # Core data structures
-│   │   ├── buffer.ts         # Piece table buffer
-│   │   ├── cursor.ts         # Cursor management
-│   │   ├── document.ts       # Document abstraction
-│   │   ├── undo.ts           # Undo/redo history
-│   │   ├── auto-indent.ts    # Auto-indentation
-│   │   ├── auto-pair.ts      # Bracket auto-pairing
-│   │   └── bracket-match.ts  # Bracket matching
-│   ├── input/                # Input handling
-│   │   ├── keymap.ts         # Key parsing and mapping
-│   │   ├── keybindings-loader.ts
-│   │   └── commands.ts       # Command registry
-│   ├── features/             # Editor features
-│   │   ├── lsp/              # Language Server Protocol
-│   │   ├── git/              # Git integration
-│   │   ├── search/           # File and project search
+│   ├── debug.ts              # Debug logging
+│   │
+│   ├── ecp/                  # Editor Command Protocol
+│   │   └── server.ts         # ECP server (routes requests to services)
+│   │
+│   ├── services/             # Backend services
+│   │   ├── database/         # Database connections and queries
+│   │   ├── document/         # Buffer, cursor, undo/redo
+│   │   ├── file/             # File system abstraction
+│   │   ├── git/              # Version control
+│   │   ├── lsp/              # Language server protocol
+│   │   ├── search/           # File and content search
+│   │   ├── secret/           # Credential storage
+│   │   ├── session/          # Settings, keybindings, state
 │   │   ├── syntax/           # Syntax highlighting
-│   │   └── ai/               # AI assistant panel
-│   ├── ui/                   # User interface
-│   │   ├── layout.ts         # Layout management
-│   │   ├── renderer.ts       # Main renderer
+│   │   └── terminal/         # PTY management
+│   │
+│   ├── clients/              # UI clients
+│   │   └── tui/              # Terminal UI client
+│   │       ├── client/       # TUI orchestrator
+│   │       ├── elements/     # Tab content (editors, terminals, AI chat)
+│   │       ├── overlays/     # Modals (command palette, file picker)
+│   │       └── config/       # TUI configuration
+│   │
+│   ├── core/                 # Core utilities
+│   │   ├── buffer.ts         # Piece table implementation
 │   │   ├── colors.ts         # Color utilities
-│   │   └── components/       # UI components
-│   │       ├── pane.ts       # Editor pane
-│   │       ├── tab-bar.ts    # Tab bar
-│   │       ├── status-bar.ts # Status bar
-│   │       ├── file-tree.ts  # File explorer
-│   │       ├── git-panel.ts  # Git panel
-│   │       └── ...           # Dialogs and widgets
-│   ├── terminal/             # Terminal I/O
-│   │   ├── ansi.ts           # ANSI escape sequences
-│   │   ├── input.ts          # Input parsing
-│   │   └── pty.ts            # PTY management
-│   ├── config/               # Configuration
-│   │   ├── defaults.ts       # Default settings
-│   │   ├── settings.ts       # Settings manager
-│   │   └── user-config.ts    # User configuration
-│   └── state/                # Application state
-│       └── editor-state.ts   # Global editor state
-├── config/                   # Configuration files
-│   ├── BOOT.md               # Welcome screen content
-│   ├── default-keybindings.json
-│   └── default-settings.json
-└── docs/                     # Documentation (you are here)
+│   │   └── event-emitter.ts  # Typed event emitter
+│   │
+│   ├── terminal/             # PTY backends
+│   │   ├── pty-factory.ts    # Backend selection
+│   │   └── backends/         # node-pty, bun-pty, IPC
+│   │
+│   └── config/               # Embedded configuration
+│       └── defaults.ts       # Generated from config/*.jsonc
+│
+├── config/                   # Source configuration
+│   ├── default-keybindings.jsonc
+│   ├── default-settings.jsonc
+│   ├── BOOT.md
+│   └── themes/
+│
+├── tests/                    # Test suites
+│   ├── unit/                 # Service unit tests
+│   ├── integration/          # ECP integration tests
+│   └── helpers/              # Test utilities (TestECPClient)
+│
+└── docs/                     # Documentation
 ```
 
-## Key Concepts
+## ECP Architecture
 
-### Piece Table Buffer
+Ultra uses an Editor Command Protocol (ECP) architecture that separates concerns:
 
-Ultra uses a [piece table](https://en.wikipedia.org/wiki/Piece_table) data structure for text storage. This provides:
-- O(1) insert/delete operations on average
-- Efficient undo/redo via snapshots
-- Memory efficiency for large files
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Clients                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │  TUI Client │  │ (Future GUI)│  │ TestECPClient (testing) │  │
+│  └──────┬──────┘  └──────┬──────┘  └────────────┬────────────┘  │
+└─────────┼────────────────┼──────────────────────┼───────────────┘
+          │                │                      │
+          ▼                ▼                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      ECP Server                                  │
+│                    (JSON-RPC 2.0)                                │
+│  Routes: document/*, file/*, git/*, lsp/*, session/*, ...       │
+└─────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Services                                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
+│  │ Document │ │   File   │ │   Git    │ │   LSP    │  ...      │
+│  │ Service  │ │ Service  │ │ Service  │ │ Service  │           │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-### Singleton Pattern
+### Service Pattern
 
-Most managers in Ultra are singletons with named + default exports:
+Each service follows a consistent pattern:
+
+```
+services/<name>/
+├── interface.ts      # Service interface (contract)
+├── types.ts          # Type definitions
+├── local.ts          # Local implementation
+├── adapter.ts        # ECP JSON-RPC adapter
+└── index.ts          # Public exports
+```
+
+### Testing with TestECPClient
+
+The ECP architecture enables headless testing:
 
 ```typescript
-export class SomeManager { ... }
-export const someManager = new SomeManager();
-export default someManager;
+import { TestECPClient } from '@test/ecp-client.ts';
+
+test('document editing', async () => {
+  const client = new TestECPClient();
+
+  const { documentId } = await client.request('document/open', {
+    uri: 'memory://test.txt',
+    content: 'hello'
+  });
+
+  await client.request('document/insert', {
+    documentId,
+    position: { line: 0, column: 5 },
+    text: ' world'
+  });
+
+  const { content } = await client.request('document/content', { documentId });
+  expect(content).toBe('hello world');
+
+  await client.shutdown();
+});
 ```
-
-### Layout System
-
-The layout manager handles pane positioning, sidebar, terminal, and AI panel placement. It uses a tree structure for split panes.
-
-### Render Scheduling
-
-Rendering is batched via `renderScheduler.scheduleRender()` to avoid excessive terminal updates. Never write directly to stdout from components.
 
 ## Technology Stack
 
@@ -128,3 +171,4 @@ Rendering is batched via `renderScheduler.scheduleRender()` to avoid excessive t
 - **Syntax Highlighting**: [Shiki](https://shiki.style/) - VS Code's syntax engine
 - **Terminal**: Raw mode with ANSI escape sequences
 - **LSP**: Language Server Protocol for IDE features
+- **Database**: PostgreSQL/Supabase support via `postgres` package

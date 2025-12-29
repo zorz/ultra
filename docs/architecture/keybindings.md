@@ -10,13 +10,13 @@ Ultra's keybinding system consists of several layers:
 Terminal Input (raw bytes)
          │
          ▼
-Input Parser (escape sequences → KeyEvent)
+TUI Client Key Parser (escape sequences → KeyEvent)
          │
          ▼
-Keymap (KeyEvent → command string)
+Session Service (KeyEvent → command string via keybindings)
          │
          ▼
-Command Registry (command string → handler function)
+Command Handler (command string → handler function)
          │
          ▼
 Command Execution
@@ -24,7 +24,7 @@ Command Execution
 
 ## Input Parsing
 
-### Raw Input (`terminal/input.ts`)
+### Raw Input
 
 The terminal is set to raw mode, meaning each keystroke is sent immediately without waiting for Enter. Input arrives as:
 
@@ -80,7 +80,32 @@ interface KeyEvent {
 }
 ```
 
-## Keymap (`input/keymap.ts`)
+## Keybinding Resolution
+
+### Session Service
+
+The Session Service manages keybinding configuration:
+
+```typescript
+// src/services/session/local.ts
+class LocalSessionService {
+  resolveKeybinding(event: KeyEvent, context: KeyContext): string | null {
+    const keyStr = this.eventToKeyString(event);
+
+    // Find matching binding with context
+    for (const binding of this.keybindings) {
+      if (binding.key === keyStr) {
+        // Check 'when' clause if present
+        if (!binding.when || this.evaluateWhen(binding.when, context)) {
+          return binding.command;
+        }
+      }
+    }
+
+    return null;
+  }
+}
+```
 
 ### Key String Format
 
@@ -96,74 +121,48 @@ Examples:
   F12
 ```
 
-### Binding Resolution
-
-```typescript
-// keymap.ts
-class Keymap {
-  private bindings: Map<string, string>;
-
-  getCommand(event: KeyEvent): string | null {
-    const keyStr = this.keyToString(event);
-    return this.bindings.get(keyStr) ?? null;
-  }
-
-  keyToString(event: KeyEvent): string {
-    const parts: string[] = [];
-    if (event.ctrl) parts.push('ctrl');
-    if (event.alt) parts.push('alt');
-    if (event.shift) parts.push('shift');
-    if (event.meta) parts.push('meta');
-    parts.push(event.key.toLowerCase());
-    return parts.join('+');
-  }
-}
-```
-
 ### Keybinding Sources
 
 Keybindings are loaded from multiple sources (in priority order):
 
-1. **User keybindings** (`~/.config/ultra/keybindings.json`) - Highest priority
-2. **Default keybindings** (`config/default-keybindings.json`)
+1. **User keybindings** (`~/.ultra/keybindings.jsonc`) - Highest priority
+2. **Default keybindings** (`config/default-keybindings.jsonc`)
 
 ```typescript
-// keybindings-loader.ts
-async function loadKeybindings(): Promise<void> {
+// Session Service loads keybindings
+async function loadKeybindings(): Promise<Keybinding[]> {
   // Load defaults first
   const defaults = await loadDefaultKeybindings();
 
   // Merge user keybindings (override defaults)
-  const userPath = getUserKeybindingsPath();
+  const userPath = path.join(getUserConfigDir(), 'keybindings.jsonc');
   if (await Bun.file(userPath).exists()) {
     const user = await loadUserKeybindings();
-    merge(defaults, user);
+    return mergeKeybindings(defaults, user);
   }
 
-  keymap.setBindings(defaults);
+  return defaults;
 }
 ```
 
 ### Keybinding Format
 
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+s",
-      "command": "ultra.save"
-    },
-    {
-      "key": "ctrl+shift+p",
-      "command": "ultra.commandPalette"
-    },
-    {
-      "key": "ctrl+d",
-      "command": "ultra.selectNextOccurrence",
-      "when": "editorTextFocus"
-    }
-  ]
-}
+```jsonc
+[
+  {
+    "key": "ctrl+s",
+    "command": "file.save"
+  },
+  {
+    "key": "ctrl+shift+p",
+    "command": "view.commandPalette"
+  },
+  {
+    "key": "ctrl+d",
+    "command": "edit.selectNextOccurrence",
+    "when": "editorFocus"
+  }
+]
 ```
 
 ### Context Conditions (`when`)
@@ -172,103 +171,82 @@ Some keybindings only apply in certain contexts:
 
 | Context | Description |
 |---------|-------------|
-| `editorTextFocus` | Editor has focus |
+| `editorFocus` | Editor has focus |
 | `sidebarFocus` | Sidebar/file tree has focus |
 | `terminalFocus` | Terminal panel has focus |
-| `dialogOpen` | A dialog is open |
+| `gitPanelFocus` | Git panel has focus |
+| `dialogOpen` | A dialog/overlay is open |
 | `autocompleteVisible` | Autocomplete popup is showing |
 
-## Command Registry (`input/commands.ts`)
+## Command Handlers
 
-### Command Structure
+### TUI Client Registration
 
-```typescript
-interface Command {
-  id: string;
-  title: string;
-  handler: () => void | Promise<void>;
-  category?: string;
-}
-
-// Registry
-class CommandRegistry {
-  private commands: Map<string, Command>;
-
-  register(command: Command): void {
-    this.commands.set(command.id, command);
-  }
-
-  execute(id: string): Promise<void> {
-    const command = this.commands.get(id);
-    if (command) {
-      return Promise.resolve(command.handler());
-    }
-    throw new Error(`Unknown command: ${id}`);
-  }
-}
-```
-
-### Command Registration
-
-Commands are registered during application startup:
+Commands are registered in the TUI Client:
 
 ```typescript
-// app.ts - command registration
-commandRegistry.register({
-  id: 'ultra.save',
-  title: 'File: Save',
-  handler: () => this.save()
-});
+// src/clients/tui/client/tui-client.ts
+class TUIClient {
+  private commandHandlers: Map<string, () => Promise<boolean>>;
 
-commandRegistry.register({
-  id: 'ultra.commandPalette',
-  title: 'View: Command Palette',
-  handler: () => this.showCommandPalette()
-});
+  private registerCommands(): void {
+    this.commandHandlers.set('file.save', async () => {
+      await this.save();
+      return true;
+    });
+
+    this.commandHandlers.set('view.commandPalette', async () => {
+      this.commandPalette.show();
+      return true;
+    });
+
+    // ... more command registrations
+  }
+}
 ```
 
 ### Command Categories
 
-Commands are organized into categories for the command palette:
+Commands are organized by category:
 
-- **File**: save, saveAs, open, close
-- **Edit**: undo, redo, cut, copy, paste
-- **Selection**: selectAll, selectLine, selectWord
-- **View**: toggleSidebar, toggleTerminal, splitPane
-- **Go**: goToLine, goToDefinition, goToFile
-- **Search**: find, findInFiles, replace
+- **file.*** - File operations (save, saveAs, open, close)
+- **edit.*** - Editing operations (undo, redo, cut, copy, paste)
+- **view.*** - View operations (toggleSidebar, toggleTerminal, splitPane)
+- **navigation.*** - Navigation (goToLine, goToDefinition, goToFile)
+- **git.*** - Git operations (stage, unstage, commit)
+- **lsp.*** - LSP features (hover, completion, definition)
 
 ## Input Handling Flow
 
 ### Main Event Loop
 
 ```typescript
-// app.ts
+// src/clients/tui/client/tui-client.ts
 private async handleKeyEvent(event: KeyEvent): Promise<void> {
-  // 1. Check for dialog handlers first
-  if (this.activeDialog) {
-    this.activeDialog.handleKey(event);
-    return;
-  }
-
-  // 2. Check for autocomplete
-  if (this.autocomplete.isVisible()) {
-    if (this.autocomplete.handleKey(event)) {
+  // 1. Check for active overlay handlers first
+  if (this.activeOverlay) {
+    if (this.activeOverlay.handleKey(event)) {
       return;
     }
   }
 
-  // 3. Try to resolve command
-  const commandId = keymap.getCommand(event);
+  // 2. Get current context
+  const context = this.getCurrentContext();
+
+  // 3. Try to resolve keybinding
+  const commandId = this.sessionService.resolveKeybinding(event, context);
 
   if (commandId) {
-    await commandRegistry.execute(commandId);
-    return;
+    const handler = this.commandHandlers.get(commandId);
+    if (handler) {
+      await handler();
+      return;
+    }
   }
 
-  // 4. If printable character, insert into editor
+  // 4. If printable character, pass to active element
   if (event.char && !event.ctrl && !event.alt && !event.meta) {
-    this.activePane?.insertChar(event.char);
+    this.activeElement?.handleChar(event.char);
   }
 }
 ```
@@ -278,43 +256,49 @@ private async handleKeyEvent(event: KeyEvent): Promise<void> {
 Different components handle input based on focus:
 
 ```typescript
-switch (editorState.focusedComponent) {
-  case 'editor':
-    return this.handleEditorKey(event);
-
-  case 'sidebar':
-    return this.handleSidebarKey(event);
-
-  case 'terminal':
-    return this.handleTerminalKey(event);
-
-  case 'dialog':
-    return this.activeDialog.handleKey(event);
+private getCurrentContext(): KeyContext {
+  return {
+    editorFocus: this.activeElement instanceof DocumentEditor,
+    sidebarFocus: this.sidebarPanel?.hasFocus(),
+    terminalFocus: this.activeElement instanceof TerminalSession,
+    gitPanelFocus: this.gitPanel?.hasFocus(),
+    dialogOpen: this.activeOverlay !== null,
+    autocompleteVisible: this.autocompletePopup?.isVisible(),
+  };
 }
 ```
 
-## Multi-Key Sequences
+## Multi-Key Sequences (Chords)
 
-Some commands use multi-key sequences (chords):
+Some commands use multi-key sequences:
 
 ```
 Ctrl+K, Ctrl+C  → Comment selection
-Ctrl+D, A       → Select all occurrences
+Ctrl+K, Ctrl+U  → Uncomment selection
+```
+
+### Chord Format
+
+```jsonc
+{
+  "key": "ctrl+k ctrl+c",
+  "command": "edit.commentLine"
+}
 ```
 
 ### Chord Implementation
 
 ```typescript
-class Keymap {
+class KeybindingResolver {
   private pendingChord: string | null = null;
 
-  handleKey(event: KeyEvent): string | null {
-    const keyStr = this.keyToString(event);
+  resolve(event: KeyEvent, context: KeyContext): string | null {
+    const keyStr = this.eventToKeyString(event);
 
     if (this.pendingChord) {
       // Check for chord completion
       const chordKey = `${this.pendingChord} ${keyStr}`;
-      const command = this.bindings.get(chordKey);
+      const command = this.findBinding(chordKey, context);
       this.pendingChord = null;
 
       if (command) return command;
@@ -327,7 +311,7 @@ class Keymap {
       return null; // Wait for next key
     }
 
-    return this.bindings.get(keyStr) ?? null;
+    return this.findBinding(keyStr, context);
   }
 }
 ```
@@ -338,98 +322,125 @@ class Keymap {
 
 | Key | Command |
 |-----|---------|
-| `Ctrl+S` | Save |
-| `Ctrl+Shift+S` | Save As |
-| `Ctrl+N` | New File |
-| `Ctrl+O` | Open File |
-| `Ctrl+W` | Close Tab |
-| `Ctrl+Q` | Quit |
+| `Ctrl+S` | file.save |
+| `Ctrl+Shift+S` | file.saveAs |
+| `Ctrl+N` | file.new |
+| `Ctrl+O` | file.open |
+| `Ctrl+W` | file.closeTab |
+| `Ctrl+Q` | file.quit |
 
 ### Navigation
 
 | Key | Command |
 |-----|---------|
-| `Ctrl+G` | Go to Line |
-| `F12` | Go to Definition |
-| `Shift+F12` | Find References |
-| `Ctrl+]` | Quick Open File |
-| `Ctrl+P` | Command Palette |
+| `Ctrl+G` | navigation.goToLine |
+| `Ctrl+P` | navigation.quickOpen |
+| `Ctrl+Shift+P` | view.commandPalette |
+| `F12` | lsp.goToDefinition |
+| `Ctrl+Shift+K` | lsp.goToDefinition |
+| `Shift+F12` | lsp.findReferences |
 
 ### Editing
 
 | Key | Command |
 |-----|---------|
-| `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` | Redo |
-| `Ctrl+X` | Cut |
-| `Ctrl+C` | Copy |
-| `Ctrl+V` | Paste |
-| `Ctrl+D` | Select Next Occurrence |
-| `Ctrl+L` | Select Line |
-| `Tab` | Indent |
-| `Shift+Tab` | Outdent |
+| `Ctrl+Z` | edit.undo |
+| `Ctrl+Shift+Z` | edit.redo |
+| `Ctrl+X` | edit.cut |
+| `Ctrl+C` | edit.copy |
+| `Ctrl+V` | edit.paste |
+| `Ctrl+D` | edit.selectNextOccurrence |
+| `Ctrl+Shift+L` | edit.selectAllOccurrences |
+| `Ctrl+/` | edit.toggleComment |
+| `Tab` | edit.indent |
+| `Shift+Tab` | edit.outdent |
 
 ### Multi-Cursor
 
 | Key | Command |
 |-----|---------|
-| `Ctrl+U` | Add Cursor Above |
-| `Ctrl+J` | Add Cursor Below |
-| `Ctrl+Shift+L` | Split Selection into Lines |
-| `Ctrl+D` | Select Next Occurrence |
-| `Ctrl+D A` | Select All Occurrences |
+| `Ctrl+Alt+Up` | edit.addCursorAbove |
+| `Ctrl+Alt+Down` | edit.addCursorBelow |
+| `Ctrl+D` | edit.selectNextOccurrence |
+| `Ctrl+Shift+L` | edit.selectAllOccurrences |
 
 ### View
 
 | Key | Command |
 |-----|---------|
-| `Ctrl+B` | Toggle Sidebar |
-| `` Ctrl+` `` | Toggle Terminal |
-| `Ctrl+\` | Split Vertical |
-| `Ctrl+Shift+\` | Split Horizontal |
-| `Ctrl+Shift+G` | Toggle Git Panel |
+| `Ctrl+B` | view.toggleSidebar |
+| `` Ctrl+` `` | view.toggleTerminal |
+| `Ctrl+\` | view.splitVertical |
+| `Ctrl+Shift+\` | view.splitHorizontal |
+| `Ctrl+Shift+G` | view.toggleGitPanel |
+
+### LSP Features
+
+| Key | Command |
+|-----|---------|
+| `Ctrl+Space` | lsp.triggerCompletion |
+| `Ctrl+K` | lsp.showHover |
+| `Ctrl+Shift+Space` | lsp.triggerSignatureHelp |
 
 ## Customization
 
 ### Adding Custom Keybindings
 
-Create or edit `~/.config/ultra/keybindings.json`:
+Create or edit `~/.ultra/keybindings.jsonc`:
 
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+shift+d",
-      "command": "ultra.duplicateLine"
-    },
-    {
-      "key": "ctrl+k ctrl+f",
-      "command": "ultra.formatDocument"
-    }
-  ]
-}
+```jsonc
+[
+  {
+    "key": "ctrl+shift+d",
+    "command": "edit.duplicateLine"
+  },
+  {
+    "key": "ctrl+k ctrl+f",
+    "command": "edit.formatDocument"
+  }
+]
 ```
 
 ### Removing Default Keybindings
 
 Set command to empty string to unbind:
 
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+d",
-      "command": ""
-    }
-  ]
-}
+```jsonc
+[
+  {
+    "key": "ctrl+d",
+    "command": ""
+  }
+]
+```
+
+### Context-Specific Bindings
+
+```jsonc
+[
+  {
+    "key": "s",
+    "command": "git.stage",
+    "when": "gitPanelFocus"
+  },
+  {
+    "key": "Enter",
+    "command": "autocomplete.accept",
+    "when": "autocompleteVisible"
+  }
+]
 ```
 
 ### Viewing Active Keybindings
 
-The debug mode shows key events in the status bar:
+Debug mode shows key events:
 
 ```bash
-ultra --debug myfile.ts
-# Status bar shows: Key: C+s | Parsed: ctrl+s -> ultra.save
+./ultra --debug myfile.ts
+# Check debug.log for key event parsing
 ```
+
+## Related Documentation
+
+- [Data Flow](data-flow.md) - How input flows through the system
+- [Adding Commands](../guides/adding-commands.md) - Creating new commands

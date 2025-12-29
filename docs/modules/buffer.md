@@ -16,6 +16,24 @@ Ultra uses a [piece table](https://en.wikipedia.org/wiki/Piece_table) instead of
 src/core/buffer.ts
 ```
 
+## Integration with Document Service
+
+The Buffer is the low-level text storage used by the Document Service:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Document Service                                │
+│  (src/services/document/)                                           │
+│                                                                      │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐             │
+│  │  Document   │───▶│   Buffer    │    │ Undo Stack  │             │
+│  │  (wrapper)  │    │ (piece tbl) │    │ (snapshots) │             │
+│  └─────────────┘    └─────────────┘    └─────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Clients access text through the Document Service ECP API, not the Buffer directly.
+
 ## Key Concepts
 
 ### Piece Table Structure
@@ -224,34 +242,33 @@ console.log(buffer.getContent()); // "Hello"
 | Position to offset | O(log n) | O(log n) |
 | Offset to position | O(log n) | O(log n) |
 
-## Integration with Document
+## Document Service Integration
 
-The `Document` class wraps `Buffer` and adds:
+The Document Service wraps Buffer and provides:
 
+- ECP API for clients
 - File I/O operations
 - Dirty state tracking
 - Undo/redo history management
 - LSP notifications
 
 ```typescript
-// Document uses Buffer internally
-class Document {
-  private buffer: Buffer;
+// Via ECP (preferred)
+const { content } = await ecpServer.request('document/content', { documentId });
 
-  getLine(n: number): string {
-    return this.buffer.getLine(n);
-  }
+// Internally, Document Service uses Buffer
+class LocalDocumentService {
+  private documents: Map<string, { buffer: Buffer; ... }>;
 
-  insert(pos: Position, text: string): void {
-    this.buffer.insertAt(pos, text);
-    this.markDirty();
-    this.notifyLSP();
+  async getContent(documentId: string): Promise<string> {
+    const doc = this.documents.get(documentId);
+    return doc.buffer.getContent();
   }
 }
 ```
 
-## Related Modules
+## Related Documentation
 
-- [Document](modules/editor.md) - Higher-level document abstraction
-- [Undo](src/core/undo.ts) - Undo/redo history
-- [Cursor](src/core/cursor.ts) - Cursor position management
+- [ECP Protocol](../architecture/ecp.md) - Editor Command Protocol
+- [Document Service](../architecture/overview.md) - Document Service ECP API
+- [Data Flow](../architecture/data-flow.md) - Text editing flow

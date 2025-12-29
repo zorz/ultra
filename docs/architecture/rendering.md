@@ -7,7 +7,7 @@ This document describes Ultra's terminal rendering pipeline, from state changes 
 Ultra renders to the terminal using ANSI escape sequences. The rendering system is designed to:
 
 - Batch multiple state changes into single render passes
-- Minimize terminal output for efficiency
+- Minimize terminal output via dirty cell tracking
 - Support 24-bit color (true color)
 - Handle resize events gracefully
 
@@ -18,18 +18,26 @@ State Change
       │
       ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    scheduleRender()                                  │
+│                    Render Scheduler                                  │
 │  - Debounces multiple rapid changes                                 │
-│  - Schedules render on next frame                                   │
+│  - Prioritizes render tasks (immediate > high > normal > low)       │
+│  - Deduplicates by task ID                                          │
 └────────────────────────────────┬────────────────────────────────────┘
       │
       ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Render Pass                                       │
-│  1. Calculate layout rectangles                                     │
-│  2. Render each component to buffer                                 │
-│  3. Diff with previous frame (optional)                             │
-│  4. Output ANSI sequences                                           │
+│                    Component Render Pass                             │
+│  - Each component renders to ScreenBuffer                           │
+│  - Components paint their own backgrounds                           │
+│  - Dirty cells are tracked automatically                            │
+└────────────────────────────────┬────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ScreenBuffer Flush                                │
+│  - Only dirty cells are written                                     │
+│  - Optimizes cursor movement                                        │
+│  - Outputs ANSI sequences                                           │
 └────────────────────────────────┬────────────────────────────────────┘
       │
       ▼
@@ -38,6 +46,79 @@ State Change
 │  - Write to stdout                                                  │
 │  - Flush immediately                                                │
 └─────────────────────────────────────────────────────────────────────┘
+```
+
+## ScreenBuffer
+
+The ScreenBuffer is the central rendering abstraction:
+
+```typescript
+// src/clients/tui/window.ts
+interface Cell {
+  char: string;
+  fg: string;      // Hex color
+  bg: string;      // Hex color
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+}
+
+class ScreenBuffer {
+  private cells: Cell[][];
+  private dirty: boolean[][];
+
+  // Set a cell (marks as dirty)
+  set(x: number, y: number, cell: Cell): void {
+    if (this.isDifferent(x, y, cell)) {
+      this.cells[y][x] = cell;
+      this.dirty[y][x] = true;
+    }
+  }
+
+  // Flush only dirty cells to terminal
+  flush(): void {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        if (this.dirty[y][x]) {
+          this.writeCell(x, y, this.cells[y][x]);
+          this.dirty[y][x] = false;
+        }
+      }
+    }
+  }
+}
+```
+
+### Dirty Cell Tracking
+
+The buffer tracks which cells have changed since the last flush:
+
+```typescript
+// Only changed cells are written
+buffer.set(5, 10, { char: 'A', fg: '#ffffff', bg: '#1e1e1e' });
+// If cell at (5,10) already has same content, it's not marked dirty
+
+buffer.flush();
+// Only dirty cells are output to terminal
+```
+
+### Important: Don't Clear the Buffer
+
+Components should NOT clear the entire buffer:
+
+```typescript
+// BAD - defeats dirty tracking, causes full screen rewrite
+render(): void {
+  this.buffer.clear(bg, fg);  // Don't do this!
+  // ... render components ...
+}
+
+// GOOD - components paint their own backgrounds
+render(): void {
+  // Each component is responsible for its own region
+  this.paneContainer.render(this.buffer);
+  this.statusBar.render(this.buffer);
+}
 ```
 
 ## Render Scheduler
@@ -59,42 +140,60 @@ statusBar.setMessage('Typing...');
 ### Implementation
 
 ```typescript
-// ui/render-scheduler.ts
+// src/clients/tui/render-scheduler.ts
 class RenderScheduler {
-  private pending: boolean = false;
-  private renderCallback: (() => void) | null = null;
+  private pendingTasks: Map<string, RenderTask>;
+  private scheduled: boolean = false;
 
-  scheduleRender(): void {
-    if (this.pending) return;
+  schedule(callback: () => void, priority: Priority, taskId: string): void {
+    // Deduplicate by task ID
+    this.pendingTasks.set(taskId, { callback, priority });
 
-    this.pending = true;
-    setImmediate(() => {
-      this.pending = false;
-      this.renderCallback?.();
-    });
+    if (!this.scheduled) {
+      this.scheduled = true;
+      setImmediate(() => this.flush());
+    }
   }
 
-  setRenderCallback(callback: () => void): void {
-    this.renderCallback = callback;
+  private flush(): void {
+    this.scheduled = false;
+
+    // Sort by priority and execute
+    const tasks = Array.from(this.pendingTasks.values())
+      .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+
+    this.pendingTasks.clear();
+
+    for (const task of tasks) {
+      task.callback();
+    }
   }
 }
 ```
 
+### Priorities
+
+| Priority | Use Case |
+|----------|----------|
+| `immediate` | Cursor position updates |
+| `high` | User input feedback |
+| `normal` | Content updates |
+| `low` | Background updates (git status, etc.) |
+
 ### Usage
 
-Components should never render directly:
-
 ```typescript
-// ❌ Bad - direct render
-this.render();
+import { renderScheduler, RenderTaskIds } from '../render-scheduler.ts';
 
-// ✅ Good - scheduled render
-renderScheduler.scheduleRender();
+// Schedule with priority and deduplication
+renderScheduler.schedule(() => {
+  this.render(ctx);
+}, 'normal', RenderTaskIds.EDITOR);
 ```
 
 ## ANSI Escape Sequences
 
-### Terminal Setup (`terminal/ansi.ts`)
+### Terminal Setup
 
 ```typescript
 // Enter alternate screen buffer
@@ -159,45 +258,39 @@ const REVERSE = '\x1b[7m';
 
 ## Layout System
 
-### Layout Manager
+### Window Layout
 
-The layout manager calculates rectangles for all UI components:
-
-```typescript
-interface Rect {
-  x: number;      // 1-indexed column
-  y: number;      // 1-indexed row
-  width: number;
-  height: number;
-}
-
-// Get component rectangles
-const editorRect = layoutManager.getEditorAreaRect();
-const sidebarRect = layoutManager.getSidebarRect();
-const terminalRect = layoutManager.getTerminalRect();
-const statusBarRect = layoutManager.getStatusBarRect();
-```
-
-### Screen Layout
+The Window class manages the overall layout:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ y=1  [Sidebar]      │  [Editor Area / Panes]                     │
+│ y=0  [Sidebar]      │  [Pane Container]                          │
 │                     │                                            │
-│                     │                                            │
-│                     │                                            │
-│      (width=30)     │           (remaining width)                │
-│                     │                                            │
-│                     │                                            │
+│                     │  ┌──────────────────────────────────────┐  │
+│                     │  │ Tab Bar                              │  │
+│      (width varies) │  ├──────────────────────────────────────┤  │
+│                     │  │ Editor Content                       │  │
+│                     │  │                                      │  │
+│                     │  └──────────────────────────────────────┘  │
 │                     ├────────────────────────────────────────────│
-│                     │  [Terminal] (if visible)                   │
-│                     │           (height=12)                      │
+│                     │  [Terminal Panel] (if visible)             │
 ├─────────────────────┴────────────────────────────────────────────│
-│ y=height  [Status Bar]              (full width, height=1)       │
+│ y=height-1  [Status Bar]                                         │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Pane Layout
+### Rect Structure
+
+```typescript
+interface Rect {
+  x: number;      // 0-indexed column
+  y: number;      // 0-indexed row
+  width: number;
+  height: number;
+}
+```
+
+### Pane Splitting
 
 Panes use a tree structure for splits:
 
@@ -210,70 +303,86 @@ interface LayoutNode {
   id?: string;       // Pane ID for leaf nodes
 }
 
-// Example: Two panes side by side (horizontal split)
+// Example: Two panes side by side (vertical split)
 {
-  type: 'horizontal',
+  type: 'vertical',
   rect: { x: 31, y: 1, width: 80, height: 30 },
   ratio: [0.5, 0.5],
   children: [
-    { type: 'leaf', id: 'pane1', rect: { x: 31, y: 1, width: 40, height: 30 } },
-    { type: 'leaf', id: 'pane2', rect: { x: 71, y: 1, width: 40, height: 30 } }
+    { type: 'leaf', id: 'pane1', rect: {...} },
+    { type: 'leaf', id: 'pane2', rect: {...} }
   ]
 }
 ```
 
 ## Component Rendering
 
-### Render Interface
+### RenderContext
 
-Each UI component implements rendering:
+Components receive a RenderContext for rendering:
 
 ```typescript
-interface Renderable {
-  render(rect: Rect): void;
+interface RenderContext {
+  buffer: ScreenBuffer;
+  getThemeColor(key: string, fallback: string): string;
+  rect: Rect;
 }
 ```
+
+### Theme Colors
+
+Components MUST use theme colors:
+
+```typescript
+// GOOD - Use theme colors
+render(ctx: RenderContext): void {
+  const bg = ctx.getThemeColor('editor.background', '#1e1e1e');
+  const fg = ctx.getThemeColor('editor.foreground', '#cccccc');
+
+  ctx.buffer.set(x, y, { char: 'A', fg, bg });
+}
+
+// BAD - Hardcoded colors
+render(ctx: RenderContext): void {
+  ctx.buffer.set(x, y, { char: 'A', fg: '#cccccc', bg: '#1e1e1e' });
+}
+```
+
+### Common Theme Color Keys
+
+| Key | Purpose |
+|-----|---------|
+| `editor.background` | Editor background |
+| `editor.foreground` | Editor text |
+| `editor.lineHighlightBackground` | Current line highlight |
+| `editorLineNumber.foreground` | Line numbers |
+| `terminal.background` | Terminal background |
+| `terminal.foreground` | Terminal text |
+| `terminalCursor.foreground` | Terminal cursor |
+| `statusBar.background` | Status bar background |
+| `statusBar.foreground` | Status bar text |
+| `tab.activeBackground` | Active tab background |
+| `tab.inactiveBackground` | Inactive tab background |
 
 ### Editor Pane Rendering
 
 ```typescript
-// ui/components/pane.ts
-class Pane {
-  render(rect: Rect): void {
-    const { x, y, width, height } = rect;
+class DocumentEditor {
+  render(ctx: RenderContext): void {
+    const { buffer, rect } = ctx;
+    const bg = ctx.getThemeColor('editor.background', '#1e1e1e');
+    const fg = ctx.getThemeColor('editor.foreground', '#cccccc');
 
-    // Reserve space for tab bar
-    const tabBarHeight = 1;
-
-    // Render tab bar
-    this.tabBar.render({ x, y, width, height: tabBarHeight });
-
-    // Render editor content
-    const editorRect = {
-      x,
-      y: y + tabBarHeight,
-      width,
-      height: height - tabBarHeight
-    };
-    this.renderContent(editorRect);
-  }
-
-  private renderContent(rect: Rect): void {
-    const { x, y, width, height } = rect;
-
-    for (let row = 0; row < height; row++) {
+    for (let row = 0; row < rect.height; row++) {
       const lineNumber = this.scrollTop + row;
       const line = this.document.getLine(lineNumber);
-      const highlighted = this.highlighter.getLine(lineNumber);
+      const tokens = this.highlighter.getTokens(lineNumber);
 
-      // Move cursor to start of row
-      process.stdout.write(moveTo(y + row, x));
-
-      // Render gutter (line numbers)
-      this.renderGutter(lineNumber, y + row, x);
+      // Render gutter
+      this.renderGutter(ctx, row, lineNumber);
 
       // Render line content with syntax highlighting
-      this.renderLine(highlighted, width - gutterWidth);
+      this.renderLine(ctx, row, tokens);
     }
   }
 }
@@ -284,96 +393,52 @@ class Pane {
 Shiki provides tokenized output for rendering:
 
 ```typescript
-// Shiki returns tokens with scopes
 interface Token {
   content: string;
   color?: string;  // Hex color from theme
 }
 
 // Render a highlighted line
-function renderHighlightedLine(tokens: Token[]): void {
+function renderHighlightedLine(
+  ctx: RenderContext,
+  y: number,
+  tokens: Token[]
+): void {
+  const bg = ctx.getThemeColor('editor.background', '#1e1e1e');
+  let x = 0;
+
   for (const token of tokens) {
-    if (token.color) {
-      const { r, g, b } = hexToRgb(token.color);
-      process.stdout.write(fg(r, g, b));
+    const fg = token.color || ctx.getThemeColor('editor.foreground', '#cccccc');
+
+    for (const char of token.content) {
+      ctx.buffer.set(x, y, { char, fg, bg });
+      x++;
     }
-    process.stdout.write(token.content);
-    process.stdout.write(RESET);
-  }
-}
-```
-
-### Status Bar Rendering
-
-```typescript
-// ui/components/status-bar.ts
-class StatusBar {
-  render(rect: Rect): void {
-    const { x, y, width } = rect;
-
-    // Move to status bar position
-    process.stdout.write(moveTo(y, x));
-
-    // Set status bar colors
-    process.stdout.write(bg(40, 44, 52));  // Dark background
-    process.stdout.write(fg(171, 178, 191)); // Light text
-
-    // Build status bar content
-    const left = ` ${this.branch} | ${this.filename} | ${this.language}`;
-    const right = `Ln ${this.line}, Col ${this.col} | ${this.encoding} `;
-    const padding = width - left.length - right.length;
-
-    process.stdout.write(left);
-    process.stdout.write(' '.repeat(Math.max(0, padding)));
-    process.stdout.write(right);
-
-    process.stdout.write(RESET);
   }
 }
 ```
 
 ## Color Utilities
 
-### Color Conversion (`ui/colors.ts`)
+### Color Conversion
 
 ```typescript
+// src/core/colors.ts
+import { hexToRgb, rgbToHex, lighten, darken } from '../core/colors.ts';
+
 // Convert hex to RGB
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : { r: 0, g: 0, b: 0 };
-}
+const { r, g, b } = hexToRgb('#ff5555');
 
 // Apply foreground color from hex
 function fgHex(hex: string): string {
   const { r, g, b } = hexToRgb(hex);
-  return fg(r, g, b);
+  return `\x1b[38;2;${r};${g};${b}m`;
 }
 
 // Apply background color from hex
 function bgHex(hex: string): string {
   const { r, g, b } = hexToRgb(hex);
-  return bg(r, g, b);
-}
-```
-
-### Theme Colors
-
-Theme colors are loaded from VS Code compatible themes:
-
-```typescript
-interface Theme {
-  colors: {
-    'editor.background': string;
-    'editor.foreground': string;
-    'editor.lineHighlightBackground': string;
-    'editorLineNumber.foreground': string;
-    // ... more colors
-  };
-  tokenColors: TokenColor[];
+  return `\x1b[48;2;${r};${g};${b}m`;
 }
 ```
 
@@ -388,7 +453,11 @@ interface Theme {
    process.stdout.write(SHOW_CURSOR);
    ```
 
-2. **Buffer output**
+2. **Use dirty tracking**
+   - Don't clear the entire buffer
+   - Only write changed cells
+
+3. **Buffer output**
    ```typescript
    let buffer = '';
    // Build all output in buffer
@@ -404,33 +473,10 @@ For small changes, update only affected regions:
 
 ```typescript
 // Only re-render changed lines
-function renderLine(lineNumber: number): void {
-  const rect = this.getLineRect(lineNumber);
-  // Clear and re-render just this line
-}
-```
-
-### Dirty Region Tracking
-
-```typescript
-class DirtyTracker {
-  private dirtyLines: Set<number> = new Set();
-
-  markDirty(line: number): void {
-    this.dirtyLines.add(line);
-  }
-
-  markRangeDirty(start: number, end: number): void {
-    for (let i = start; i <= end; i++) {
-      this.dirtyLines.add(i);
-    }
-  }
-
-  getDirtyLines(): number[] {
-    const lines = Array.from(this.dirtyLines);
-    this.dirtyLines.clear();
-    return lines.sort((a, b) => a - b);
-  }
+function invalidateLine(lineNumber: number): void {
+  renderScheduler.schedule(() => {
+    this.renderLine(lineNumber);
+  }, 'normal', `line-${lineNumber}`);
 }
 ```
 
@@ -442,11 +488,15 @@ When the terminal resizes:
 process.stdout.on('resize', () => {
   const { columns, rows } = process.stdout;
 
-  // Update layout manager
-  layoutManager.updateDimensions(columns, rows);
+  // Resize screen buffer
+  this.buffer.resize(columns, rows);
+
+  // Update layout
+  this.window.updateDimensions(columns, rows);
 
   // Force full re-render
-  renderScheduler.scheduleRender();
+  this.buffer.markAllDirty();
+  this.render();
 });
 ```
 
@@ -455,18 +505,23 @@ process.stdout.on('resize', () => {
 Enable render debugging with `--debug` flag:
 
 ```typescript
+import { debugLog } from '../../debug.ts';
+
 function debugRender(component: string, rect: Rect): void {
-  if (debugMode) {
-    debugLog(`Render ${component}: ${JSON.stringify(rect)}`);
-  }
+  debugLog(`[Render] ${component}: ${JSON.stringify(rect)}`);
 }
 ```
 
 ## Best Practices
 
 1. **Always use the render scheduler** - Never render directly
-2. **Batch ANSI sequences** - Minimize write() calls
+2. **Use dirty tracking** - Don't clear the buffer
 3. **Hide cursor during updates** - Prevents flicker
-4. **Use hex colors from theme** - Don't hardcode colors
-5. **Clear before render** - Prevent artifacts from previous content
+4. **Use theme colors** - Never hardcode colors
+5. **Components paint backgrounds** - Each component fills its own region
 6. **Handle edge cases** - Empty lines, overflow, unicode width
+
+## Related Documentation
+
+- [Data Flow](data-flow.md) - How state changes trigger renders
+- [Keybindings](keybindings.md) - Input handling

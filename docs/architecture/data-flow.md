@@ -1,13 +1,13 @@
 # Data Flow
 
-This document describes how data flows through Ultra, from user input to screen output.
+This document describes how data flows through Ultra's ECP architecture.
 
 ## Overview
 
-Ultra follows a unidirectional data flow pattern:
+Ultra follows a service-oriented data flow pattern:
 
 ```
-Input → Parse → Command → State Update → Render
+User Input → TUI Client → ECP Request → Service → State Update → Event → Render
 ```
 
 ## Input Processing
@@ -16,37 +16,37 @@ Input → Parse → Command → State Update → Render
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Terminal Input                               │
-│                     (raw bytes from stdin)                          │
+│                         Terminal stdin                               │
+│                     (raw bytes in raw mode)                         │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Input Parser (input.ts)                         │
+│                      TUI Client Key Handler                          │
 │  - Parses escape sequences                                          │
-│  - Identifies special keys (arrows, function keys, etc.)            │
-│  - Detects modifier keys (ctrl, alt, shift, meta)                   │
+│  - Identifies special keys (arrows, function keys)                  │
+│  - Detects modifiers (ctrl, alt, shift, meta)                       │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Key Event                                    │
-│  { key: 's', ctrl: true, shift: false, alt: false, meta: false }    │
+│                         KeyEvent                                     │
+│  { key: 's', ctrl: true, shift: false, alt: false, meta: false }   │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Keymap Resolution (keymap.ts)                    │
+│                     Keybinding Resolution                            │
 │  - Converts event to key string: "ctrl+s"                           │
-│  - Looks up command binding                                         │
-│  - Returns command ID: "ultra.save"                                 │
+│  - Checks context conditions (when clauses)                         │
+│  - Returns command ID: "file.save"                                  │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   Command Execution (commands.ts)                    │
-│  - Looks up handler for command ID                                  │
-│  - Executes handler with current context                            │
+│                   Command Handler Execution                          │
+│  - Looks up handler in commandHandlers map                          │
+│  - Calls appropriate service methods                                │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -58,21 +58,71 @@ Mouse Event (ANSI escape sequence)
          ▼
 ┌─────────────────┐
 │   Mouse Parser  │
-│   (mouse.ts)    │
+│  (TUI Client)   │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Mouse Event                                   │
+│                        MouseEvent                                    │
 │  { x, y, button, action: 'click' | 'drag' | 'scroll' }             │
 └────────────────────────────────┬────────────────────────────────────┘
          │
          ├────────────────────────┬────────────────────────┐
          ▼                        ▼                        ▼
-┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-│  Layout     │          │   Hit Test  │          │  Component  │
-│  Manager    │          │  (find pane)│          │  Handler    │
-└─────────────┘          └─────────────┘          └─────────────┘
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│  Window Layout  │      │   Hit Test      │      │   Component     │
+│  (find target)  │      │ (find element)  │      │    Handler      │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
+```
+
+## ECP Data Flow
+
+### Client to Service
+
+All operations flow through the ECP server:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         TUI Client                                   │
+│                                                                      │
+│  // User types 'a' in editor                                        │
+│  const result = await ecpServer.request('document/insert', {        │
+│    documentId: 'doc-123',                                           │
+│    position: { line: 5, column: 10 },                              │
+│    text: 'a'                                                        │
+│  });                                                                │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ECP Server                                   │
+│  (src/ecp/server.ts)                                                │
+│                                                                      │
+│  // Routes based on method prefix                                   │
+│  if (method.startsWith('document/')) {                              │
+│    return documentAdapter.handleRequest(method, params);            │
+│  }                                                                  │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Document Service Adapter                          │
+│  (src/services/document/adapter.ts)                                 │
+│                                                                      │
+│  case 'document/insert':                                            │
+│    return this.service.insert(params.documentId, params.position,   │
+│                               params.text);                         │
+└────────────────────────────────┬────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Local Document Service                            │
+│  (src/services/document/local.ts)                                   │
+│                                                                      │
+│  // Updates buffer, manages undo, emits events                      │
+│  this.buffer.insertAt(position, text);                              │
+│  this.emit('contentChanged', { documentId, changes });              │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Text Editing Flow
@@ -84,31 +134,26 @@ Key Press ('a')
       │
       ▼
 ┌─────────────────┐
-│ Active Pane     │
+│ Document Editor │
 │ handleChar('a') │
 └────────┬────────┘
          │
          ▼
-┌─────────────────┐
-│ Cursor Manager  │
-│ (get position)  │
-└────────┬────────┘
-         │
-         ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Document                                     │
+│                    Document Service                                  │
 │                                                                      │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐             │
 │  │ insertAt()  │───▶│   Buffer    │───▶│ Undo Stack  │             │
 │  │             │    │ (piece tbl) │    │ (snapshot)  │             │
 │  └─────────────┘    └─────────────┘    └─────────────┘             │
 │                                                                      │
+│  emit('contentChanged')                                              │
 └────────────────────────────────┬────────────────────────────────────┘
          │
          ├──────────────────────────────────────────┐
          ▼                                          ▼
 ┌─────────────────┐                        ┌─────────────────┐
-│ LSP Notification│                        │ Syntax Highlight│
+│ LSP Service     │                        │ Syntax Service  │
 │ (didChange)     │                        │ (invalidate)    │
 └─────────────────┘                        └────────┬────────┘
                                                     │
@@ -145,53 +190,55 @@ Result: "Hello Beautiful World"
 ### File Open Flow
 
 ```
-Command: open file.ts
+Command: file.open
          │
          ▼
 ┌─────────────────┐
-│ Pane Manager    │
+│ TUI Client      │
 │ openFile()      │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Document.open()                               │
-│  1. Read file content (Bun.file().text())                           │
-│  2. Create Buffer with content                                       │
-│  3. Detect language from extension                                   │
+│                    File Service + Document Service                   │
+│                                                                      │
+│  1. file/read - Read file content from disk                         │
+│  2. document/open - Create document with content                    │
+│  3. Detect language from extension                                  │
 │  4. Initialize undo history                                         │
 └────────────────────────────────┬────────────────────────────────────┘
          │
          ├──────────────────────────────────────────┐
          ▼                                          ▼
 ┌─────────────────┐                        ┌─────────────────┐
-│ LSP Manager     │                        │ Syntax Manager  │
+│ LSP Service     │                        │ Syntax Service  │
 │ didOpen()       │                        │ loadLanguage()  │
 └─────────────────┘                        └─────────────────┘
          │
          ▼
 ┌─────────────────┐
-│ Tab Bar Update  │
-│ Add new tab     │
+│ TUI Window      │
+│ Add tab to pane │
 └─────────────────┘
 ```
 
 ### File Save Flow
 
 ```
-Command: save
+Command: file.save
          │
          ▼
 ┌─────────────────┐
-│ Active Pane     │
+│ TUI Client      │
 │ save()          │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Document.save()                               │
-│  1. Get buffer content                                              │
-│  2. Write to file (Bun.write())                                     │
+│                    Document Service → File Service                   │
+│                                                                      │
+│  1. document/content - Get buffer content                           │
+│  2. file/write - Write to disk                                      │
 │  3. Clear dirty flag                                                │
 │  4. Update undo checkpoint                                          │
 └────────────────────────────────┬────────────────────────────────────┘
@@ -199,7 +246,7 @@ Command: save
          ├──────────────────────────────────────────┐
          ▼                                          ▼
 ┌─────────────────┐                        ┌─────────────────┐
-│ LSP Manager     │                        │ Status Bar      │
+│ LSP Service     │                        │ Notification    │
 │ didSave()       │                        │ "File saved"    │
 └─────────────────┘                        └─────────────────┘
 ```
@@ -213,21 +260,21 @@ User Types Character
          │
          ▼
 ┌─────────────────┐
-│ LSP Provider    │
+│ LSP Integration │
 │ triggerComplete │
 └────────┬────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      LSP Client                                      │
-│  textDocument/completion request                                     │
+│                      LSP Service                                     │
+│  lsp/completion request                                              │
 │  { uri, position: { line, character } }                             │
 └────────────────────────────────┬────────────────────────────────────┘
          │ JSON-RPC over stdio
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    Language Server                                   │
-│              (tsserver, pyright, etc.)                              │
+│              (typescript-language-server, pyright, etc.)            │
 └────────────────────────────────┬────────────────────────────────────┘
          │
          ▼
@@ -239,7 +286,7 @@ User Types Character
          ▼
 ┌─────────────────┐
 │ Autocomplete    │
-│ Popup           │
+│ Popup Overlay   │
 │ (show items)    │
 └─────────────────┘
 ```
@@ -255,7 +302,7 @@ Document Modified
 │              LSP didChange                      │ │
 │  Full sync: entire document content             │ │
 │  Incremental: only changed ranges               │ │
-└─────────────────────────────────┬───────────────┘ │
+└─────────────────────────────────────────────────┘ │
          │                                          │
          ▼                                          │
 ┌─────────────────────────────────────────────────┐ │
@@ -267,7 +314,7 @@ Document Modified
          │                                          │
          ▼                                          │
 ┌─────────────────────────────────────────────────┐ │
-│         Diagnostics Renderer                     │◀┘
+│         Diagnostics Overlay                      │◀┘
 │  - Updates error/warning markers                │
 │  - Schedules re-render                          │
 └─────────────────────────────────────────────────┘
@@ -282,9 +329,11 @@ File Modified / Timer Tick / Manual Refresh
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      Git Integration                                 │
-│  await $`git status --porcelain`                                    │
-│  await $`git diff --numstat`                                        │
+│                      Git Service                                     │
+│  (src/services/git/)                                                │
+│                                                                      │
+│  await git.getStatus()                                              │
+│  // Internally: git status --porcelain, git diff --numstat          │
 └────────────────────────────────┬────────────────────────────────────┘
          │
          ▼
@@ -298,44 +347,60 @@ File Modified / Timer Tick / Manual Refresh
          ├──────────────────────────────────────────┐
          ▼                                          ▼
 ┌─────────────────┐                        ┌─────────────────┐
-│ Git Panel       │                        │ Pane Gutter     │
+│ Git Panel       │                        │ Editor Gutter   │
 │ Update list     │                        │ Show indicators │
 └─────────────────┘                        └─────────────────┘
 ```
 
-## State Management
+## Session State Flow
 
-### Editor State
+### State Persistence
 
-```typescript
-// Centralized state in editor-state.ts
-interface EditorState {
-  // Pane state
-  activePane: Pane | null;
-  panes: Pane[];
-
-  // UI state
-  sidebarVisible: boolean;
-  terminalVisible: boolean;
-
-  // Editor state
-  focusedComponent: 'editor' | 'sidebar' | 'terminal' | 'dialog';
-
-  // Search state
-  searchQuery: string;
-  searchResults: SearchResult[];
-}
+```
+User Action (open file, move cursor, split pane)
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Session Service                                   │
+│  (src/services/session/)                                            │
+│                                                                      │
+│  - Tracks open documents with cursor/scroll positions               │
+│  - Tracks terminal tabs and their sessions                          │
+│  - Tracks AI chat tabs with session IDs                             │
+│  - Tracks pane layout (splits, active pane)                         │
+│  - Tracks UI state (sidebar, panel visibility)                      │
+└────────────────────────────────┬────────────────────────────────────┘
+         │
+         ▼ (on idle or explicit save)
+┌─────────────────────────────────────────────────────────────────────┐
+│                    File System                                       │
+│  ~/.ultra/sessions/<workspace>.json                                 │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### State Update Pattern
+### Settings Flow
 
-```typescript
-// State updates trigger renders
-editorState.setActivePane(pane);
-// Internally:
-//   1. Update state
-//   2. Emit 'activePaneChanged' event
-//   3. Listeners call scheduleRender()
+```
+User Changes Setting
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Session Service                                   │
+│                                                                      │
+│  setSetting('editor.tabSize', 4)                                    │
+│  → Validate against schema                                          │
+│  → Update in-memory settings                                        │
+│  → Write to ~/.ultra/settings.jsonc                                 │
+│  → Emit 'settingChanged' event                                      │
+└────────────────────────────────┬────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Components React                                  │
+│                                                                      │
+│  - Editor updates tab rendering                                      │
+│  - Affected components schedule re-render                           │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Render Data Flow
@@ -361,6 +426,12 @@ scheduleRender()
 │                              │                                       │
 │                              ▼                                       │
 │                    ┌─────────────────┐                              │
+│                    │  ScreenBuffer   │                              │
+│                    │  (dirty cells)  │                              │
+│                    └────────┬────────┘                              │
+│                              │                                       │
+│                              ▼                                       │
+│                    ┌─────────────────┐                              │
 │                    │ ANSI Sequences  │                              │
 │                    │ (terminal out)  │                              │
 │                    └─────────────────┘                              │
@@ -369,24 +440,36 @@ scheduleRender()
 
 ## Event System
 
-### Event Emitter Pattern
+### Event Callback Pattern
 
 ```typescript
-// Components emit events
-document.emit('contentChanged', { range, text });
-
-// Other components listen
-lspManager.on('document:contentChanged', (event) => {
-  this.sendDidChange(document, event);
+// Services emit events
+documentService.on('contentChanged', (event) => {
+  // Handle document change
 });
+
+// Registration returns unsubscribe function
+const unsubscribe = service.onChange((data) => {
+  // Handle change
+});
+
+// Clean up later
+unsubscribe();
 ```
 
 ### Common Events
 
 | Event | Source | Listeners |
 |-------|--------|-----------|
-| `contentChanged` | Document | LSP, Syntax, Git |
-| `cursorMoved` | Cursor | LSP Hover, Status Bar |
-| `fileSaved` | Document | LSP, Git |
-| `focusChanged` | Pane Manager | Status Bar, Keymap |
-| `themeChanged` | Settings | All renderers |
+| `contentChanged` | Document Service | LSP Service, Syntax Service, Git Service |
+| `cursorMoved` | Document Service | Status Bar, LSP Hover |
+| `fileSaved` | Document Service | LSP Service, Git Service |
+| `focusChanged` | Window | Status Bar, Keybinding Resolution |
+| `themeChanged` | Session Service | All renderers |
+| `settingChanged` | Session Service | Affected components |
+
+## Related Documentation
+
+- [Architecture Overview](overview.md) - ECP architecture
+- [Rendering](rendering.md) - Terminal rendering pipeline
+- [Keybindings](keybindings.md) - Keyboard input handling

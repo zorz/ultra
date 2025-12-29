@@ -9,103 +9,93 @@ Commands are named actions that can be:
 - Executed from the command palette
 - Called programmatically
 
-## Location
+## Architecture
+
+Commands are registered in the TUI Client and executed via command handlers:
 
 ```
-src/input/commands.ts
+┌─────────────────────────────────────────────────────────────────────┐
+│                      TUI Client                                      │
+│  (src/clients/tui/client/tui-client.ts)                             │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                   Command Handlers                           │    │
+│  │  Map<string, () => Promise<boolean>>                        │    │
+│  │                                                              │    │
+│  │  'file.save' → async () => { await this.save(); }           │    │
+│  │  'edit.undo' → async () => { await this.undo(); }           │    │
+│  │  'view.commandPalette' → async () => { this.palette.show() }│    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Key Concepts
+## Command Naming
 
-### Command Structure
+Commands use a `category.action` naming convention:
 
-```typescript
-interface Command {
-  id: string;           // Unique identifier, e.g., "ultra.save"
-  title: string;        // Display name, e.g., "File: Save"
-  handler: () => void | Promise<void>;
-  category?: string;    // For grouping in palette
-}
-```
-
-### Command IDs
-
-Command IDs follow the pattern `ultra.<action>`:
-
-```
-ultra.save
-ultra.saveAs
-ultra.undo
-ultra.redo
-ultra.toggleSidebar
-ultra.goToLine
-```
-
-## API Reference
-
-### CommandRegistry
-
-```typescript
-import { commandRegistry } from './input/commands.ts';
-
-// Register a command
-commandRegistry.register({
-  id: 'ultra.myCommand',
-  title: 'My Command',
-  handler: () => {
-    console.log('Command executed!');
-  }
-});
-
-// Execute a command by ID
-await commandRegistry.execute('ultra.myCommand');
-
-// Get all registered commands
-const commands = commandRegistry.getAll();
-
-// Check if command exists
-const exists = commandRegistry.has('ultra.myCommand');
-
-// Get command by ID
-const command = commandRegistry.get('ultra.myCommand');
-```
+| Category | Purpose | Examples |
+|----------|---------|----------|
+| `file.*` | File operations | `file.save`, `file.saveAs`, `file.new` |
+| `edit.*` | Editing | `edit.undo`, `edit.redo`, `edit.cut` |
+| `view.*` | View changes | `view.toggleSidebar`, `view.splitVertical` |
+| `navigation.*` | Navigation | `navigation.goToLine`, `navigation.quickOpen` |
+| `git.*` | Git operations | `git.stage`, `git.commit`, `git.push` |
+| `lsp.*` | LSP features | `lsp.goToDefinition`, `lsp.hover` |
+| `database.*` | Database | `database.newQuery`, `database.runQuery` |
 
 ## Registering Commands
 
-### Basic Registration
+### In TUI Client
+
+Commands are registered in the `registerCommands()` method:
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.duplicateLine',
-  title: 'Edit: Duplicate Line',
-  handler: () => {
-    const pane = app.getActivePane();
-    pane?.duplicateCurrentLine();
-  }
-});
+// src/clients/tui/client/tui-client.ts
+private registerCommands(): void {
+  // File commands
+  this.commandHandlers.set('file.save', async () => {
+    await this.save();
+    return true;
+  });
+
+  this.commandHandlers.set('file.saveAs', async () => {
+    await this.saveAs();
+    return true;
+  });
+
+  // Edit commands
+  this.commandHandlers.set('edit.undo', async () => {
+    const editor = this.window.getActiveEditor();
+    if (editor) {
+      await editor.undo();
+      return true;
+    }
+    return false;
+  });
+
+  // View commands
+  this.commandHandlers.set('view.toggleSidebar', async () => {
+    this.window.toggleSidebar();
+    return true;
+  });
+}
 ```
 
-### Async Commands
+### Command Handler Pattern
 
 ```typescript
-commandRegistry.register({
-  id: 'ultra.formatDocument',
-  title: 'Edit: Format Document',
-  handler: async () => {
-    const pane = app.getActivePane();
-    await lspManager.formatDocument(pane.document);
+// Handler signature
+type CommandHandler = () => Promise<boolean>;
+
+// Return true on success, false on failure
+this.commandHandlers.set('myFeature.doSomething', async () => {
+  try {
+    await this.doSomething();
+    return true;
+  } catch (error) {
+    this.window.showNotification(`Failed: ${error}`, 'error');
+    return false;
   }
-});
-```
-
-### With Category
-
-```typescript
-commandRegistry.register({
-  id: 'ultra.newFile',
-  title: 'New File',
-  category: 'File',
-  handler: () => app.newFile()
 });
 ```
 
@@ -113,172 +103,225 @@ commandRegistry.register({
 
 ### File Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.save` | File: Save | Save current file |
-| `ultra.saveAs` | File: Save As | Save with new name |
-| `ultra.newFile` | File: New File | Create new file |
-| `ultra.openFile` | File: Open File | Open file picker |
-| `ultra.closeTab` | File: Close Tab | Close current tab |
-| `ultra.quit` | File: Quit | Exit Ultra |
+| ID | Description |
+|----|-------------|
+| `file.save` | Save current file |
+| `file.saveAs` | Save with new name |
+| `file.new` | Create new file |
+| `file.open` | Open file picker |
+| `file.closeTab` | Close current tab |
+| `file.quit` | Exit Ultra |
 
 ### Edit Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.undo` | Edit: Undo | Undo last change |
-| `ultra.redo` | Edit: Redo | Redo last undo |
-| `ultra.cut` | Edit: Cut | Cut selection |
-| `ultra.copy` | Edit: Copy | Copy selection |
-| `ultra.paste` | Edit: Paste | Paste clipboard |
-| `ultra.selectAll` | Edit: Select All | Select all text |
-| `ultra.selectLine` | Edit: Select Line | Select current line |
+| ID | Description |
+|----|-------------|
+| `edit.undo` | Undo last change |
+| `edit.redo` | Redo last undo |
+| `edit.cut` | Cut selection |
+| `edit.copy` | Copy selection |
+| `edit.paste` | Paste clipboard |
+| `edit.selectAll` | Select all text |
+| `edit.selectLine` | Select current line |
+| `edit.duplicateLine` | Duplicate current line |
+| `edit.deleteLine` | Delete current line |
+| `edit.toggleComment` | Toggle line comment |
+| `edit.indent` | Indent selection |
+| `edit.outdent` | Outdent selection |
 
 ### View Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.toggleSidebar` | View: Toggle Sidebar | Show/hide file tree |
-| `ultra.toggleTerminal` | View: Toggle Terminal | Show/hide terminal |
-| `ultra.toggleGitPanel` | View: Toggle Git Panel | Show/hide git panel |
-| `ultra.commandPalette` | View: Command Palette | Open command palette |
-| `ultra.splitVertical` | View: Split Vertical | Split pane vertically |
-| `ultra.splitHorizontal` | View: Split Horizontal | Split pane horizontally |
+| ID | Description |
+|----|-------------|
+| `view.toggleSidebar` | Show/hide sidebar |
+| `view.toggleTerminal` | Show/hide terminal |
+| `view.toggleGitPanel` | Show/hide git panel |
+| `view.commandPalette` | Open command palette |
+| `view.splitVertical` | Split pane vertically |
+| `view.splitHorizontal` | Split pane horizontally |
 
 ### Navigation Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.goToLine` | Go: Go to Line | Jump to line number |
-| `ultra.goToFile` | Go: Quick Open | Fuzzy file finder |
-| `ultra.goToDefinition` | Go: Go to Definition | LSP definition |
-| `ultra.findReferences` | Go: Find References | LSP references |
+| ID | Description |
+|----|-------------|
+| `navigation.goToLine` | Jump to line number |
+| `navigation.quickOpen` | Fuzzy file finder |
+| `navigation.goToSymbol` | Go to symbol in file |
 
-### Search Commands
+### LSP Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.find` | Search: Find | Find in file |
-| `ultra.findInFiles` | Search: Find in Files | Project-wide search |
-| `ultra.replace` | Search: Replace | Find and replace |
+| ID | Description |
+|----|-------------|
+| `lsp.goToDefinition` | Go to symbol definition |
+| `lsp.findReferences` | Find all references |
+| `lsp.showHover` | Show hover tooltip |
+| `lsp.triggerCompletion` | Trigger autocomplete |
+| `lsp.triggerSignatureHelp` | Show function signature |
+| `lsp.formatDocument` | Format entire document |
+
+### Git Commands
+
+| ID | Description |
+|----|-------------|
+| `git.stage` | Stage selected file |
+| `git.stageAll` | Stage all files |
+| `git.unstage` | Unstage selected file |
+| `git.commit` | Open commit dialog |
+| `git.push` | Push to remote |
+| `git.pull` | Pull from remote |
 
 ### Multi-Cursor Commands
 
-| ID | Title | Description |
-|----|-------|-------------|
-| `ultra.addCursorAbove` | Selection: Add Cursor Above | Add cursor on line above |
-| `ultra.addCursorBelow` | Selection: Add Cursor Below | Add cursor on line below |
-| `ultra.selectNextOccurrence` | Selection: Select Next | Select next match |
-| `ultra.selectAllOccurrences` | Selection: Select All | Select all matches |
+| ID | Description |
+|----|-------------|
+| `edit.addCursorAbove` | Add cursor on line above |
+| `edit.addCursorBelow` | Add cursor on line below |
+| `edit.selectNextOccurrence` | Select next match |
+| `edit.selectAllOccurrences` | Select all matches |
 
 ## Command Palette Integration
 
-Commands appear in the command palette (`Ctrl+P`):
+Commands appear in the command palette (`Ctrl+Shift+P`):
 
 ```typescript
-// In command-palette.ts
-const items = commandRegistry.getAll()
-  .map(cmd => ({
-    label: cmd.title,
-    id: cmd.id,
-    category: cmd.category
-  }))
-  .sort((a, b) => a.label.localeCompare(b.label));
+// Command palette shows registered commands
+class CommandPalette {
+  show(): void {
+    const commands = Array.from(this.client.commandHandlers.keys())
+      .map(id => ({
+        id,
+        label: this.formatLabel(id),  // 'file.save' → 'File: Save'
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    this.showItems(commands);
+  }
+
+  private formatLabel(id: string): string {
+    const [category, action] = id.split('.');
+    return `${this.capitalize(category)}: ${this.formatAction(action)}`;
+  }
+}
 ```
-
-### Filtering
-
-The palette filters commands by:
-1. Title text match
-2. Category prefix
-3. Command ID (partial match)
 
 ## Keybinding Integration
 
-Commands are bound to keys in keybindings:
+Commands are bound to keys in keybindings configuration:
 
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+s",
-      "command": "ultra.save"
-    }
-  ]
-}
+```jsonc
+// config/default-keybindings.jsonc
+[
+  { "key": "ctrl+s", "command": "file.save" },
+  { "key": "ctrl+shift+p", "command": "view.commandPalette" },
+  { "key": "ctrl+d", "command": "edit.selectNextOccurrence", "when": "editorFocus" }
+]
 ```
 
-When a key is pressed, the keymap resolves it to a command ID, which is then executed:
+The Session Service resolves keybindings:
 
 ```typescript
-// In keymap.ts
-const commandId = keymap.getCommand(keyEvent);
+// Key event flows through keybinding resolution
+const commandId = sessionService.resolveKeybinding(keyEvent, context);
 if (commandId) {
-  await commandRegistry.execute(commandId);
+  const handler = this.commandHandlers.get(commandId);
+  await handler?.();
 }
 ```
 
-## Creating Custom Commands
+## Using Services in Commands
 
-### In a Plugin/Extension
+Commands delegate to ECP services:
 
 ```typescript
-// my-extension.ts
-import { commandRegistry } from './input/commands.ts';
+this.commandHandlers.set('git.stageAll', async () => {
+  const gitService = this.ecpServer.getService<LocalGitService>('git');
+  await gitService.stageAll();
+  this.window.showNotification('All files staged', 'info');
+  return true;
+});
 
-export function activate() {
-  commandRegistry.register({
-    id: 'ultra.myExtension.doThing',
-    title: 'My Extension: Do Thing',
-    category: 'My Extension',
-    handler: () => {
-      // Extension logic
-    }
-  });
-}
-```
+this.commandHandlers.set('lsp.goToDefinition', async () => {
+  const editor = this.window.getActiveEditor();
+  if (!editor) return false;
 
-### With Keybinding
+  const lspService = this.ecpServer.getService<LocalLSPService>('lsp');
+  const location = await lspService.getDefinition(editor.uri, editor.position);
 
-Add to `~/.config/ultra/keybindings.json`:
-
-```json
-{
-  "keybindings": [
-    {
-      "key": "ctrl+shift+t",
-      "command": "ultra.myExtension.doThing"
-    }
-  ]
-}
+  if (location) {
+    await this.openFileAtLocation(location);
+    return true;
+  }
+  return false;
+});
 ```
 
 ## Error Handling
 
+Commands should handle their own errors:
+
 ```typescript
-// Commands should handle their own errors
-commandRegistry.register({
-  id: 'ultra.riskyOperation',
-  title: 'Risky Operation',
-  handler: async () => {
-    try {
-      await doRiskyThing();
-    } catch (error) {
-      statusBar.setMessage(`Error: ${error.message}`, 5000);
-    }
+this.commandHandlers.set('file.save', async () => {
+  const editor = this.window.getActiveEditor();
+  if (!editor) {
+    this.window.showNotification('No active editor', 'warning');
+    return false;
+  }
+
+  try {
+    await editor.save();
+    this.window.showNotification('File saved', 'info');
+    return true;
+  } catch (error) {
+    this.window.showNotification(`Save failed: ${error}`, 'error');
+    return false;
   }
 });
 ```
 
 ## Best Practices
 
-1. **Use descriptive IDs** - `ultra.category.action` format
-2. **Provide clear titles** - "Category: Action" format
-3. **Handle errors gracefully** - Don't let errors bubble up
-4. **Make commands idempotent** - Safe to run multiple times
-5. **Use async when needed** - For I/O operations
+1. **Use descriptive IDs** - `category.action` format
+2. **Return success status** - `true` on success, `false` on failure
+3. **Handle errors gracefully** - Show notifications for failures
+4. **Use services for logic** - Don't implement business logic in handlers
+5. **Check prerequisites** - Verify active editor, focused panel, etc.
+6. **Provide user feedback** - Show notifications for async operations
 
-## Related Modules
+## Adding a New Command
 
-- [Keymap](architecture/keybindings.md) - Keyboard shortcut resolution
-- [Command Palette](src/ui/components/command-palette.ts) - UI for command discovery
+### 1. Register the Handler
+
+```typescript
+// In tui-client.ts registerCommands()
+this.commandHandlers.set('myFeature.doThing', async () => {
+  await this.doThing();
+  return true;
+});
+```
+
+### 2. Implement the Method
+
+```typescript
+// In TUIClient class
+private async doThing(): Promise<void> {
+  const service = this.ecpServer.getService<MyService>('myService');
+  await service.doThing();
+  this.window.showNotification('Thing done!', 'info');
+}
+```
+
+### 3. Add Keybinding (Optional)
+
+```jsonc
+// In config/default-keybindings.jsonc
+{
+  "key": "ctrl+shift+t",
+  "command": "myFeature.doThing"
+}
+```
+
+## Related Documentation
+
+- [Adding Commands Guide](../guides/adding-commands.md) - Step-by-step guide
+- [Keybindings Architecture](../architecture/keybindings.md) - Key handling
+- [ECP Protocol](../architecture/ecp.md) - Service access

@@ -11,77 +11,121 @@ Ultra implements an LSP client that communicates with language servers for:
 - **Go to Definition** - Jump to symbol definition
 - **Find References** - Find all usages
 - **Diagnostics** - Errors and warnings
-- **Rename** - Symbol renaming
 - **Signature Help** - Function parameter hints
+
+## Architecture
+
+The LSP functionality is split between the LSP Service and TUI overlays:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      LSP Service                                     │
+│  (src/services/lsp/)                                                │
+│                                                                      │
+│  ┌─────────────────┐    ┌─────────────────┐                        │
+│  │  LSP Manager    │───▶│  LSP Client(s)  │                        │
+│  │  (connection    │    │  (per language) │                        │
+│  │   management)   │    │                 │                        │
+│  └─────────────────┘    └────────┬────────┘                        │
+│                                  │ JSON-RPC                         │
+│                                  ▼                                  │
+│                     ┌─────────────────────┐                        │
+│                     │  Language Server    │                        │
+│                     │  (tsserver, etc.)   │                        │
+│                     └─────────────────────┘                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                      TUI Client (Overlays)                           │
+│  (src/clients/tui/overlays/)                                        │
+│                                                                      │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
+│  │ Autocomplete    │  │ Hover Tooltip   │  │ Signature Help  │     │
+│  │ Popup           │  │                 │  │                 │     │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## Location
 
 ```
-src/features/lsp/
-├── index.ts           # Module exports
-├── manager.ts         # LSP connection manager
-├── client.ts          # Language server client
-├── providers.ts       # LSP feature providers
-├── autocomplete-popup.ts
-├── hover-tooltip.ts
-├── signature-help.ts
-└── diagnostics-renderer.ts
+src/services/lsp/
+├── interface.ts      # LSP service interface
+├── types.ts          # LSP type definitions
+├── local.ts          # LocalLSPService implementation
+├── adapter.ts        # ECP adapter
+├── providers.ts      # Server configuration
+└── index.ts          # Public exports
+
+src/clients/tui/overlays/
+├── autocomplete-popup.ts   # Completion UI
+├── hover-tooltip.ts        # Hover info display
+├── signature-help.ts       # Function signature UI
+└── diagnostics-overlay.ts  # Error/warning display
+
+src/clients/tui/client/
+└── lsp-integration.ts      # LSP overlay management
 ```
 
-## Architecture
+## LSP Service
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        LSP Manager                                   │
-│  - Manages connections to multiple language servers                 │
-│  - Routes requests to appropriate server                            │
-│  - Handles server lifecycle                                         │
-└────────────────────────────────┬────────────────────────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-                    ▼                         ▼
-          ┌─────────────────┐       ┌─────────────────┐
-          │   LSP Client    │       │   LSP Client    │
-          │  (TypeScript)   │       │    (Python)     │
-          └────────┬────────┘       └────────┬────────┘
-                   │                         │
-                   ▼                         ▼
-          ┌─────────────────┐       ┌─────────────────┐
-          │    tsserver     │       │    pyright      │
-          │   (process)     │       │   (process)     │
-          └─────────────────┘       └─────────────────┘
-```
-
-## LSP Manager
-
-### Initialization
+### Interface
 
 ```typescript
-import lspManager from './features/lsp/manager.ts';
+// src/services/lsp/interface.ts
+export interface LSPService {
+  // Connection management
+  startServer(languageId: string): Promise<void>;
+  stopServer(languageId: string): Promise<void>;
 
-// Start LSP for a language
-await lspManager.startServer('typescript');
+  // Document sync
+  didOpen(uri: string, languageId: string, content: string): Promise<void>;
+  didChange(uri: string, changes: TextDocumentChange[]): Promise<void>;
+  didSave(uri: string): Promise<void>;
+  didClose(uri: string): Promise<void>;
 
-// Or auto-detect from file
-await lspManager.ensureServerForFile('/path/to/file.ts');
+  // LSP features
+  completion(uri: string, position: Position): Promise<CompletionList>;
+  hover(uri: string, position: Position): Promise<Hover | null>;
+  definition(uri: string, position: Position): Promise<Location | null>;
+  references(uri: string, position: Position): Promise<Location[]>;
+  signatureHelp(uri: string, position: Position): Promise<SignatureHelp | null>;
+
+  // Events
+  onDiagnostics(callback: DiagnosticsCallback): Unsubscribe;
+}
 ```
 
-### Supported Languages
+### ECP Methods
+
+| Method | Description |
+|--------|-------------|
+| `lsp/startServer` | Start language server for a language |
+| `lsp/completion` | Get completions at position |
+| `lsp/hover` | Get hover info at position |
+| `lsp/definition` | Get definition location |
+| `lsp/references` | Get reference locations |
+| `lsp/signatureHelp` | Get signature help |
+| `lsp/format` | Format document |
+
+## Supported Languages
+
+The LSP Service supports multiple languages via external language servers:
 
 | Language | Server | Command |
 |----------|--------|---------|
-| TypeScript/JavaScript | tsserver | `typescript-language-server --stdio` |
+| TypeScript/JavaScript | typescript-language-server | `typescript-language-server --stdio` |
 | Python | pyright | `pyright-langserver --stdio` |
 | Go | gopls | `gopls serve` |
 | Rust | rust-analyzer | `rust-analyzer` |
 | C/C++ | clangd | `clangd` |
+| SQL | sql-language-server | `sql-language-server up --method stdio` |
 
 ### Configuration
 
-Language servers are configured in settings:
+Language servers are configured in `~/.ultra/settings.jsonc`:
 
-```json
+```jsonc
 {
   "lsp.servers": {
     "typescript": {
@@ -98,169 +142,98 @@ Language servers are configured in settings:
 }
 ```
 
-## LSP Client
+## LSP Integration (TUI)
 
-### Document Synchronization
+The `LSPIntegration` class manages LSP overlays in the TUI:
 
 ```typescript
-// Open document
-await client.didOpen({
-  textDocument: {
-    uri: `file://${filePath}`,
-    languageId: 'typescript',
-    version: 1,
-    text: content
+// src/clients/tui/client/lsp-integration.ts
+class LSPIntegration {
+  private autocomplete: AutocompletePopup;
+  private hoverTooltip: HoverTooltip;
+  private signatureHelp: SignatureHelpOverlay;
+
+  // Trigger completion
+  async triggerCompletion(
+    uri: string,
+    position: Position,
+    screenX: number,
+    screenY: number,
+    prefix: string,
+    startColumn: number
+  ): Promise<void> {
+    const result = await this.lspService.completion(uri, position);
+    if (result.items.length > 0) {
+      this.autocomplete.show(result.items, screenX, screenY, prefix, startColumn);
+    }
   }
-});
 
-// Document changed
-await client.didChange({
-  textDocument: { uri, version: 2 },
-  contentChanges: [{ text: newContent }]
-});
-
-// Document saved
-await client.didSave({
-  textDocument: { uri }
-});
-
-// Document closed
-await client.didClose({
-  textDocument: { uri }
-});
-```
-
-### Request/Response
-
-```typescript
-// Completion request
-const completions = await client.completion({
-  textDocument: { uri },
-  position: { line: 10, character: 5 }
-});
-
-// Hover request
-const hover = await client.hover({
-  textDocument: { uri },
-  position: { line: 10, character: 5 }
-});
-
-// Definition request
-const definition = await client.definition({
-  textDocument: { uri },
-  position: { line: 10, character: 5 }
-});
-
-// References request
-const references = await client.references({
-  textDocument: { uri },
-  position: { line: 10, character: 5 },
-  context: { includeDeclaration: true }
-});
-```
-
-## Feature Providers
-
-### Autocomplete
-
-```typescript
-// providers.ts
-class CompletionProvider {
-  async provideCompletions(
-    document: Document,
-    position: Position
-  ): Promise<CompletionItem[]> {
-    const client = lspManager.getClientForDocument(document);
-    if (!client) return [];
-
-    const result = await client.completion({
-      textDocument: { uri: document.uri },
-      position
-    });
-
-    return result.items.map(item => ({
-      label: item.label,
-      kind: item.kind,
-      detail: item.detail,
-      insertText: item.insertText || item.label
-    }));
+  // Show hover info
+  async showHover(uri: string, position: Position, screenX: number, screenY: number): Promise<void> {
+    const hover = await this.lspService.hover(uri, position);
+    if (hover) {
+      this.hoverTooltip.show(hover.contents, screenX, screenY);
+    }
   }
 }
 ```
 
-### Hover Tooltip
+## Autocomplete
+
+### Trigger
+
+Completion is triggered by:
+- Typing trigger characters (`.`, `(`, etc.)
+- Pressing `Ctrl+Space`
 
 ```typescript
-class HoverProvider {
-  async provideHover(
-    document: Document,
-    position: Position
-  ): Promise<Hover | null> {
-    const client = lspManager.getClientForDocument(document);
-    if (!client) return null;
+// In document editor
+handleChar(char: string): void {
+  this.insertChar(char);
 
-    const hover = await client.hover({
-      textDocument: { uri: document.uri },
-      position
-    });
-
-    return hover ? {
-      contents: this.parseMarkdown(hover.contents),
-      range: hover.range
-    } : null;
+  // Check for trigger character
+  if (this.isTriggerChar(char)) {
+    this.lspIntegration.triggerCompletion(
+      this.uri,
+      this.position,
+      this.screenX,
+      this.screenY,
+      char,
+      this.position.column
+    );
   }
 }
 ```
 
-### Diagnostics
+### Completion Popup
 
 ```typescript
-// Diagnostics are pushed from the server
-client.on('textDocument/publishDiagnostics', (params) => {
-  const { uri, diagnostics } = params;
-
-  diagnosticsRenderer.setDiagnostics(uri, diagnostics.map(d => ({
-    range: d.range,
-    severity: d.severity,  // 1=Error, 2=Warning, 3=Info, 4=Hint
-    message: d.message,
-    source: d.source
-  })));
-
-  renderScheduler.scheduleRender();
-});
-```
-
-## UI Components
-
-### Autocomplete Popup
-
-```typescript
-// autocomplete-popup.ts
+// src/clients/tui/overlays/autocomplete-popup.ts
 class AutocompletePopup {
   private items: CompletionItem[] = [];
   private selectedIndex: number = 0;
 
-  show(items: CompletionItem[], position: Position): void {
+  show(items: CompletionItem[], x: number, y: number, prefix: string, startColumn: number): void {
     this.items = items;
     this.selectedIndex = 0;
+    this.prefix = prefix;
+    this.startColumn = startColumn;
     this.visible = true;
+    this.position = { x, y };
     renderScheduler.scheduleRender();
   }
 
   handleKey(event: KeyEvent): boolean {
     switch (event.key) {
       case 'ArrowDown':
-        this.selectedIndex = Math.min(
-          this.selectedIndex + 1,
-          this.items.length - 1
-        );
+        this.selectedIndex = Math.min(this.selectedIndex + 1, this.items.length - 1);
         return true;
       case 'ArrowUp':
         this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
         return true;
       case 'Enter':
       case 'Tab':
-        this.acceptSelected();
+        this.accept();
         return true;
       case 'Escape':
         this.hide();
@@ -271,117 +244,143 @@ class AutocompletePopup {
 }
 ```
 
-### Hover Tooltip
+### Accepting Completion
 
 ```typescript
-// hover-tooltip.ts
+// Callback when completion is accepted
+onCompletionAccepted: (item: CompletionItem, prefix: string, startColumn: number) => {
+  // Delete prefix text
+  this.editor.deleteRange({
+    start: { line: this.position.line, column: startColumn },
+    end: this.position
+  });
+
+  // Insert completion text
+  const insertText = item.insertText || item.label;
+  this.editor.insert(insertText);
+}
+```
+
+## Hover Tooltip
+
+```typescript
+// src/clients/tui/overlays/hover-tooltip.ts
 class HoverTooltip {
-  async showAtPosition(document: Document, position: Position): Promise<void> {
-    const hover = await hoverProvider.provideHover(document, position);
+  private content: string = '';
+  private position: { x: number; y: number } = { x: 0, y: 0 };
+
+  async showAtPosition(uri: string, position: Position, screenX: number, screenY: number): Promise<void> {
+    const hover = await this.lspService.hover(uri, position);
     if (hover) {
-      this.content = hover.contents;
+      this.content = this.parseMarkdown(hover.contents);
+      this.position = { x: screenX, y: screenY };
       this.visible = true;
       renderScheduler.scheduleRender();
     }
   }
 
-  render(rect: Rect): void {
+  render(ctx: RenderContext): void {
     if (!this.visible) return;
 
-    // Draw tooltip box
-    // Render markdown content
+    // Draw tooltip box with content
+    const bg = ctx.getThemeColor('editorHoverWidget.background', '#2d2d2d');
+    const fg = ctx.getThemeColor('editorHoverWidget.foreground', '#cccccc');
+    // ... render tooltip
   }
 }
 ```
 
-### Diagnostics Renderer
+## Diagnostics
+
+Diagnostics are pushed from the language server:
 
 ```typescript
-// diagnostics-renderer.ts
-class DiagnosticsRenderer {
-  renderGutterMarkers(lineNumber: number): void {
-    const diagnostics = this.getDiagnosticsForLine(lineNumber);
-    if (diagnostics.length === 0) return;
+// LSP Service receives diagnostics
+this.client.on('textDocument/publishDiagnostics', (params) => {
+  const { uri, diagnostics } = params;
+  this.emit('diagnostics', { uri, diagnostics });
+});
 
-    // Show error/warning icon in gutter
+// TUI subscribes to diagnostics
+lspService.onDiagnostics((event) => {
+  this.updateDiagnostics(event.uri, event.diagnostics);
+  renderScheduler.scheduleRender();
+});
+```
+
+### Diagnostic Rendering
+
+```typescript
+// In document editor
+renderGutter(ctx: RenderContext, lineNumber: number): void {
+  const diagnostics = this.getDiagnosticsForLine(lineNumber);
+  if (diagnostics.length > 0) {
     const severity = Math.min(...diagnostics.map(d => d.severity));
     const icon = severity === 1 ? '●' : severity === 2 ? '▲' : 'ℹ';
     const color = severity === 1 ? '#ff5555' : severity === 2 ? '#ffaa00' : '#5555ff';
 
-    process.stdout.write(fgHex(color) + icon + RESET);
-  }
-
-  renderUnderlines(line: string, lineNumber: number): void {
-    const diagnostics = this.getDiagnosticsForLine(lineNumber);
-    for (const d of diagnostics) {
-      // Draw squiggly underline under the error range
-    }
+    ctx.buffer.set(gutterX, y, { char: icon, fg: color, bg });
   }
 }
+```
+
+## Document Synchronization
+
+The LSP Service keeps language servers in sync with document changes:
+
+```typescript
+// Open document
+await lspService.didOpen(uri, 'typescript', content);
+
+// Document changed
+await lspService.didChange(uri, [
+  {
+    range: { start: { line: 5, character: 0 }, end: { line: 5, character: 10 } },
+    text: 'new text'
+  }
+]);
+
+// Document saved
+await lspService.didSave(uri);
+
+// Document closed
+await lspService.didClose(uri);
 ```
 
 ## Error Handling
 
 ```typescript
-// Handle server crashes
-client.on('error', (error) => {
-  debugLog(`LSP error: ${error.message}`);
-  statusBar.setMessage(`Language server error: ${error.message}`, 5000);
+// Handle server errors
+this.client.on('error', (error) => {
+  debugLog(`[LSP] Server error: ${error.message}`);
 });
 
 // Handle server exit
-client.on('exit', (code) => {
-  debugLog(`LSP server exited with code ${code}`);
+this.client.on('exit', (code) => {
+  debugLog(`[LSP] Server exited with code ${code}`);
   // Attempt restart
-  setTimeout(() => lspManager.restartServer(languageId), 1000);
+  this.restartServer(languageId);
 });
 ```
 
-## Performance
+## Keybindings
 
-### Request Debouncing
-
-```typescript
-// Debounce completion requests while typing
-private completionTimer: Timer | null = null;
-
-triggerCompletion(document: Document, position: Position): void {
-  if (this.completionTimer) {
-    clearTimeout(this.completionTimer);
-  }
-
-  this.completionTimer = setTimeout(async () => {
-    const items = await this.provideCompletions(document, position);
-    this.autocompletePopup.show(items, position);
-  }, 100);  // 100ms debounce
-}
-```
-
-### Incremental Sync
-
-For large files, use incremental document sync:
-
-```typescript
-// Only send changed ranges, not full document
-await client.didChange({
-  textDocument: { uri, version },
-  contentChanges: [{
-    range: {
-      start: { line: 5, character: 0 },
-      end: { line: 5, character: 10 }
-    },
-    text: 'new text'
-  }]
-});
-```
+| Key | Command | Description |
+|-----|---------|-------------|
+| `Ctrl+Space` | `lsp.triggerCompletion` | Trigger autocomplete |
+| `Ctrl+K` | `lsp.showHover` | Show hover tooltip |
+| `F12` | `lsp.goToDefinition` | Go to definition |
+| `Ctrl+Shift+K` | `lsp.goToDefinition` | Go to definition (alt) |
+| `Shift+F12` | `lsp.findReferences` | Find all references |
+| `Ctrl+Shift+Space` | `lsp.triggerSignatureHelp` | Show signature help |
 
 ## Debugging
 
 Enable LSP debug logging:
 
 ```bash
-ultra --debug myfile.ts
-# LSP messages logged to debug.log
+./ultra --debug myfile.ts
+# Check debug.log for LSP messages
 ```
 
 Log format:
@@ -390,9 +389,12 @@ Log format:
 [LSP] <- initialize result {...}
 [LSP] -> textDocument/didOpen {...}
 [LSP] <- textDocument/publishDiagnostics {...}
+[LSP] -> textDocument/completion {...}
+[LSP] <- textDocument/completion result {...}
 ```
 
-## Related Modules
+## Related Documentation
 
-- [Commands](commands.md) - LSP commands (goToDefinition, findReferences)
-- [Rendering](../architecture/rendering.md) - Diagnostic rendering
+- [ECP Protocol](../architecture/ecp.md) - LSP Service ECP API
+- [Adding Languages](../guides/adding-languages.md) - Configuring language servers
+- [Keybindings](../architecture/keybindings.md) - LSP keybindings
