@@ -7,6 +7,8 @@ _v0.5.0_
 
 A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and integrated AI capabilities. Built with Bun for maximum performance.
 
+Ultra is developed as a proof-of-concept for using AI to develop large, highly complex applications. Zero lines of code have been written by a human. **Do not use Ultra for production work as it may consume your data while making loud belching noises.**
+
 ## Quick Start
 
 ```bash
