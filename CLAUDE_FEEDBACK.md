@@ -5,8 +5,9 @@
 Comprehensive codebase analysis comparing implementation against CLAUDE.md conventions, architecture design documents, and incorporating feedback from CODEX_FEEDBACK.md and GEMINI_FEEDBACK.md.
 
 **Current Status:** v0.5.1 UX Polish Phase
-**Test Status:** 1740/1740 tests passing
+**Test Status:** 1763/1763 tests passing
 **Branch:** `ux-fixes-20251228`
+**Last Updated:** 2025-12-28
 
 ---
 
@@ -15,7 +16,7 @@ Comprehensive codebase analysis comparing implementation against CLAUDE.md conve
 ### 1.1 Database Service Initialization Race Condition
 
 **Source:** CODEX_FEEDBACK.md #1, #2
-**Status:** CONFIRMED - Still present
+**Status:** ✅ FIXED - Database service initialized at TUI startup
 
 **Problem:** Connection dialogs can be invoked before `localDatabaseService.init()` runs:
 - `showNewDatabaseConnectionDialog` calls secret service methods
@@ -49,7 +50,7 @@ private async showNewDatabaseConnectionDialog(): Promise<void> {
 ### 1.2 SQL LSP Configuration Timing Issue
 
 **Source:** CODEX_FEEDBACK.md #3
-**Status:** CONFIRMED - Still present
+**Status:** ✅ FIXED - LSP reconfigured after successful connection
 
 **Problem:** `configureSQLLanguageServer` requires cached password, but password is only cached after `connect()`:
 1. User selects connection in SQL editor dropdown
@@ -78,7 +79,7 @@ private async executeQuery(sql: string, connectionId: string): Promise<void> {
 ### 1.3 Row Details Panel Hardcodes 'public' Schema
 
 **Source:** CODEX_FEEDBACK.md #4
-**Status:** CONFIRMED - Still present
+**Status:** ✅ FIXED - Created parseTableInfoFromSql utility to extract schema from SQL
 
 **Problem:** All row operations use hardcoded `'public'` schema:
 
@@ -107,26 +108,23 @@ const schemaName = (panel as any).schemaName || 'public';
 ### 2.1 console.log/console.error Violations
 
 **Source:** CLAUDE.md Anti-Patterns
-**Status:** 26 violations found
+**Status:** ✅ FIXED - Replaced with debugLog where appropriate
 
 The convention states: "Never use `console.log` for debugging. Use the centralized debug system."
 
-**Violations by file:**
+**Fixed files:**
+- `src/config/settings-loader.ts` - Replaced with debugLog
+- `src/core/errors.ts` - Replaced with debugLog
+- `src/core/event-emitter.ts` - Replaced with debugLog
+- `src/clients/tui/client/keybinding-adapter.ts` - Replaced with debugLog
+- `src/services/syntax/highlighter.ts` - Replaced with debugLog
+- `src/terminal/pty.ts` - Replaced with debugLog
+- `src/clients/tui/main.ts` - Warning message replaced with debugLog
 
-| File | Count | Type |
-|------|-------|------|
-| `src/clients/tui/main.ts` | 6 | console.log, console.error |
-| `src/index.ts` | 3 | console.log, console.error |
-| `src/config/settings-loader.ts` | 2 | console.error |
-| `src/core/errors.ts` | 3 | console.error |
-| `src/core/event-emitter.ts` | 1 | console.error |
-| `src/clients/tui/client/keybinding-adapter.ts` | 1 | console.error |
-| `src/services/syntax/highlighter.ts` | 1 | console.error |
-| `src/terminal/pty-bridge.ts` | 1 | console.error |
-| `src/terminal/pty-loader.ts` | 1 | console.error |
-| `src/terminal/pty.ts` | 1 | console.error |
-
-**Note:** Some console.log in main.ts are intentional (version output, help). Those should stay.
+**Kept as-is (intentional):**
+- `src/clients/tui/main.ts` - Help output, version, fatal errors (user must see)
+- `src/index.ts` - Help output, version, fatal startup error
+- `src/terminal/pty-bridge.ts` - IPC protocol (sends JSON via stderr)
 
 **Recommendation:** Replace with `debugLog()` where appropriate, or use proper error reporting mechanisms.
 
@@ -190,7 +188,7 @@ Pattern detected: `} catch {` with no error handling:
 ### 2.4 Connection Change Event Emitted Prematurely
 
 **Source:** CODEX_FEEDBACK.md #5
-**Status:** CONFIRMED
+**Status:** ✅ FIXED - Added 'connecting' event type
 
 **Location:** `src/services/database/local.ts:168-194`
 
@@ -229,37 +227,32 @@ Theme fallback colors in `theme-adapter.ts` are intentional defaults. However, s
 ### 3.2 Legacy 'archived' References Remain
 
 **Source:** GEMINI_FEEDBACK.md #4
-**Status:** Partially resolved
+**Status:** ✅ FIXED - Removed from tsconfig.json
 
-The `src/archived/` directory has been removed, but references remain:
+The `src/archived/` directory has been removed.
 
-| File | Issue |
-|------|-------|
-| `tsconfig.json:36-37` | Excludes non-existent `src/archived` paths |
-| `BACKLOG.md:178-280` | References archived feature sources |
-| `src/clients/tui/config/config-manager.ts:596,667` | Archives to `~/.ultra/archived/` |
+**Fixed:**
+- `tsconfig.json` - Removed `src/archived` from excludes
 
-**Recommendation:**
-1. Remove `src/archived` from tsconfig.json excludes
-2. Update BACKLOG.md to mark sources as "historical"
-3. Keep config-manager archiving logic (it's for user config, not source)
+**Remaining (acceptable):**
+- `BACKLOG.md:178-280` - References archived feature sources (historical documentation)
+- `src/clients/tui/config/config-manager.ts:596,667` - Archives user configs to `~/.ultra/archived/` (intentional)
 
 ---
 
 ### 3.3 Magic Numbers in Timeouts
 
 **Source:** CLAUDE.md Constants section
-**Status:** 2 violations found
+**Status:** ✅ FIXED - Added constants and updated files
 
-```typescript
-// src/services/database/local.ts:160
-setTimeout(check, 100);
+Added to `src/constants.ts`:
+- `TIMEOUTS.IPC_CALL` (10000ms)
+- `TIMEOUTS.IPC_BRIDGE_STARTUP` (5000ms)
+- `TIMEOUTS.DB_POLL_INTERVAL` (100ms)
 
-// src/terminal/backends/ipc-pty.ts:190
-const timeout = setTimeout(() => reject(...), 5000);
-```
-
-**Recommendation:** Use `TIMEOUTS` constants from `src/constants.ts`
+**Fixed files:**
+- `src/services/database/local.ts` - Uses `TIMEOUTS.DB_POLL_INTERVAL`
+- `src/terminal/backends/ipc-pty.ts` - Uses `TIMEOUTS.IPC_CALL` and `TIMEOUTS.IPC_BRIDGE_STARTUP`
 
 ---
 
@@ -349,23 +342,24 @@ Based on CODEX feedback and analysis:
 1. **No integration tests for connection dialogs** - Secret storage and persistence flows untested
 2. **No tests for LSP configuration** - SQL editor LSP path untested
 3. **No tests for row editing** - Schema handling untested
-4. **Database service events** - Connection state machine untested
+4. ✅ **Database service events** - Connection state machine now tested (connecting event sequence)
+5. ✅ **SQL parsing** - Added 22 tests for `parseTableInfoFromSql` utility
 
 ---
 
 ## Recommended Action Plan
 
-### Phase 1: Critical Fixes (This Sprint)
-1. Initialize database service at TUI startup
-2. Re-configure SQL LSP after successful connection
-3. Fix connection event emission sequence
-4. Parse and preserve schema in SQL queries
+### Phase 1: Critical Fixes ✅ COMPLETED
+1. ✅ Initialize database service at TUI startup
+2. ✅ Re-configure SQL LSP after successful connection
+3. ✅ Fix connection event emission sequence
+4. ✅ Parse and preserve schema in SQL queries
 
-### Phase 2: Code Quality (Next Sprint)
-1. Replace console.log/error with debugLog where appropriate
-2. Add error logging to catch blocks
-3. Move magic numbers to constants.ts
-4. Create GitHub issues for TODO markers
+### Phase 2: Code Quality ✅ COMPLETED
+1. ✅ Replace console.log/error with debugLog where appropriate
+2. ⏸️ Add error logging to catch blocks (most are intentional graceful degradation)
+3. ✅ Move magic numbers to constants.ts
+4. ⏸️ Create GitHub issues for TODO markers (tracking only)
 
 ### Phase 3: Performance (Future)
 1. Implement incremental LSP document sync

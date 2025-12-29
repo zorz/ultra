@@ -45,6 +45,15 @@ export const TIMEOUTS = {
   /** LSP initialization timeout (60 seconds) */
   LSP_INIT: 60000,
 
+  /** IPC call timeout (10 seconds) */
+  IPC_CALL: 10000,
+
+  /** IPC bridge startup timeout (5 seconds) */
+  IPC_BRIDGE_STARTUP: 5000,
+
+  /** Database connection poll interval (100ms) */
+  DB_POLL_INTERVAL: 100,
+
   /** Default debounce delay for user input (100ms) */
   DEBOUNCE_DEFAULT: 100,
 

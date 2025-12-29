@@ -32,8 +32,6 @@
     "src/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "src/archived",
-    "src/archived/**"
+    "node_modules"
   ]
 }
