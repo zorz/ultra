@@ -2,6 +2,25 @@
   "name": "ultra",
   "version": "0.5.0",
   "description": "A terminal-native code editor with Sublime Text ergonomics and AI capabilities",
+  "license": "BSL-1.1",
+  "author": "Zorz LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zorz/ultra.git"
+  },
+  "homepage": "https://github.com/zorz/ultra",
+  "bugs": {
+    "url": "https://github.com/zorz/ultra/issues"
+  },
+  "keywords": [
+    "editor",
+    "terminal",
+    "tui",
+    "bun",
+    "typescript",
+    "code-editor",
+    "ide"
+  ],
   "type": "module",
   "main": "src/index.ts",
   "bin": {

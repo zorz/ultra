@@ -14,8 +14,8 @@ Thank you for your interest in contributing to Ultra! This guide covers the deve
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ultra-editor.git
-cd ultra-editor
+git clone https://github.com/zorz/ultra.git
+cd ultra
 
 # Install dependencies
 bun install
@@ -30,22 +30,18 @@ bun run src/index.ts --debug
 ### Project Structure
 
 ```
-ultra-editor/
+ultra/
 ├── src/
-│   ├── index.ts          # Entry point
-│   ├── app.ts            # Main application
-│   ├── constants.ts      # Shared constants
-│   ├── debug.ts          # Debug utilities
-│   ├── core/             # Core data structures
-│   ├── input/            # Input handling
-│   ├── features/         # Editor features
-│   ├── ui/               # User interface
-│   ├── terminal/         # Terminal I/O
-│   ├── config/           # Configuration
-│   └── state/            # Application state
-├── config/               # Default configurations
-├── docs/                 # Documentation
-└── tests/                # Test files
+│   ├── index.ts            # Entry point
+│   ├── constants.ts        # Shared constants
+│   ├── debug.ts            # Debug utilities
+│   ├── clients/tui/        # Terminal UI client
+│   ├── services/           # ECP services (document, file, git, lsp, etc.)
+│   ├── terminal/           # PTY backends
+│   └── config/             # Configuration
+├── config/                 # Default configurations
+├── docs/                   # Documentation
+└── tests/                  # Test files
 ```
 
 ## Development Workflow

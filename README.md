@@ -1,5 +1,8 @@
 # Ultra
 
+[![CI](https://github.com/zorz/ultra/actions/workflows/ci.yml/badge.svg)](https://github.com/zorz/ultra/actions/workflows/ci.yml)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
+
 _v0.5.0_
 
 A terminal-native code editor with Sublime Text ergonomics, VS Code configuration compatibility, and integrated AI capabilities. Built with Bun for maximum performance.
@@ -571,10 +574,18 @@ bun run typecheck
 bun run docs
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for detailed development guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a PR.
 
 ---
 
 ## License
 
-Copyright 2025, Zorz LLC, All Rights Reserved
+Ultra is licensed under the [Business Source License 1.1](LICENSE). After January 1, 2029, the license converts to Apache 2.0.
+
+Copyright 2025 Zorz LLC
