@@ -98,6 +98,7 @@ import { localLSPService, type LSPDocumentSymbol } from '../../../services/lsp/i
 import {
   localDatabaseService,
   getSQLCompletionProvider,
+  parseTableInfoFromSql,
   type SQLCompletionItem,
   SQLCompletionKind,
 } from '../../../services/database/index.ts';
@@ -470,6 +471,10 @@ export class TUIClient {
 
     // Initialize session service (before layout setup)
     await this.initSessionService();
+
+    // Initialize database service (enables connection dialogs and secret storage)
+    await localDatabaseService.init(this.workingDirectory || undefined);
+    this.log('Database service initialized');
 
     // Initialize syntax service
     await this.syntaxService.waitForReady();
@@ -6219,9 +6224,10 @@ export class TUIClient {
       });
       proc.stdin.write(text);
       proc.stdin.end();
-      await proc.exited;
-    } catch {
-      // Silently fail - internal clipboard still works
+      const exitCode = await proc.exited;
+      this.log(`copyToSystemClipboard: pbcopy exited with code ${exitCode}`);
+    } catch (err) {
+      this.log(`copyToSystemClipboard failed: ${err}`);
     }
   }
 
@@ -6234,9 +6240,11 @@ export class TUIClient {
         stdout: 'pipe',
       });
       const output = await new Response(proc.stdout).text();
-      await proc.exited;
+      const exitCode = await proc.exited;
+      this.log(`pasteFromSystemClipboard: pbpaste exited with code ${exitCode}, got ${output.length} chars`);
       return output;
-    } catch {
+    } catch (err) {
+      this.log(`pasteFromSystemClipboard failed: ${err}`);
       return null;
     }
   }
@@ -6246,18 +6254,31 @@ export class TUIClient {
    */
   private async editCut(): Promise<void> {
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) return;
+    this.log(`editCut called, focused element: ${element?.constructor.name}`);
 
-    const text = element.getSelectedText();
-    if (!text) return;
+    let text: string | undefined;
 
-    // Copy to clipboard
-    this.clipboard = text;
-    await this.copyToSystemClipboard(text);
+    if (element instanceof DocumentEditor) {
+      text = element.getSelectedText();
+      if (text) {
+        this.clipboard = text;
+        await this.copyToSystemClipboard(text);
+        element.deleteBackward();
+      }
+    } else if (element instanceof SQLEditor) {
+      text = element.getSelectedText();
+      if (text) {
+        this.clipboard = text;
+        await this.copyToSystemClipboard(text);
+        element.deleteBackward();
+      }
+    }
+    // Note: Cut doesn't apply to terminals
 
-    // Delete the selection - deleteBackward handles this when there's a selection
-    element.deleteBackward();
-    this.scheduleRender();
+    if (text) {
+      this.log(`editCut: cut ${text.length} chars`);
+      this.scheduleRender();
+    }
   }
 
   /**
@@ -6265,14 +6286,24 @@ export class TUIClient {
    */
   private async editCopy(): Promise<void> {
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) return;
+    this.log(`editCopy called, focused element: ${element?.constructor.name}`);
 
-    const text = element.getSelectedText();
+    let text: string | undefined;
+
+    if (element instanceof DocumentEditor) {
+      text = element.getSelectedText();
+    } else if (element instanceof SQLEditor) {
+      text = element.getSelectedText();
+    }
+    // Note: Terminal copy requires text selection support which isn't implemented yet
+
+    this.log(`editCopy: selected text length = ${text?.length ?? 0}`);
     if (!text) return;
 
     // Copy to clipboard
     this.clipboard = text;
     await this.copyToSystemClipboard(text);
+    this.log(`editCopy: copied ${text.length} chars to clipboard`);
   }
 
   /**
@@ -6280,13 +6311,33 @@ export class TUIClient {
    */
   private async editPaste(): Promise<void> {
     const element = this.window.getFocusedElement();
-    if (!(element instanceof DocumentEditor)) return;
+    this.log(`editPaste called, focused element: ${element?.constructor.name}`);
 
     // Try system clipboard first, fall back to internal
-    const text = await this.pasteFromSystemClipboard() || this.clipboard;
+    const systemText = await this.pasteFromSystemClipboard();
+    const text = systemText || this.clipboard;
+    this.log(`editPaste: system=${systemText?.length ?? 0}, internal=${this.clipboard?.length ?? 0}`);
     if (!text) return;
 
-    element.insertText(text);
+    if (element instanceof DocumentEditor) {
+      element.insertText(text);
+      this.log(`editPaste: inserted ${text.length} chars into DocumentEditor`);
+    } else if (element instanceof SQLEditor) {
+      element.insertText(text);
+      this.log(`editPaste: inserted ${text.length} chars into SQLEditor`);
+    } else if (element instanceof AITerminalChat) {
+      // Write text directly to the terminal PTY
+      element.writeInput(text);
+      this.log(`editPaste: wrote ${text.length} chars to AITerminalChat`);
+    } else if (element instanceof TerminalPanel) {
+      // Write text to the active terminal session
+      element.write(text);
+      this.log(`editPaste: wrote ${text.length} chars to TerminalPanel`);
+    } else {
+      this.log('editPaste: unsupported element type');
+      return;
+    }
+
     this.scheduleRender();
   }
 
@@ -7937,6 +7988,9 @@ export class TUIClient {
     const currentConnectionId = connectionId;
     const currentSql = sql;
 
+    // Parse schema and table from SQL for row details
+    const { schema: parsedSchema, tableName: parsedTableName } = parseTableInfoFromSql(sql);
+
     // Set up callbacks (this overrides but that's OK for now)
     (results as any).callbacks = {
       ...(results as any).callbacks,
@@ -7946,7 +8000,9 @@ export class TUIClient {
         tableName: string,
         rowIndex: number
       ) => {
-        this.showRowDetailsPanel(row, fields, tableName, currentConnectionId, results);
+        // Use parsed schema, or default to 'public' if parsing failed
+        const schemaName = tableName === parsedTableName ? parsedSchema : 'public';
+        this.showRowDetailsPanel(row, fields, tableName, schemaName, currentConnectionId, results);
       },
       onRefresh: async () => {
         if (!currentSql || !currentConnectionId) {
@@ -7970,18 +8026,8 @@ export class TUIClient {
    * Parse table name from a SQL query (simple heuristic).
    */
   private parseTableNameFromSql(sql: string): string {
-    const normalized = sql.replace(/\s+/g, ' ').trim().toLowerCase();
-
-    // Try to extract table from SELECT ... FROM <table>
-    const fromMatch = normalized.match(/from\s+([^\s,;()]+)/i);
-    if (fromMatch) {
-      // Clean up table name (remove schema prefix for display)
-      const tableName = fromMatch[1]!;
-      const parts = tableName.split('.');
-      return parts[parts.length - 1] || tableName;
-    }
-
-    return 'Query Results';
+    const { tableName } = parseTableInfoFromSql(sql);
+    return tableName;
   }
 
   /**
@@ -7991,6 +8037,7 @@ export class TUIClient {
     row: Record<string, unknown>,
     fields: import('../../../services/database/types.ts').FieldInfo[],
     tableName: string,
+    schemaName: string,
     connectionId: string,
     sourceResults: QueryResults
   ): Promise<void> {
@@ -8023,7 +8070,7 @@ export class TUIClient {
         try {
           const tableDetails = await localDatabaseService.describeTable(
             connectionId,
-            'public', // TODO: Parse schema from table name
+            schemaName,
             tableName
           );
           if (tableDetails?.primaryKey) {
@@ -8035,7 +8082,7 @@ export class TUIClient {
       }
 
       // Set the row data
-      detailsPanel.setRowData(row, fields, tableName, 'public', primaryKey);
+      detailsPanel.setRowData(row, fields, tableName, schemaName, primaryKey);
 
       // Focus the details panel
       activePane.setActiveElement(detailsPanel.id);
@@ -8180,6 +8227,8 @@ export class TUIClient {
 
       if (connection.status === 'disconnected' || connection.status === 'error') {
         await localDatabaseService.connect(connectionId);
+        // Now password is cached - configure SQL LSP with database connection
+        this.configureSQLLanguageServer(connectionId);
       }
 
       const result = await localDatabaseService.executeQuery(connectionId, sql);

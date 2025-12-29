@@ -5,6 +5,7 @@
  */
 
 import { spawn } from 'bun-pty';
+import { debugLog } from '../debug.ts';
 
 // Re-export screen buffer types and classes from screen-buffer.ts
 // These are separated to allow imports without loading bun-pty
@@ -132,7 +133,7 @@ export class PTY {
       });
 
     } catch (error) {
-      console.error('Failed to start PTY:', error);
+      debugLog(`[PTY] Failed to start PTY: ${error}`);
       throw error;
     }
   }

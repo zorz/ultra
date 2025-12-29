@@ -462,7 +462,7 @@ export interface QueryHistoryEntry {
 /**
  * Connection change event types.
  */
-export type ConnectionChangeType = 'created' | 'updated' | 'deleted' | 'connected' | 'disconnected' | 'error';
+export type ConnectionChangeType = 'created' | 'updated' | 'deleted' | 'connecting' | 'connected' | 'disconnected' | 'error';
 
 /**
  * Connection change event.

@@ -15,6 +15,7 @@ import type {
 } from '../pty-backend.ts';
 import { ScreenBuffer, AnsiParser } from '../screen-buffer.ts';
 import { debugLog } from '../../debug.ts';
+import { TIMEOUTS } from '../../constants.ts';
 
 /**
  * IpcPtyBackend communicates with pty-bridge.ts via IPC.
@@ -84,13 +85,13 @@ export class IpcPtyBackend implements PTYBackend {
       this.pendingCalls.set(id, { resolve, reject });
       this.send({ id, method, params });
 
-      // Timeout after 10 seconds
+      // Timeout after IPC_CALL timeout
       setTimeout(() => {
         if (this.pendingCalls.has(id)) {
           this.pendingCalls.delete(id);
           reject(new Error(`IPC call ${method} timed out`));
         }
-      }, 10000);
+      }, TIMEOUTS.IPC_CALL);
     });
   }
 
@@ -187,14 +188,14 @@ export class IpcPtyBackend implements PTYBackend {
 
     // Wait for ready event (with timeout)
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('Bridge startup timeout')), 5000);
+      const timeout = setTimeout(() => reject(new Error('Bridge startup timeout')), TIMEOUTS.IPC_BRIDGE_STARTUP);
       const checkReady = setInterval(() => {
         // The bridge sends 'ready' event which is handled in handleMessage
         // For simplicity, just wait a bit for the process to start
         clearInterval(checkReady);
         clearTimeout(timeout);
         resolve();
-      }, 100);
+      }, TIMEOUTS.DB_POLL_INTERVAL);
     });
 
     // Spawn the PTY in the bridge

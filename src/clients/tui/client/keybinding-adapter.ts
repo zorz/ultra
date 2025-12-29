@@ -4,6 +4,7 @@
  * Connects the TUI client to the session service for keybinding management.
  */
 
+import { debugLog } from '../../../debug.ts';
 import type { SessionService } from '../../../services/session/interface.ts';
 import type { KeyBinding, ParsedKey, Unsubscribe } from '../../../services/session/types.ts';
 import type { KeyEvent } from '../types.ts';
@@ -221,7 +222,7 @@ export class KeybindingAdapter {
     const result = handler(binding?.args);
     if (result instanceof Promise) {
       result.catch((err) => {
-        console.error(`Error executing command ${commandId}:`, err);
+        debugLog(`[KeybindingAdapter] Error executing command ${commandId}: ${err}`);
       });
     }
 

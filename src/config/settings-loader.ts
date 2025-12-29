@@ -1,9 +1,10 @@
 /**
  * Settings Loader
- * 
+ *
  * Loads and parses VS Code compatible settings.json files.
  */
 
+import { debugLog } from '../debug.ts';
 import type { EditorSettings } from './settings.ts';
 
 export class SettingsLoader {
@@ -18,7 +19,7 @@ export class SettingsLoader {
     } catch (error) {
       // Silently fail for $bunfs paths (expected in compiled binaries)
       if (!filePath.includes('$bunfs')) {
-        console.error(`Failed to load settings from ${filePath}:`, error);
+        debugLog(`[SettingsLoader] Failed to load settings from ${filePath}: ${error}`);
       }
       return {};
     }
@@ -36,7 +37,7 @@ export class SettingsLoader {
 
       return JSON.parse(cleanContent);
     } catch (error) {
-      console.error('Failed to parse settings:', error);
+      debugLog(`[SettingsLoader] Failed to parse settings: ${error}`);
       return {};
     }
   }

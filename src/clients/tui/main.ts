@@ -101,7 +101,7 @@ if (pathArg) {
         workingDirectory = resolvedPath;
       } catch {
         // Can't create directory, fall back to CWD
-        console.error(`Warning: Cannot create directory '${pathArg}', using current directory`);
+        debugLog(`[TUI Main] Warning: Cannot create directory '${pathArg}', using current directory`);
         workingDirectory = process.cwd();
       }
     }

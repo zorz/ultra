@@ -34,6 +34,8 @@
  * unsubscribe();
  */
 
+import { debugLog } from '../debug.ts';
+
 /**
  * Callback function type for event handlers
  */
@@ -149,7 +151,7 @@ export class EventEmitter<Events extends Record<string, unknown>> {
         callback(data);
       } catch (error) {
         // Log error but don't let it break other listeners
-        console.error(`Error in event handler for "${String(event)}":`, error);
+        debugLog(`[EventEmitter] Error in event handler for "${String(event)}": ${error}`);
       }
     }
   }

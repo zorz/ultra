@@ -1,10 +1,11 @@
 /**
  * Shiki-based Syntax Highlighter
- * 
+ *
  * Uses Shiki for syntax highlighting - pure JS/TS, works great with Bun.
  */
 
 import { createHighlighter, type Highlighter as ShikiHighlighter, type ThemedToken } from 'shiki';
+import { debugLog } from '../../debug.ts';
 
 export interface HighlightToken {
   start: number;  // Column start (0-indexed)
@@ -83,7 +84,7 @@ async function getSharedShiki(): Promise<ShikiHighlighter | null> {
       sharedShiki = highlighter;
       return highlighter;
     }).catch(error => {
-      console.error('Failed to initialize Shiki:', error);
+      debugLog(`[Highlighter] Failed to initialize Shiki: ${error}`);
       return null;
     });
   }

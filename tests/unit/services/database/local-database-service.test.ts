@@ -197,6 +197,46 @@ describeWithPostgres('LocalDatabaseService', () => {
       expect(events[0]?.id).toBe(id);
     });
 
+    test('connect emits connecting event before connected', async () => {
+      // This test verifies that the 'connecting' event is emitted before 'connected'
+      // to allow UI to show connection-in-progress state
+      const id = await service.createConnection({
+        name: 'Connect Event Test',
+        type: 'postgres',
+        host: 'localhost',
+        port: 5432,
+        database: 'testdb',
+        username: 'user',
+        passwordSecret: 'test-password-secret',
+        scope: 'global',
+      });
+
+      const events: { type: string; status: string }[] = [];
+      service.onConnectionChange((event) => {
+        events.push({ type: event.type, status: event.connection?.status || 'unknown' });
+      });
+
+      // Try to connect - will fail since no real database, but should emit 'connecting' first
+      try {
+        await service.connect(id);
+      } catch {
+        // Connection will fail, but we want to verify the event sequence
+      }
+
+      // Should have at least a 'connecting' event
+      const connectingEvent = events.find(e => e.type === 'connecting');
+      expect(connectingEvent).toBeDefined();
+      expect(connectingEvent?.status).toBe('connecting');
+
+      // If there's an error event, it should come after connecting
+      const errorEvent = events.find(e => e.type === 'error');
+      if (errorEvent) {
+        const connectingIndex = events.findIndex(e => e.type === 'connecting');
+        const errorIndex = events.findIndex(e => e.type === 'error');
+        expect(connectingIndex).toBeLessThan(errorIndex);
+      }
+    });
+
     test('onConnectionChange notifies on delete', async () => {
       const id = await service.createConnection({
         name: 'Delete Test',

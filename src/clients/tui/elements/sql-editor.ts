@@ -183,6 +183,27 @@ export class SQLEditor extends BaseElement {
   }
 
   /**
+   * Get selected text from the editor.
+   */
+  getSelectedText(): string {
+    return this.documentEditor.getSelectedText();
+  }
+
+  /**
+   * Insert text at the current cursor position.
+   */
+  insertText(text: string): void {
+    this.documentEditor.insertText(text);
+  }
+
+  /**
+   * Delete the character before the cursor, or delete selection if any.
+   */
+  deleteBackward(): void {
+    this.documentEditor.deleteBackward();
+  }
+
+  /**
    * Set the connection to use for queries.
    */
   setConnection(connectionId: string | null, connectionName?: string): void {

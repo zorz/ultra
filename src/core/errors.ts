@@ -34,6 +34,8 @@
  * });
  */
 
+import { debugLog } from '../debug.ts';
+
 /**
  * Error codes for the Ultra editor
  */
@@ -306,7 +308,7 @@ export class ErrorHandler {
         try {
           handler(ultraError);
         } catch (e) {
-          console.error('[ErrorHandler] Handler threw:', e);
+          debugLog(`[ErrorHandler] Handler threw: ${e}`);
         }
       }
       return; // Don't show default UI if custom handler exists
@@ -317,7 +319,7 @@ export class ErrorHandler {
       try {
         handler(ultraError);
       } catch (e) {
-        console.error('[ErrorHandler] Global handler threw:', e);
+        debugLog(`[ErrorHandler] Global handler threw: ${e}`);
       }
     }
 
@@ -474,9 +476,9 @@ export class ErrorHandler {
     const message = `[Error] ${error.code}: ${error.message}`;
     this.displayCallbacks.logDebug?.(message);
 
-    // Also log to console in development
+    // Also log to debug log in development
     if (process.env.NODE_ENV !== 'production') {
-      console.error(error.toString(), error.context);
+      debugLog(`${error.toString()} ${JSON.stringify(error.context)}`);
     }
   }
 }

@@ -487,6 +487,15 @@ export abstract class AITerminalChat extends BaseElement {
     return false;
   }
 
+  /**
+   * Write text directly to the PTY (for paste operations).
+   */
+  writeInput(text: string): void {
+    if (this.pty?.isRunning()) {
+      this.pty.write(text);
+    }
+  }
+
   protected keyEventToInput(event: KeyEvent): string | null {
     // Handle special keys
     if (event.ctrl) {

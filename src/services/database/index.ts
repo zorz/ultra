@@ -66,5 +66,8 @@ export {
   type SQLCompletionItem,
 } from './sql-completion.ts';
 
+// SQL Utilities
+export { parseTableInfoFromSql, type ParsedTableInfo } from './sql-utils.ts';
+
 // Default export
 export { localDatabaseService as default } from './local.ts';

@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { homedir } from 'os';
 import { join } from 'path';
 import { debugLog } from '../../debug.ts';
+import { TIMEOUTS } from '../../constants.ts';
 import type { DatabaseService } from './interface.ts';
 import type {
   ConnectionConfig,
@@ -157,7 +158,7 @@ export class LocalDatabaseService implements DatabaseService {
           } else if (conn.status === 'error') {
             reject(new Error(conn.error));
           } else {
-            setTimeout(check, 100);
+            setTimeout(check, TIMEOUTS.DB_POLL_INTERVAL);
           }
         };
         check();
@@ -168,7 +169,7 @@ export class LocalDatabaseService implements DatabaseService {
     conn.status = 'connecting';
     this.emitConnectionChange({
       connectionId,
-      type: 'connected',
+      type: 'connecting',
       connection: this.getConnection(connectionId)!,
     });
 
