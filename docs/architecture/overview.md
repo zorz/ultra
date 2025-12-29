@@ -1,296 +1,304 @@
 # Architecture Overview
 
-This document provides a high-level overview of Ultra's architecture, describing the main components and how they interact.
+Ultra uses an Editor Command Protocol (ECP) architecture that separates the editor into services and clients.
 
-## System Architecture
+## ECP Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                              Application                                 │
-│                              (app.ts)                                   │
-├─────────────────────────────────────────────────────────────────────────┤
+│                              Clients                                     │
+│  ┌───────────────────┐  ┌───────────────────┐  ┌─────────────────────┐  │
+│  │    TUI Client     │  │   (Future: GUI)   │  │   TestECPClient     │  │
+│  │  (Terminal UI)    │  │                   │  │   (Headless Test)   │  │
+│  └─────────┬─────────┘  └─────────┬─────────┘  └──────────┬──────────┘  │
+└────────────┼──────────────────────┼───────────────────────┼─────────────┘
+             │                      │                       │
+             ▼                      ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           ECP Server                                     │
+│                         (src/ecp/server.ts)                              │
 │                                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │   Terminal   │  │    Input     │  │   Renderer   │  │    State     │ │
-│  │   (ansi.ts)  │  │  (keymap.ts) │  │(renderer.ts) │  │(editor-state)│ │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘ │
-│         │                 │                 │                 │          │
-│         ▼                 ▼                 ▼                 ▼          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │                         Layout Manager                            │   │
-│  │                         (layout.ts)                               │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                    │                                     │
-│         ┌──────────────────────────┼──────────────────────────┐         │
-│         ▼                          ▼                          ▼         │
-│  ┌──────────────┐          ┌──────────────┐          ┌──────────────┐   │
-│  │  File Tree   │          │  Pane Manager │          │   Terminal   │   │
-│  │(file-tree.ts)│          │(pane-manager) │          │(terminal-pane)│  │
-│  └──────────────┘          └──────┬───────┘          └──────────────┘   │
-│                                   │                                      │
-│                    ┌──────────────┼──────────────┐                      │
-│                    ▼              ▼              ▼                      │
-│             ┌──────────┐   ┌──────────┐   ┌──────────┐                  │
-│             │   Pane   │   │   Pane   │   │   Pane   │                  │
-│             │  (pane)  │   │  (pane)  │   │  (pane)  │                  │
-│             └────┬─────┘   └────┬─────┘   └────┬─────┘                  │
-│                  │              │              │                         │
-│                  ▼              ▼              ▼                         │
-│             ┌──────────────────────────────────────────────┐            │
-│             │              Document / Buffer                │            │
-│             │           (document.ts / buffer.ts)           │            │
-│             └──────────────────────────────────────────────┘            │
+│   JSON-RPC 2.0 Interface                                                 │
+│   Routes requests to service adapters based on method prefix:            │
+│     document/* → DocumentServiceAdapter                                  │
+│     file/*     → FileServiceAdapter                                      │
+│     git/*      → GitServiceAdapter                                       │
+│     lsp/*      → LSPServiceAdapter                                       │
+│     session/*  → SessionServiceAdapter                                   │
+│     ...                                                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+             │
+             ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            Services                                      │
+│                         (src/services/)                                  │
 │                                                                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                              Features                                    │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │   LSP    │  │   Git    │  │  Search  │  │  Syntax  │  │    AI    │  │
-│  │(manager) │  │(git-int) │  │(file-src)│  │  (shiki) │  │ (claude) │  │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
+│  │  Document  │  │    File    │  │    Git     │  │    LSP     │        │
+│  │  Service   │  │  Service   │  │  Service   │  │  Service   │        │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │
+│                                                                          │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
+│  │  Session   │  │   Syntax   │  │  Database  │  │  Terminal  │        │
+│  │  Service   │  │  Service   │  │  Service   │  │  Service   │        │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘        │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+## Core Concepts
 
-### Application (`app.ts`)
+### Services
 
-The central orchestrator that:
-- Initializes all components on startup
-- Sets up the event loop
-- Handles global keyboard input
-- Coordinates between features and UI components
-- Manages application lifecycle (start/stop)
+Services are stateful backend components that implement core functionality:
 
-```typescript
-// Example: Application startup flow
-app.start(filePath, { debug: debugMode })
-  // 1. Initialize terminal (raw mode, alternate screen)
-  // 2. Load configuration
-  // 3. Initialize layout manager
-  // 4. Create initial pane
-  // 5. Start LSP connections
-  // 6. Begin render loop
+| Service | Purpose | Key Features |
+|---------|---------|--------------|
+| **Document** | Text editing | Buffer, cursor, undo/redo, selections |
+| **File** | File system | Read, write, watch, list directories |
+| **Git** | Version control | Status, diff, stage, commit, branches |
+| **LSP** | Language features | Completion, hover, definition, references |
+| **Session** | Configuration | Settings, keybindings, themes, state |
+| **Syntax** | Highlighting | Shiki-based syntax highlighting |
+| **Database** | DB connections | PostgreSQL/Supabase queries |
+| **Terminal** | PTY management | Shell sessions, I/O |
+| **Secret** | Credentials | Keychain, encrypted storage |
+| **Search** | Find in files | File search, content grep |
+
+### Service Structure
+
+Each service follows a consistent pattern:
+
+```
+src/services/<name>/
+├── interface.ts      # Abstract service interface
+├── types.ts          # Type definitions
+├── local.ts          # LocalXxxService implementation
+├── adapter.ts        # XxxServiceAdapter (ECP JSON-RPC)
+└── index.ts          # Public exports
 ```
 
-### Terminal Layer (`terminal/`)
-
-Provides low-level terminal I/O:
-- **ansi.ts**: ANSI escape sequence generation
-- **input.ts**: Raw input parsing
-- **pty.ts**: Pseudo-terminal management for integrated terminal
-
-### Layout Manager (`ui/layout.ts`)
-
-Manages screen real estate:
-- Calculates positions for all UI elements
-- Handles sidebar, terminal, AI panel visibility
-- Supports pane splits (horizontal/vertical)
-- Responds to terminal resize events
-
-### Pane Manager (`ui/components/pane-manager.ts`)
-
-Orchestrates multiple editor panes:
-- Creates/destroys panes
-- Handles focus switching
-- Manages pane splits
-- Routes input to active pane
-
-### Editor Pane (`ui/components/pane.ts`)
-
-Individual editing surface:
-- Renders document content
-- Handles cursor and selection
-- Manages tab bar for that pane
-- Coordinates with LSP for features
-
-### Document (`core/document.ts`)
-
-Higher-level abstraction over Buffer:
-- File I/O operations
-- Change tracking (dirty state)
-- Integration with undo history
-
-### Buffer (`core/buffer.ts`)
-
-Piece table implementation for text storage:
-- Efficient insert/delete operations
-- Line-based access with caching
-- Position/offset conversion
-- Snapshot support for undo
-
-## Singleton Pattern
-
-Most managers in Ultra follow the singleton pattern:
-
+Example:
 ```typescript
-// Standard singleton export pattern
-export class SomeManager {
-  // ... implementation
+// interface.ts - The contract
+export interface GitService {
+  getStatus(): Promise<GitStatus>;
+  stage(paths: string[]): Promise<void>;
+  commit(message: string): Promise<CommitResult>;
 }
 
-// Named export for when type is needed
-export const someManager = new SomeManager();
+// local.ts - The implementation
+export class LocalGitService implements GitService {
+  async getStatus(): Promise<GitStatus> { ... }
+}
 
-// Default export for convenient imports
-export default someManager;
+// adapter.ts - ECP routing
+export class GitServiceAdapter {
+  constructor(private service: GitService) {}
+
+  async handleRequest(method: string, params: unknown) {
+    switch (method) {
+      case 'git/status': return this.service.getStatus();
+      case 'git/stage': return this.service.stage(params.paths);
+    }
+  }
+}
 ```
 
-Usage:
+### Clients
+
+Clients connect to the ECP server to provide user interfaces:
+
+**TUI Client** (`src/clients/tui/`)
+- Terminal-based UI using ANSI escape sequences
+- Components: document editors, terminals, AI chat
+- Overlays: command palette, file picker, dialogs
+
+**TestECPClient** (`tests/helpers/ecp-client.ts`)
+- Headless client for automated testing
+- Direct service access without terminal I/O
+
+### TUI Client Structure
+
+```
+src/clients/tui/
+├── client/
+│   ├── tui-client.ts       # Main orchestrator
+│   └── lsp-integration.ts  # LSP overlay management
+├── elements/               # Tab content types
+│   ├── document-editor.ts  # Code editor
+│   ├── terminal-session.ts # Terminal emulator
+│   └── ai-terminal-chat.ts # AI assistant
+├── overlays/               # Modal dialogs
+│   ├── command-palette.ts
+│   ├── file-picker.ts
+│   ├── autocomplete-popup.ts
+│   └── hover-tooltip.ts
+├── config/
+│   └── config-manager.ts   # Settings + keybindings
+└── window.ts               # Pane management
+```
+
+## Data Flow
+
+### User Input → State Change
+
+```
+User presses key
+        │
+        ▼
+┌─────────────────┐
+│  Terminal stdin │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   TUI Client    │
+│  (key handler)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  ECP Request    │
+│  document/insert│
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Document Service│
+│  (buffer edit)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ State Changed   │
+│ → Emit Event    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  TUI Renders    │
+│  (terminal out) │
+└─────────────────┘
+```
+
+### ECP Request/Response
+
+All client-server communication uses JSON-RPC 2.0:
+
 ```typescript
-// Import the singleton instance
-import someManager from './some-manager.ts';
+// Request
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "document/insert",
+  "params": {
+    "documentId": "doc-123",
+    "position": { "line": 5, "column": 10 },
+    "text": "hello"
+  }
+}
 
-// Or import both class and instance
-import { SomeManager, someManager } from './some-manager.ts';
+// Response
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": { "success": true }
+}
 ```
 
-## Key Singletons
+## Key Patterns
 
-| Module | Instance | Purpose |
-|--------|----------|---------|
-| `app.ts` | `app` | Main application |
-| `layout.ts` | `layoutManager` | Layout calculations |
-| `renderer.ts` | `renderer` | Screen rendering |
-| `commands.ts` | `commandRegistry` | Command registration |
-| `keymap.ts` | `keymap` | Keybinding resolution |
-| `settings.ts` | `settings` | Configuration |
-| `lsp/manager.ts` | `lspManager` | LSP connections |
-| `git-integration.ts` | `gitIntegration` | Git operations |
+### Singleton Services
 
-## Feature Architecture
+Services are singletons with named + default exports:
 
-### LSP Integration
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  LSP Client │────▶│ LSP Manager │────▶│   Providers │
-│  (client.ts)│     │ (manager.ts)│     │(providers.ts)│
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   │
-       │                   ▼                   ▼
-       │            ┌─────────────┐     ┌─────────────┐
-       │            │ Autocomplete│     │   Tooltip   │
-       │            │   Popup     │     │  (hover)    │
-       │            └─────────────┘     └─────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────┐
-│              Language Server Process                 │
-│         (tsserver, pyright, gopls, etc.)            │
-└─────────────────────────────────────────────────────┘
+```typescript
+export class LocalGitService implements GitService { ... }
+export const gitService = new LocalGitService();
+export default gitService;
 ```
 
-### Git Integration
+### Event Callbacks
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Git Integration                     │
-│               (git-integration.ts)                   │
-├─────────────────────────────────────────────────────┤
-│  - Status (staged, modified, untracked)             │
-│  - Diff (file and line-level)                       │
-│  - Commit, push, pull, branch operations            │
-│  - Blame information                                │
-└─────────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────────┐
-│              Git Panel (git-panel.ts)                │
-│         Commit Dialog (commit-dialog.ts)            │
-│          Inline Diff (inline-diff.ts)               │
-└─────────────────────────────────────────────────────┘
+Components use callback registration with unsubscribe:
+
+```typescript
+const unsubscribe = service.onChange((data) => {
+  // Handle change
+});
+
+// Later, to clean up
+unsubscribe();
 ```
 
-## Rendering Pipeline
+### Render Scheduling
 
-Ultra uses a scheduled rendering approach:
+UI updates are batched via the render scheduler:
 
-1. **State Change**: User input or external event modifies state
-2. **Schedule Render**: Component calls `renderScheduler.scheduleRender()`
-3. **Batch Updates**: Multiple calls within same frame are batched
-4. **Render Pass**: Single render pass updates terminal
-5. **Flush**: Output is flushed to terminal
+```typescript
+import { renderScheduler } from '../render-scheduler.ts';
 
-See [Rendering Architecture](rendering.md) for details.
-
-## Event Flow
-
-```
-User Input (keyboard/mouse)
-         │
-         ▼
-┌─────────────────┐
-│  Input Parser   │
-│  (terminal)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    Keymap       │
-│  Resolution     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    Command      │
-│   Execution     │
-└────────┬────────┘
-         │
-         ├──────────────┐
-         ▼              ▼
-┌─────────────┐  ┌─────────────┐
-│   State     │  │   Feature   │
-│   Update    │  │   Action    │
-└──────┬──────┘  └──────┬──────┘
-       │                │
-       └────────┬───────┘
-                ▼
-┌─────────────────────────────────┐
-│       Render Scheduler          │
-│   (schedule → batch → render)   │
-└─────────────────────────────────┘
+// Schedule render with priority
+renderScheduler.schedule(() => {
+  this.render(ctx);
+}, 'normal', RenderTaskIds.STATUS_BAR);
 ```
 
-## Configuration System
+Priorities: `immediate` > `high` > `normal` > `low`
 
-```
-~/.config/ultra/
-├── settings.json          ─┐
-├── keybindings.json        │─▶ User Configuration
-└── themes/                ─┘
+### Debug Logging
 
-config/
-├── default-settings.json  ─┐
-├── default-keybindings.json│─▶ Default Configuration
-└── BOOT.md                ─┘
+Use `debugLog()` instead of `console.log`:
 
-src/config/
-├── defaults.ts            ─▶ Embedded defaults
-├── settings.ts            ─▶ Settings manager
-├── settings-loader.ts     ─▶ File loading
-└── user-config.ts         ─▶ User config paths
+```typescript
+import { debugLog } from '../../debug.ts';
+
+debugLog(`[MyComponent] Event: ${data}`);
 ```
 
-## Dependencies
+Logs are written to `debug.log` when `--debug` flag is passed.
 
-### External Dependencies
+## Configuration
 
-| Package | Purpose |
-|---------|---------|
-| `shiki` | Syntax highlighting engine |
-| `vscode-languageserver-protocol` | LSP types |
-| `vscode-languageclient` | LSP client implementation |
+### Settings Priority
 
-### Runtime
+1. User settings: `~/.ultra/settings.jsonc`
+2. Default settings: `config/default-settings.jsonc` (embedded at build)
 
-Ultra runs on [Bun](https://bun.sh/), using:
-- Native TypeScript support
-- Built-in shell execution (`Bun.$`)
-- Built-in file operations (`Bun.file()`)
-- Fast startup and execution
+### Keybindings
+
+- Default: `config/default-keybindings.jsonc`
+- User overrides: `~/.ultra/keybindings.jsonc`
+- Context-aware via `when` clauses
+
+### Themes
+
+- Built-in: `config/themes/*.json`
+- User themes: `~/.ultra/themes/`
+- VS Code compatible format
+
+## Testing
+
+The ECP architecture enables comprehensive testing:
+
+```typescript
+// Unit test a service
+test('git status', async () => {
+  const service = new LocalGitService('/repo');
+  const status = await service.getStatus();
+  expect(status.staged).toEqual([]);
+});
+
+// Integration test via ECP
+test('document workflow', async () => {
+  const client = new TestECPClient();
+  const { documentId } = await client.request('document/open', { uri: 'file:///test.txt' });
+  await client.request('document/insert', { documentId, text: 'hello' });
+  await client.shutdown();
+});
+```
 
 ## Next Steps
 
-- [Data Flow](data-flow.md): Detailed look at data movement
-- [Keybindings](keybindings.md): How keyboard input is processed
 - [Rendering](rendering.md): Terminal rendering pipeline
+- [Keybindings](keybindings.md): Keyboard input handling

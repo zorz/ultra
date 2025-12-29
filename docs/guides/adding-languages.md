@@ -6,70 +6,52 @@ This guide explains how to add support for new programming languages in Ultra.
 
 Language support in Ultra consists of:
 
-1. **Syntax highlighting** - Provided by Shiki
-2. **LSP features** - Go-to-definition, autocomplete, etc.
+1. **Syntax highlighting** - Provided by Shiki (Syntax Service)
+2. **LSP features** - Go-to-definition, autocomplete, etc. (LSP Service)
 3. **File association** - Mapping extensions to languages
 
 ## Syntax Highlighting
 
-Ultra uses [Shiki](https://shiki.style/) for syntax highlighting, which includes support for 100+ languages out of the box.
+Ultra uses [Shiki](https://shiki.style/) for syntax highlighting via the Syntax Service.
 
 ### Supported Languages
 
-Shiki supports most common languages. Check if your language is already supported:
+Shiki supports 100+ languages out of the box. The Syntax Service preloads common languages:
+
+- TypeScript, JavaScript, TSX, JSX
+- Python, Go, Rust
+- JSON, JSONC, YAML
+- HTML, CSS, Markdown
+- Bash, SQL
+
+### Adding a Language to Preload
+
+Edit `src/services/syntax/highlighter.ts`:
 
 ```typescript
-// Check available languages
-import { bundledLanguages } from 'shiki';
-console.log(Object.keys(bundledLanguages));
-```
-
-### Adding Custom Grammar
-
-If your language isn't supported by Shiki:
-
-1. Create a TextMate grammar file (`.tmLanguage.json`)
-2. Register it with Shiki:
-
-```typescript
-// src/features/syntax/shiki-highlighter.ts
-import customGrammar from './grammars/mylang.tmLanguage.json';
-
-const highlighter = await createHighlighter({
-  themes: ['one-dark-pro'],
-  langs: [
-    ...bundledLanguages,
-    {
-      id: 'mylang',
-      scopeName: 'source.mylang',
-      grammar: customGrammar,
-      aliases: ['ml']
-    }
-  ]
-});
+const PRELOADED_LANGUAGES = [
+  'typescript',
+  'javascript',
+  // ... existing languages
+  'ruby',  // Add your language
+];
 ```
 
 ### File Extension Mapping
 
-Map file extensions to languages:
+The Syntax Service maps file extensions to languages. Add mappings in `src/services/syntax/local.ts`:
 
 ```typescript
-// src/features/syntax/language-detection.ts
-const extensionMap: Record<string, string> = {
-  '.ts': 'typescript',
-  '.tsx': 'tsx',
-  '.js': 'javascript',
-  '.jsx': 'jsx',
-  '.py': 'python',
-  '.rs': 'rust',
-  '.go': 'go',
-  '.mylang': 'mylang',  // Add your language
-  '.ml': 'mylang',      // Alternative extension
-};
-
-export function detectLanguage(filename: string): string {
-  const ext = path.extname(filename);
-  return extensionMap[ext] ?? 'plaintext';
+private getLanguageId(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const extMap: Record<string, string> = {
+    '.ts': 'typescript',
+    '.tsx': 'tsx',
+    // ... existing mappings
+    '.rb': 'ruby',
+    '.rake': 'ruby',
+  };
+  return extMap[ext] ?? 'plaintext';
 }
 ```
 
@@ -77,7 +59,7 @@ export function detectLanguage(filename: string): string {
 
 ### Prerequisites
 
-1. Install the language server globally:
+Install the language server globally:
 
 ```bash
 # TypeScript
@@ -89,22 +71,22 @@ pip install pyright
 # Go
 go install golang.org/x/tools/gopls@latest
 
-# Rust
-rustup component add rust-analyzer
+# Ruby
+gem install solargraph
 ```
 
 ### Configuring a Language Server
 
-Add server configuration in settings:
+Add server configuration in `~/.ultra/settings.jsonc`:
 
-```json
+```jsonc
 {
   "lsp.servers": {
-    "mylang": {
-      "command": "mylang-language-server",
-      "args": ["--stdio"],
-      "filetypes": ["mylang"],
-      "rootPatterns": ["mylang.config", ".mylangrc"]
+    "ruby": {
+      "command": "solargraph",
+      "args": ["stdio"],
+      "filetypes": ["ruby"],
+      "rootPatterns": ["Gemfile", ".ruby-version"]
     }
   }
 }
@@ -120,99 +102,18 @@ Add server configuration in settings:
 | `rootPatterns` | Files that identify project root |
 | `initializationOptions` | Server-specific options |
 
-### Server Registration
+### Built-in Server Registration
 
-Register the server in LSP manager:
+For built-in support, add to `src/services/lsp/providers.ts`:
 
 ```typescript
-// src/features/lsp/manager.ts
-const serverConfigs: Record<string, ServerConfig> = {
+const SERVER_CONFIGS: Record<string, LSPServerConfig> = {
   typescript: {
     command: 'typescript-language-server',
     args: ['--stdio'],
     filetypes: ['typescript', 'javascript', 'tsx', 'jsx'],
     rootPatterns: ['tsconfig.json', 'package.json']
   },
-
-  // Add your language
-  mylang: {
-    command: 'mylang-language-server',
-    args: ['--stdio'],
-    filetypes: ['mylang'],
-    rootPatterns: ['mylang.config']
-  }
-};
-```
-
-### Implementing LSP Client
-
-If using a standard LSP server, no additional code is needed. For non-standard servers:
-
-```typescript
-// Custom initialization options
-const initOptions = {
-  mylang: {
-    enableFeatureX: true,
-    maxComplexity: 100
-  }
-};
-
-// Pass to server during initialization
-await client.initialize({
-  rootUri: projectRoot,
-  capabilities: clientCapabilities,
-  initializationOptions: initOptions.mylang
-});
-```
-
-## Complete Example: Adding Ruby Support
-
-### 1. Verify Syntax Highlighting
-
-Ruby is supported by Shiki by default. Verify the extension mapping:
-
-```typescript
-// src/features/syntax/language-detection.ts
-const extensionMap = {
-  // ... existing mappings
-  '.rb': 'ruby',
-  '.rake': 'ruby',
-  '.gemspec': 'ruby',
-  'Gemfile': 'ruby',
-  'Rakefile': 'ruby',
-};
-```
-
-### 2. Install Language Server
-
-```bash
-gem install solargraph
-```
-
-### 3. Configure LSP
-
-Add to `~/.config/ultra/settings.json`:
-
-```json
-{
-  "lsp.servers": {
-    "ruby": {
-      "command": "solargraph",
-      "args": ["stdio"],
-      "filetypes": ["ruby"],
-      "rootPatterns": ["Gemfile", ".ruby-version"]
-    }
-  }
-}
-```
-
-### 4. Add Server Config (Optional)
-
-For built-in support, add to `src/features/lsp/manager.ts`:
-
-```typescript
-const serverConfigs = {
-  // ... existing configs
 
   ruby: {
     command: 'solargraph',
@@ -227,29 +128,52 @@ const serverConfigs = {
 };
 ```
 
-## File-Specific Settings
+## Complete Example: Adding Ruby Support
 
-Some languages need specific editor settings:
+### 1. Add Syntax Highlighting
+
+Ruby is supported by Shiki by default. Add to preloaded languages:
 
 ```typescript
-// src/config/language-settings.ts
-const languageSettings: Record<string, EditorSettings> = {
-  python: {
-    tabSize: 4,
-    insertSpaces: true
-  },
-  go: {
-    tabSize: 4,
-    insertSpaces: false  // Go uses tabs
-  },
-  ruby: {
-    tabSize: 2,
-    insertSpaces: true
-  }
-};
+// src/services/syntax/highlighter.ts
+const PRELOADED_LANGUAGES = [
+  // ... existing
+  'ruby',
+];
+```
 
-export function getLanguageSettings(language: string): EditorSettings {
-  return languageSettings[language] ?? defaultSettings;
+### 2. Add File Extension Mapping
+
+```typescript
+// src/services/syntax/local.ts
+const extMap = {
+  // ... existing
+  '.rb': 'ruby',
+  '.rake': 'ruby',
+  '.gemspec': 'ruby',
+};
+```
+
+### 3. Install Language Server
+
+```bash
+gem install solargraph
+```
+
+### 4. Configure LSP
+
+Add to `~/.ultra/settings.jsonc`:
+
+```jsonc
+{
+  "lsp.servers": {
+    "ruby": {
+      "command": "solargraph",
+      "args": ["stdio"],
+      "filetypes": ["ruby"],
+      "rootPatterns": ["Gemfile", ".ruby-version"]
+    }
+  }
 }
 ```
 
@@ -264,14 +188,14 @@ echo 'def hello
 end' > test.rb
 
 # Open in Ultra
-bun src/index.ts test.rb
+bun run dev test.rb
 ```
 
 ### 2. Test LSP Features
 
 1. Open a file of your language
 2. Try these features:
-   - Hover over symbols
+   - Hover over symbols (`Ctrl+K`)
    - Trigger autocomplete (`Ctrl+Space`)
    - Go to definition (`F12`)
    - Find references (`Shift+F12`)
@@ -279,8 +203,8 @@ bun src/index.ts test.rb
 ### 3. Check Debug Logs
 
 ```bash
-bun src/index.ts --debug test.rb
-cat debug.log | grep LSP
+bun run dev --debug test.rb
+cat debug.log | grep -E "(LSP|Syntax)"
 ```
 
 ## Troubleshooting
@@ -288,35 +212,39 @@ cat debug.log | grep LSP
 ### Syntax Highlighting Not Working
 
 1. Check file extension mapping
-2. Verify language ID matches Shiki
-3. Check for grammar loading errors in debug log
+2. Verify language is in PRELOADED_LANGUAGES
+3. Check `debug.log` for Shiki errors
 
 ### LSP Not Connecting
 
-1. Verify language server is installed: `which <server>`
-2. Check server configuration
-3. Look for errors in debug.log
-4. Try running server manually: `<server> --stdio`
+1. Verify language server is installed: `which solargraph`
+2. Check server configuration in settings
+3. Look for errors in `debug.log`
+4. Try running server manually: `solargraph stdio`
 
 ### LSP Features Missing
 
 1. Some servers don't support all features
 2. Check server capabilities in initialize response
-3. Verify project has required config files (tsconfig.json, etc.)
+3. Verify project has required config files
 
-## Contributing Language Support
+## Service Architecture
 
-If you add support for a new language:
+Language support uses two ECP services:
 
-1. Add extension mapping
-2. Add default LSP configuration
-3. Add language-specific settings if needed
-4. Test thoroughly
-5. Update documentation
-6. Submit a pull request
+```
+┌─────────────────────┐     ┌─────────────────────┐
+│   Syntax Service    │     │    LSP Service      │
+│  (src/services/     │     │  (src/services/     │
+│   syntax/)          │     │   lsp/)             │
+├─────────────────────┤     ├─────────────────────┤
+│ - Shiki highlighter │     │ - LSP client mgmt   │
+│ - Token generation  │     │ - Completion        │
+│ - Language detect   │     │ - Hover/Definition  │
+└─────────────────────┘     └─────────────────────┘
+```
 
 ## Related Documentation
 
+- [Architecture Overview](../architecture/overview.md) - ECP services
 - [LSP Module](../modules/lsp.md) - LSP implementation details
-- [Architecture Overview](../architecture/overview.md) - System architecture
-- [Contributing](contributing.md) - Contribution guidelines
