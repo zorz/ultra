@@ -7,6 +7,7 @@
 import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
+import { TIMEOUTS } from '../../../constants.ts';
 
 // ============================================
 // Types
@@ -643,7 +644,7 @@ export class GitPanel extends BaseElement {
           const viewIdx = this.scrollTop + relY;
           if (viewIdx >= 0 && viewIdx < this.viewNodes.length) {
             const now = Date.now();
-            const isDoubleClick = viewIdx === this.lastClickIndex && (now - this.lastClickTime) < 300;
+            const isDoubleClick = viewIdx === this.lastClickIndex && (now - this.lastClickTime) < TIMEOUTS.DOUBLE_CLICK;
             const node = this.viewNodes[viewIdx];
 
             this.selectedIndex = viewIdx;
@@ -652,9 +653,10 @@ export class GitPanel extends BaseElement {
             if (node?.type === 'section') {
               this.toggleSection();
             }
-            // Double-click on file opens it
+            // Double-click on file opens the diff view
             else if (isDoubleClick && node?.type === 'file' && node.change) {
-              this.callbacks.onOpenFile?.(node.change.path);
+              const isStaged = node.section === 'staged';
+              this.callbacks.onOpenDiff?.(node.change.path, isStaged);
             }
 
             this.lastClickTime = now;

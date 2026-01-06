@@ -3746,7 +3746,12 @@ export class TUIClient {
       }
       case 'fileTreeFocus': {
         const element = this.window.getFocusedElement();
-        return element?.type === 'FileTree';
+        if (element?.type === 'FileTree') {
+          // Return false if a dialog is open (e.g., new file, rename)
+          // to allow typing in the input field without triggering shortcuts
+          return !(element as FileTree).isDialogOpen();
+        }
+        return false;
       }
       case 'gitPanelFocus': {
         const element = this.window.getFocusedElement();
