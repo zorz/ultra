@@ -14,48 +14,8 @@ import {
   cloneCell,
 } from '../types.ts';
 
-// ============================================
-// Display Width Utilities
-// ============================================
-
-/**
- * Get the display width of a character in terminal cells.
- * Most emojis are 2 cells wide, ASCII chars are 1 cell.
- */
-function getCharDisplayWidth(char: string): number {
-  const code = char.codePointAt(0) ?? 0;
-
-  // ASCII control chars
-  if (code < 32) return 0;
-
-  // Basic ASCII (most common case)
-  if (code < 127) return 1;
-
-  // Common emoji ranges (simplified - most emojis are 2 cells wide)
-  if (
-    (code >= 0x1F300 && code <= 0x1F9FF) || // Misc Symbols, Emoticons, etc.
-    (code >= 0x2600 && code <= 0x26FF) ||   // Misc Symbols
-    (code >= 0x2700 && code <= 0x27BF) ||   // Dingbats
-    (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
-    (code >= 0x1F680 && code <= 0x1F6FF) || // Transport/Map
-    (code >= 0x1F1E0 && code <= 0x1F1FF)    // Flags
-  ) {
-    return 2;
-  }
-
-  // CJK characters (2 cells wide)
-  if (
-    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
-    (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
-    (code >= 0xF900 && code <= 0xFAFF) ||   // CJK Compatibility
-    (code >= 0xFF00 && code <= 0xFFEF)      // Fullwidth Forms
-  ) {
-    return 2;
-  }
-
-  // Default to 1 for other characters
-  return 1;
-}
+// Import shared character width utility (single source of truth)
+import { getCharWidth as getCharDisplayWidth } from '../../../core/char-width.ts';
 
 // ============================================
 // ScreenBuffer Class
@@ -199,13 +159,19 @@ export class ScreenBuffer {
     // Use for...of to properly iterate Unicode code points (not UTF-16 code units)
     for (const char of text) {
       if (px >= this.width) break;
+
+      const charWidth = getCharDisplayWidth(char);
+
+      // Skip zero-width characters (variation selectors, combining marks)
+      if (charWidth === 0) {
+        continue;
+      }
+
       if (px < 0) {
-        px += getCharDisplayWidth(char);
+        px += charWidth;
         continue;
       }
       if (y < 0 || y >= this.height) continue;
-
-      const charWidth = getCharDisplayWidth(char);
 
       this.set(px, y, {
         char,

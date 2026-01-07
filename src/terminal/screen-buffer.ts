@@ -7,6 +7,7 @@
  */
 
 import { debugLog } from '../debug.ts';
+import { getCharWidth } from './ansi.ts';
 
 /**
  * Terminal cell with character and attributes
@@ -170,10 +171,20 @@ export class ScreenBuffer {
   }
 
   /**
-   * Write a character at current cursor position
+   * Write a character at current cursor position.
+   * Handles wide characters (emoji, CJK) by advancing cursor appropriately
+   * and setting a placeholder cell for the second position.
    */
   writeChar(char: string): void {
-    if (this.cursorX >= this.cols) {
+    const charWidth = getCharWidth(char);
+
+    // Skip zero-width characters (control chars, combining marks)
+    if (charWidth === 0) {
+      return;
+    }
+
+    // Handle line wrap if we would exceed the line
+    if (this.cursorX + charWidth > this.cols) {
       this.cursorX = 0;
       this.newLine();
     }
@@ -184,7 +195,7 @@ export class ScreenBuffer {
       this.cursorX >= 0 &&
       this.cursorX < this.cols
     ) {
-      this.buffer[this.cursorY]![this.cursorX] = {
+      const cell: TerminalCell = {
         char,
         fg: this.inverse ? this.currentBg : this.currentFg,
         bg: this.inverse ? this.currentFg : this.currentBg,
@@ -194,8 +205,23 @@ export class ScreenBuffer {
         dim: this.dim,
         inverse: false, // Already applied above
       };
+      this.buffer[this.cursorY]![this.cursorX] = cell;
+
+      // For wide characters, set a placeholder in the next cell
+      if (charWidth === 2 && this.cursorX + 1 < this.cols) {
+        this.buffer[this.cursorY]![this.cursorX + 1] = {
+          char: '', // Empty placeholder for second cell of wide char
+          fg: cell.fg,
+          bg: cell.bg,
+          bold: cell.bold,
+          italic: cell.italic,
+          underline: cell.underline,
+          dim: cell.dim,
+          inverse: false,
+        };
+      }
     }
-    this.cursorX++;
+    this.cursorX += charWidth;
   }
 
   /**

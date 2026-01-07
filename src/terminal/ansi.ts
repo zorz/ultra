@@ -147,8 +147,20 @@ export const PASTE = {
   end: `${ESC}[201~`,
 };
 
-// Import shared color utilities
+// Import shared utilities
 import { hexToRgbTuple } from '../core/colors.ts';
+import {
+  getCharWidth as _getCharWidth,
+  getDisplayWidth as _getDisplayWidth,
+  truncateToWidth as _truncateToWidth,
+  padToWidth as _padToWidth,
+} from '../core/char-width.ts';
+
+// Re-export character width utilities for backward compatibility
+export const getCharWidth = _getCharWidth;
+export const getDisplayWidth = _getDisplayWidth;
+export const truncateToWidth = _truncateToWidth;
+export const padToWidth = _padToWidth;
 
 /**
  * Convert hex color to RGB tuple
@@ -188,74 +200,3 @@ export function styled(text: string, ...codes: string[]): string {
   return `${codes.join('')}${text}${STYLE.reset}`;
 }
 
-/**
- * Get display width of a string (accounting for wide chars)
- */
-export function getDisplayWidth(str: string): number {
-  let width = 0;
-  for (const char of str) {
-    const code = char.codePointAt(0) || 0;
-    // Simple heuristic: CJK characters and some others are double-width
-    if (
-      (code >= 0x1100 && code <= 0x115F) ||  // Hangul Jamo
-      (code >= 0x2E80 && code <= 0xA4CF) ||  // CJK, Yi, etc.
-      (code >= 0xAC00 && code <= 0xD7A3) ||  // Hangul Syllables
-      (code >= 0xF900 && code <= 0xFAFF) ||  // CJK Compatibility
-      (code >= 0xFE10 && code <= 0xFE1F) ||  // Vertical forms
-      (code >= 0xFE30 && code <= 0xFE6F) ||  // CJK Compatibility Forms
-      (code >= 0xFF00 && code <= 0xFF60) ||  // Fullwidth Forms
-      (code >= 0xFFE0 && code <= 0xFFE6) ||  // Fullwidth Forms
-      (code >= 0x20000 && code <= 0x2FFFF)   // CJK Extension B-F
-    ) {
-      width += 2;
-    } else if (code >= 0x20) {  // Printable characters
-      width += 1;
-    }
-    // Control characters and combining marks have width 0
-  }
-  return width;
-}
-
-/**
- * Truncate string to fit display width
- */
-export function truncateToWidth(str: string, maxWidth: number, ellipsis: string = '…'): string {
-  const ellipsisWidth = getDisplayWidth(ellipsis);
-  if (getDisplayWidth(str) <= maxWidth) {
-    return str;
-  }
-  
-  let width = 0;
-  let result = '';
-  for (const char of str) {
-    const charWidth = getDisplayWidth(char);
-    if (width + charWidth + ellipsisWidth > maxWidth) {
-      return result + ellipsis;
-    }
-    result += char;
-    width += charWidth;
-  }
-  return result;
-}
-
-/**
- * Pad string to exact display width
- */
-export function padToWidth(str: string, width: number, align: 'left' | 'right' | 'center' = 'left'): string {
-  const currentWidth = getDisplayWidth(str);
-  if (currentWidth >= width) {
-    return truncateToWidth(str, width);
-  }
-  
-  const padding = width - currentWidth;
-  switch (align) {
-    case 'right':
-      return ' '.repeat(padding) + str;
-    case 'center':
-      const left = Math.floor(padding / 2);
-      const right = padding - left;
-      return ' '.repeat(left) + str + ' '.repeat(right);
-    default:
-      return str + ' '.repeat(padding);
-  }
-}
