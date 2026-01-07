@@ -8,88 +8,8 @@ import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 
-// ============================================
-// Display Width Utilities
-// ============================================
-
-/**
- * Get the display width of a character in terminal cells.
- * Most emojis are 2 cells wide, ASCII chars are 1 cell.
- */
-function getCharWidth(char: string): number {
-  const code = char.codePointAt(0) ?? 0;
-
-  // ASCII control chars
-  if (code < 32) return 0;
-
-  // Basic ASCII (most common case)
-  if (code < 127) return 1;
-
-  // Common emoji ranges (simplified - most emojis are 2 cells wide)
-  // Emoji presentation sequences, pictographs, symbols
-  if (
-    (code >= 0x1F300 && code <= 0x1F9FF) || // Misc Symbols, Emoticons, etc.
-    (code >= 0x2600 && code <= 0x26FF) ||   // Misc Symbols
-    (code >= 0x2700 && code <= 0x27BF) ||   // Dingbats
-    (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
-    (code >= 0x1F680 && code <= 0x1F6FF) || // Transport/Map
-    (code >= 0x1F1E0 && code <= 0x1F1FF)    // Flags
-  ) {
-    return 2;
-  }
-
-  // CJK characters (2 cells wide)
-  if (
-    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
-    (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
-    (code >= 0xF900 && code <= 0xFAFF) ||   // CJK Compatibility
-    (code >= 0xFF00 && code <= 0xFFEF)      // Fullwidth Forms
-  ) {
-    return 2;
-  }
-
-  // Default to 1 for other characters
-  return 1;
-}
-
-/**
- * Get the display width of a string in terminal cells.
- */
-function getDisplayWidth(str: string): number {
-  let width = 0;
-  for (const char of str) {
-    width += getCharWidth(char);
-  }
-  return width;
-}
-
-/**
- * Truncate a string to fit within a given display width.
- * Appends suffix (like '…') if truncated.
- */
-function truncateToWidth(str: string, maxWidth: number, suffix = '…'): string {
-  const strWidth = getDisplayWidth(str);
-  if (strWidth <= maxWidth) {
-    return str;
-  }
-
-  const suffixWidth = getDisplayWidth(suffix);
-  const targetWidth = maxWidth - suffixWidth;
-
-  let result = '';
-  let currentWidth = 0;
-
-  for (const char of str) {
-    const charWidth = getCharWidth(char);
-    if (currentWidth + charWidth > targetWidth) {
-      break;
-    }
-    result += char;
-    currentWidth += charWidth;
-  }
-
-  return result + suffix;
-}
+// Import shared character width utilities (single source of truth)
+import { getDisplayWidth, truncateToWidth } from '../../../core/char-width.ts';
 
 /**
  * Pad a string to a given display width with spaces.
@@ -697,7 +617,7 @@ export class FileTree extends BaseElement {
       // Truncate or pad using display width (handles emoji properly)
       const lineWidth = getDisplayWidth(line);
       if (lineWidth > width) {
-        line = truncateToWidth(line, width);
+        line = truncateToWidth(line, width, '…');
       }
       // Pad to fill the width
       line = padToWidth(line, width);

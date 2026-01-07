@@ -9,6 +9,7 @@ import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent, Position, UnderlineStyle } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../core/colors.ts';
+import { getCharWidth } from '../../../core/char-width.ts';
 import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
 import { InlineDiffExpander, type InlineDiffCallbacks } from '../components/inline-diff-expander.ts';
@@ -1991,6 +1992,56 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
+   * Convert a buffer column (character index) to a screen column,
+   * accounting for tab expansion.
+   */
+  private bufferColumnToScreenColumn(text: string, bufferCol: number, tabSize: number): number {
+    let screenCol = 0;
+    let i = 0;
+    // Use for...of to properly iterate Unicode code points
+    for (const char of text) {
+      if (i >= bufferCol) break;
+      if (char === '\t') {
+        // Tab advances to next tab stop
+        screenCol = screenCol + tabSize - (screenCol % tabSize);
+      } else {
+        screenCol += getCharWidth(char);
+      }
+      i++;
+    }
+    return screenCol;
+  }
+
+  /**
+   * Convert a screen column to a buffer column (character index),
+   * accounting for tab expansion.
+   */
+  private screenColumnToBufferColumn(text: string, screenCol: number, tabSize: number): number {
+    let currentScreenCol = 0;
+    let i = 0;
+    // Use for...of to properly iterate Unicode code points
+    for (const char of text) {
+      if (currentScreenCol >= screenCol) {
+        return i;
+      }
+      if (char === '\t') {
+        currentScreenCol = currentScreenCol + tabSize - (currentScreenCol % tabSize);
+      } else {
+        currentScreenCol += getCharWidth(char);
+      }
+      i++;
+    }
+    return text.length;
+  }
+
+  /**
+   * Get the screen width of a text string, accounting for tabs.
+   */
+  private getTextScreenWidth(text: string, tabSize: number): number {
+    return this.bufferColumnToScreenColumn(text, text.length, tabSize);
+  }
+
+  /**
    * Insert newline with auto-indentation at all cursor positions.
    * Handles bracket pairs and indent increase patterns.
    */
@@ -2474,59 +2525,74 @@ export class DocumentEditor extends BaseElement {
    * Calculate wrap break positions for a line (word-aware wrapping).
    * Returns an array of character positions where each wrapped row starts.
    * E.g., [0, 45, 92] means row 0 starts at char 0, row 1 at char 45, row 2 at char 92.
+   * Accounts for tab expansion when calculating screen widths.
    */
   private getLineWrapBreaks(lineText: string, wrapWidth: number): number[] {
     if (!this.wordWrapEnabled || wrapWidth <= 0 || lineText.length === 0) {
       return [0];
     }
 
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
     const breaks: number[] = [0];
-    let pos = 0;
+    let bufferPos = 0;
 
-    while (pos < lineText.length) {
-      const remaining = lineText.length - pos;
-      if (remaining <= wrapWidth) {
-        // Rest fits on this row
+    while (bufferPos < lineText.length) {
+      // Calculate screen width from current position to find where we'd exceed wrapWidth
+      let screenCol = 0;
+      let lastBreakablePos = -1;
+      let lastBreakableScreenCol = 0;
+      let breakBufferPos = bufferPos;
+
+      while (breakBufferPos < lineText.length && screenCol < wrapWidth) {
+        const char = lineText[breakBufferPos]!;
+
+        // Track potential break points (after spaces/tabs, or before punctuation)
+        if (char === ' ' || char === '\t') {
+          // Calculate screen col after this char
+          const charWidth = char === '\t' ? (tabSize - (screenCol % tabSize)) : 1;
+          lastBreakablePos = breakBufferPos + 1; // Break after the space/tab
+          lastBreakableScreenCol = screenCol + charWidth;
+        } else if (screenCol > wrapWidth * 0.5 && (char === '-' || char === '/' || char === '\\' || char === '.' || char === ',')) {
+          lastBreakablePos = breakBufferPos; // Break before punctuation
+          lastBreakableScreenCol = screenCol;
+        }
+
+        // Calculate screen width of this character (accounting for wide chars like emoji)
+        if (char === '\t') {
+          screenCol = screenCol + tabSize - (screenCol % tabSize);
+        } else {
+          screenCol += getCharWidth(char);
+        }
+
+        breakBufferPos++;
+      }
+
+      // If we've reached the end of the text, we're done
+      if (breakBufferPos >= lineText.length) {
         break;
       }
 
-      // Find the last space/break point within wrapWidth
-      let breakPos = pos + wrapWidth;
-      let foundBreak = false;
-
-      // Look backwards for a word boundary
-      for (let i = breakPos; i > pos; i--) {
-        const char = lineText[i];
-        // Break after spaces, tabs, or before certain punctuation
-        if (char === ' ' || char === '\t') {
-          breakPos = i + 1; // Break after the space
-          foundBreak = true;
-          break;
-        }
-        // Also allow breaking before certain punctuation if we're close to the edge
-        if (i > pos + wrapWidth * 0.5 && (char === '-' || char === '/' || char === '\\' || char === '.' || char === ',')) {
-          breakPos = i;
-          foundBreak = true;
-          break;
-        }
-      }
-
-      // If no word boundary found, hard break at wrapWidth
-      if (!foundBreak) {
-        breakPos = pos + wrapWidth;
+      // Determine where to break
+      let actualBreakPos: number;
+      if (lastBreakablePos > bufferPos && lastBreakableScreenCol <= wrapWidth) {
+        // Use the word boundary
+        actualBreakPos = lastBreakablePos;
+      } else {
+        // Hard break - use the buffer position where we exceeded wrapWidth
+        actualBreakPos = breakBufferPos;
       }
 
       // Skip leading spaces on the new line (optional, for cleaner look)
-      while (breakPos < lineText.length && lineText[breakPos] === ' ') {
-        breakPos++;
+      while (actualBreakPos < lineText.length && lineText[actualBreakPos] === ' ') {
+        actualBreakPos++;
       }
 
-      if (breakPos >= lineText.length) {
+      if (actualBreakPos >= lineText.length) {
         break;
       }
 
-      breaks.push(breakPos);
-      pos = breakPos;
+      breaks.push(actualBreakPos);
+      bufferPos = actualBreakPos;
     }
 
     return breaks;
@@ -2722,15 +2788,16 @@ export class DocumentEditor extends BaseElement {
           // Render with tokens, adjusting for wrap offset
           this.renderLineWithTokensWrapped(buffer, contentX, screenY, line, contentWidth, lineBg, textOffset, wrappedText.length);
         } else {
-          buffer.writeString(contentX, screenY, wrappedText, fg, lineBg);
+          // Render without tokens but with proper tab expansion
+          this.renderWrappedLineWithTabExpansion(buffer, contentX, screenY, line.text, textOffset, wrappedText.length, contentWidth, fg, lineBg);
         }
       } else {
         // No wrapping - use horizontal scroll
-        const visibleText = line.text.slice(this.scrollLeft, this.scrollLeft + contentWidth);
         if (line.tokens && line.tokens.length > 0) {
           this.renderLineWithTokens(buffer, contentX, screenY, line, contentWidth, lineBg);
         } else {
-          buffer.writeString(contentX, screenY, visibleText, fg, lineBg);
+          // Render without tokens but with proper tab expansion
+          this.renderLineWithTabExpansion(buffer, contentX, screenY, line.text, contentWidth, fg, lineBg);
         }
       }
 
@@ -2774,12 +2841,16 @@ export class DocumentEditor extends BaseElement {
               ? this.getWrapRowForColumn(line.text, cursor.position.column, contentWidth)
               : 0;
             if (cursorWrapRow === wrapOffset) {
+              const tabSize = this.ctx.getSetting('editor.tabSize', 2);
               const wrapStart = this.wordWrapEnabled
                 ? this.getWrapRowStart(line.text, wrapOffset, contentWidth)
                 : 0;
-              const cursorCol = this.wordWrapEnabled
+              // Convert buffer column to screen column, accounting for tab expansion
+              const bufferCol = this.wordWrapEnabled
                 ? cursor.position.column - wrapStart
-                : cursor.position.column - this.scrollLeft;
+                : cursor.position.column;
+              const screenColFromStart = this.bufferColumnToScreenColumn(line.text, bufferCol, tabSize);
+              const cursorCol = screenColFromStart - (this.wordWrapEnabled ? 0 : this.scrollLeft);
               if (cursorCol >= 0 && cursorCol < contentWidth) {
                 const cursorX = contentX + cursorCol;
                 const cursorChar = buffer.get(cursorX, screenY)?.char ?? ' ';
@@ -2856,32 +2927,37 @@ export class DocumentEditor extends BaseElement {
     // Check if curly underlines are enabled (for terminals that support them)
     const useCurlyUnderline = this.ctx.getSetting('editor.diagnostics.curlyUnderline', true);
     const underlineStyle: UnderlineStyle | undefined = useCurlyUnderline ? 'curly' : undefined;
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
+    const lineText = this.lines[bufferLine]?.text ?? '';
 
     for (const diag of lineDiagnostics) {
       // Determine the color based on severity
       const underlineColor = this.getDiagnosticUnderlineColor(diag.severity);
 
-      // Calculate the visible range on this line
-      let startCol: number;
-      let endCol: number;
+      // Calculate the visible range on this line (buffer columns)
+      let startBufferCol: number;
+      let endBufferCol: number;
 
       if (diag.startLine === bufferLine) {
-        startCol = diag.startColumn;
+        startBufferCol = diag.startColumn;
       } else {
-        startCol = 0; // Diagnostic starts on a previous line
+        startBufferCol = 0; // Diagnostic starts on a previous line
       }
 
       if (diag.endLine === bufferLine) {
-        endCol = diag.endColumn;
+        endBufferCol = diag.endColumn;
       } else {
         // Diagnostic continues to next line
-        const line = this.lines[bufferLine];
-        endCol = line ? line.text.length : 0;
+        endBufferCol = lineText.length;
       }
 
+      // Convert buffer columns to screen columns for proper tab handling
+      const startScreenCol = this.bufferColumnToScreenColumn(lineText, startBufferCol, tabSize);
+      const endScreenCol = this.bufferColumnToScreenColumn(lineText, endBufferCol, tabSize);
+
       // Adjust for horizontal scroll
-      const visibleStart = Math.max(0, startCol - this.scrollLeft);
-      const visibleEnd = Math.min(contentWidth, endCol - this.scrollLeft);
+      const visibleStart = Math.max(0, startScreenCol - this.scrollLeft);
+      const visibleEnd = Math.min(contentWidth, endScreenCol - this.scrollLeft);
 
       // Draw underline characters
       for (let col = visibleStart; col < visibleEnd; col++) {
@@ -2919,7 +2995,7 @@ export class DocumentEditor extends BaseElement {
   }
 
   /**
-   * Render a line with syntax tokens.
+   * Render a line with syntax tokens, properly expanding tabs.
    */
   private renderLineWithTokens(
     buffer: ScreenBuffer,
@@ -2932,31 +3008,178 @@ export class DocumentEditor extends BaseElement {
     const fg = this.ctx.getThemeColor('editor.foreground', '#cccccc');
     const text = line.text;
     const tokens = line.tokens ?? [];
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
 
     // Sort tokens by start position
     const sortedTokens = [...tokens].sort((a, b) => a.start - b.start);
 
-    let col = 0;
+    // Find the buffer column that corresponds to scrollLeft screen column
+    const startBufferCol = this.screenColumnToBufferColumn(text, this.scrollLeft, tabSize);
+
+    let screenCol = 0; // Screen column being written to (relative to content area)
+    let currentScreenPos = this.bufferColumnToScreenColumn(text, startBufferCol, tabSize) - this.scrollLeft;
     let tokenIdx = 0;
 
-    while (col < width && this.scrollLeft + col < text.length) {
-      const charIdx = this.scrollLeft + col;
+    // Skip tokens before our starting position
+    while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= startBufferCol) {
+      tokenIdx++;
+    }
 
-      // Find applicable token
-      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= charIdx) {
+    for (let bufferCol = startBufferCol; bufferCol < text.length && screenCol < width; bufferCol++) {
+      const char = text[bufferCol]!;
+
+      // Find applicable token for this buffer position
+      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= bufferCol) {
         tokenIdx++;
       }
 
       let color = fg;
       if (tokenIdx < sortedTokens.length) {
         const token = sortedTokens[tokenIdx]!;
-        if (charIdx >= token.start && charIdx < token.end) {
+        if (bufferCol >= token.start && bufferCol < token.end) {
           color = token.color ?? this.getTokenColor(token.type);
         }
       }
 
-      buffer.set(x + col, y, { char: text[charIdx]!, fg: color, bg });
-      col++;
+      if (char === '\t') {
+        // Expand tab to spaces
+        const tabWidth = tabSize - (currentScreenPos % tabSize);
+        for (let i = 0; i < tabWidth && screenCol < width; i++) {
+          buffer.set(x + screenCol, y, { char: ' ', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
+        buffer.set(x + screenCol, y, { char, fg: color, bg });
+        screenCol++;
+        currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      }
+    }
+  }
+
+  /**
+   * Render a line without tokens but with proper tab expansion.
+   * Used for files without syntax highlighting.
+   */
+  private renderLineWithTabExpansion(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    text: string,
+    width: number,
+    fg: string,
+    bg: string
+  ): void {
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
+
+    // Find the buffer column that corresponds to scrollLeft screen column
+    const startBufferCol = this.screenColumnToBufferColumn(text, this.scrollLeft, tabSize);
+
+    let screenCol = 0; // Screen column being written to (relative to content area)
+    let currentScreenPos = this.bufferColumnToScreenColumn(text, startBufferCol, tabSize) - this.scrollLeft;
+
+    for (let bufferCol = startBufferCol; bufferCol < text.length && screenCol < width; bufferCol++) {
+      const char = text[bufferCol]!;
+
+      if (char === '\t') {
+        // Expand tab to spaces
+        const tabWidth = tabSize - (currentScreenPos % tabSize);
+        for (let i = 0; i < tabWidth && screenCol < width; i++) {
+          buffer.set(x + screenCol, y, { char: ' ', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
+        buffer.set(x + screenCol, y, { char, fg, bg });
+        screenCol++;
+        currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      }
+    }
+  }
+
+  /**
+   * Render a word-wrapped line without tokens but with proper tab expansion.
+   * Used for word-wrapped files without syntax highlighting.
+   */
+  private renderWrappedLineWithTabExpansion(
+    buffer: ScreenBuffer,
+    x: number,
+    y: number,
+    text: string,
+    textOffset: number,
+    textLength: number,
+    width: number,
+    fg: string,
+    bg: string
+  ): void {
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
+
+    // Calculate the screen column at the start of this wrapped segment
+    // We need to know how many screen columns came before textOffset
+    let baseScreenCol = 0;
+    for (let i = 0; i < textOffset && i < text.length; i++) {
+      if (text[i] === '\t') {
+        baseScreenCol = baseScreenCol + tabSize - (baseScreenCol % tabSize);
+      } else {
+        baseScreenCol += getCharWidth(text[i]!);
+      }
+    }
+
+    let screenCol = 0; // Screen column being written to (relative to content area)
+    let currentScreenPos = baseScreenCol; // Absolute screen position for tab alignment
+    let charsWritten = 0;
+
+    for (let bufferCol = textOffset; bufferCol < text.length && screenCol < width && charsWritten < textLength; bufferCol++) {
+      const char = text[bufferCol]!;
+
+      if (char === '\t') {
+        // Expand tab to spaces
+        const tabWidth = tabSize - (currentScreenPos % tabSize);
+        for (let i = 0; i < tabWidth && screenCol < width; i++) {
+          buffer.set(x + screenCol, y, { char: ' ', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+        charsWritten++;
+      } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
+        buffer.set(x + screenCol, y, { char, fg, bg });
+        screenCol++;
+        currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+        charsWritten++;
+      }
     }
   }
 
@@ -3002,23 +3225,28 @@ export class DocumentEditor extends BaseElement {
 
     const { start, end } = this.getSelectionRange(cursor.selection);
     const line = this.lines[lineNum]!;
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
 
     // Check if line is in selection
     if (lineNum < start.line || lineNum > end.line) return;
 
-    let startCol = 0;
-    let endCol = line.text.length;
+    let startBufferCol = 0;
+    let endBufferCol = line.text.length;
 
     if (lineNum === start.line) {
-      startCol = start.column;
+      startBufferCol = start.column;
     }
     if (lineNum === end.line) {
-      endCol = end.column;
+      endBufferCol = end.column;
     }
 
+    // Convert buffer columns to screen columns for proper tab handling
+    const startScreenCol = this.bufferColumnToScreenColumn(line.text, startBufferCol, tabSize);
+    const endScreenCol = this.bufferColumnToScreenColumn(line.text, endBufferCol, tabSize);
+
     // Adjust for scroll
-    startCol = Math.max(startCol - this.scrollLeft, 0);
-    endCol = Math.min(endCol - this.scrollLeft, width);
+    let startCol = Math.max(startScreenCol - this.scrollLeft, 0);
+    let endCol = Math.min(endScreenCol - this.scrollLeft, width);
 
     // Highlight selection
     for (let col = startCol; col < endCol; col++) {
@@ -3043,6 +3271,8 @@ export class DocumentEditor extends BaseElement {
 
     const matchBg = this.ctx.getThemeColor('editor.findMatchBackground', '#515c6a');
     const currentMatchBg = this.ctx.getThemeColor('editor.findMatchHighlightBackground', '#ea5c0055');
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
+    const lineText = this.lines[lineNum]?.text ?? '';
 
     for (let i = 0; i < this.searchMatches.length; i++) {
       const match = this.searchMatches[i]!;
@@ -3051,8 +3281,12 @@ export class DocumentEditor extends BaseElement {
       const isCurrent = i === this.currentSearchIndex;
       const highlightBg = isCurrent ? currentMatchBg : matchBg;
 
-      let startCol = match.column - this.scrollLeft;
-      let endCol = match.column + match.length - this.scrollLeft;
+      // Convert buffer columns to screen columns for proper tab handling
+      const matchScreenStart = this.bufferColumnToScreenColumn(lineText, match.column, tabSize);
+      const matchScreenEnd = this.bufferColumnToScreenColumn(lineText, match.column + match.length, tabSize);
+
+      let startCol = matchScreenStart - this.scrollLeft;
+      let endCol = matchScreenEnd - this.scrollLeft;
 
       // Clamp to visible area
       startCol = Math.max(startCol, 0);
@@ -3116,6 +3350,7 @@ export class DocumentEditor extends BaseElement {
 
   /**
    * Render a line with syntax tokens, adjusted for word wrap offset.
+   * Properly expands tab characters to spaces.
    */
   private renderLineWithTokensWrapped(
     buffer: ScreenBuffer,
@@ -3130,34 +3365,67 @@ export class DocumentEditor extends BaseElement {
     const fg = this.ctx.getThemeColor('editor.foreground', '#cccccc');
     const text = line.text;
     const tokens = line.tokens ?? [];
+    const tabSize = this.ctx.getSetting('editor.tabSize', 2);
 
     // Sort tokens by start position
     const sortedTokens = [...tokens].sort((a, b) => a.start - b.start);
 
-    let col = 0;
+    // Calculate the screen column at the start of this wrapped segment
+    let baseScreenCol = 0;
+    for (let i = 0; i < textOffset && i < text.length; i++) {
+      if (text[i] === '\t') {
+        baseScreenCol = baseScreenCol + tabSize - (baseScreenCol % tabSize);
+      } else {
+        baseScreenCol += getCharWidth(text[i]!);
+      }
+    }
+
+    let screenCol = 0; // Screen column being written to (relative to content area)
+    let currentScreenPos = baseScreenCol; // Absolute screen position for tab alignment
     let tokenIdx = 0;
+    let charsProcessed = 0;
 
-    // Use rowLength to limit how many characters we render (word-wrapped row length)
-    const maxCol = Math.min(width, rowLength);
-
-    while (col < maxCol && textOffset + col < text.length) {
-      const charIdx = textOffset + col;
+    for (let bufferCol = textOffset; bufferCol < text.length && screenCol < width && charsProcessed < rowLength; bufferCol++) {
+      const char = text[bufferCol]!;
 
       // Find applicable token
-      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= charIdx) {
+      while (tokenIdx < sortedTokens.length && sortedTokens[tokenIdx]!.end <= bufferCol) {
         tokenIdx++;
       }
 
       let color = fg;
       if (tokenIdx < sortedTokens.length) {
         const token = sortedTokens[tokenIdx]!;
-        if (charIdx >= token.start && charIdx < token.end) {
+        if (bufferCol >= token.start && bufferCol < token.end) {
           color = token.color ?? this.getTokenColor(token.type);
         }
       }
 
-      buffer.set(x + col, y, { char: text[charIdx]!, fg: color, bg });
-      col++;
+      if (char === '\t') {
+        // Expand tab to spaces
+        const tabWidth = tabSize - (currentScreenPos % tabSize);
+        for (let i = 0; i < tabWidth && screenCol < width; i++) {
+          buffer.set(x + screenCol, y, { char: ' ', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
+        buffer.set(x + screenCol, y, { char, fg: color, bg });
+        screenCol++;
+        currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
+      }
+      charsProcessed++;
     }
   }
 
@@ -3604,11 +3872,16 @@ export class DocumentEditor extends BaseElement {
       if (result !== null) {
         const { bufferLine, wrapOffset } = result;
         const lineText = this.lines[bufferLine]!.text;
+        const tabSize = this.ctx.getSetting('editor.tabSize', 2);
         const wrapColumnOffset = this.wordWrapEnabled
           ? this.getWrapRowStart(lineText, wrapOffset, contentWidth)
           : 0;
-        const baseColumn = this.wordWrapEnabled ? relX : this.scrollLeft + relX;
-        const column = Math.max(0, Math.min(wrapColumnOffset + baseColumn, lineText.length));
+        // Convert screen column to buffer column, accounting for tab expansion
+        const screenCol = this.wordWrapEnabled ? relX : this.scrollLeft + relX;
+        const column = Math.max(0, Math.min(
+          wrapColumnOffset + this.screenColumnToBufferColumn(lineText.slice(wrapColumnOffset), screenCol, tabSize),
+          lineText.length
+        ));
         this.setCursorPosition({ line: bufferLine, column }, true);
       }
       return true;
@@ -3660,11 +3933,16 @@ export class DocumentEditor extends BaseElement {
         const { bufferLine, wrapOffset } = result;
         const lineText = this.lines[bufferLine];
         if (lineText) {
+          const tabSize = this.ctx.getSetting('editor.tabSize', 2);
           const wrapColumnOffset = this.wordWrapEnabled
             ? this.getWrapRowStart(lineText.text, wrapOffset, contentWidth)
             : 0;
-          const baseColumn = this.wordWrapEnabled ? contentRelX : this.scrollLeft + contentRelX;
-          const column = Math.min(wrapColumnOffset + baseColumn, lineText.text.length);
+          // Convert screen column to buffer column, accounting for tab expansion
+          const screenCol = this.wordWrapEnabled ? contentRelX : this.scrollLeft + contentRelX;
+          const column = Math.min(
+            wrapColumnOffset + this.screenColumnToBufferColumn(lineText.text.slice(wrapColumnOffset), screenCol, tabSize),
+            lineText.text.length
+          );
           const clickPos = { line: bufferLine, column };
 
           // Check modifiers FIRST - they take priority over multi-click detection
