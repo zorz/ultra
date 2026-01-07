@@ -804,12 +804,8 @@ export class TerminalSession extends BaseElement {
       for (let col = 0; col < width; col++) {
         const cell = line[col];
         if (cell) {
-          // Skip placeholder cells for wide characters (char === '')
-          // The wide character in the previous cell already occupies this space
-          if (cell.char === '') {
-            continue;
-          }
-          buffer.set(x + col, screenY, this.convertTerminalCell(cell, defaultFg, defaultBg));
+          const converted = this.convertTerminalCell(cell, defaultFg, defaultBg);
+          buffer.set(x + col, screenY, converted);
         } else {
           buffer.set(x + col, screenY, { char: ' ', fg: defaultFg, bg: defaultBg });
         }
@@ -889,6 +885,8 @@ export class TerminalSession extends BaseElement {
    */
   private convertTerminalCell(cell: TerminalCell, defaultFg: string, defaultBg: string): Cell {
     return {
+      // Keep placeholder cells (char === '') as empty - the wide character
+      // before them already clears both terminal cells when written.
       char: cell.char,
       fg: cell.fg ?? defaultFg,
       bg: cell.bg ?? defaultBg,

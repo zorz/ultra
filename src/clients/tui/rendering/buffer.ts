@@ -14,68 +14,8 @@ import {
   cloneCell,
 } from '../types.ts';
 
-// ============================================
-// Display Width Utilities
-// ============================================
-
-/**
- * Get the display width of a character in terminal cells.
- * Most emojis are 2 cells wide, ASCII chars are 1 cell.
- * Zero-width characters (variation selectors, combining marks) return 0.
- */
-function getCharDisplayWidth(char: string): number {
-  const code = char.codePointAt(0) ?? 0;
-
-  // ASCII control chars
-  if (code < 32) return 0;
-
-  // Basic ASCII (most common case)
-  if (code < 127) return 1;
-
-  // Zero-width characters (must check before other ranges)
-  if (
-    (code >= 0x200B && code <= 0x200F) ||   // Zero-width space, joiners, direction marks
-    (code >= 0x2028 && code <= 0x202F) ||   // Line/paragraph separators, embedding controls
-    (code >= 0x2060 && code <= 0x206F) ||   // Word joiner, invisible operators
-    (code >= 0xFE00 && code <= 0xFE0F) ||   // Variation Selectors (VS1-VS16)
-    (code >= 0xFEFF && code <= 0xFEFF) ||   // BOM / Zero-width no-break space
-    (code >= 0xE0100 && code <= 0xE01EF) || // Variation Selectors Supplement
-    (code >= 0x0300 && code <= 0x036F) ||   // Combining Diacritical Marks
-    (code >= 0x0483 && code <= 0x0489) ||   // Combining Cyrillic marks
-    (code >= 0x0591 && code <= 0x05BD) ||   // Hebrew combining marks
-    (code >= 0x1AB0 && code <= 0x1AFF) ||   // Combining Diacritical Marks Extended
-    (code >= 0x1DC0 && code <= 0x1DFF) ||   // Combining Diacritical Marks Supplement
-    (code >= 0x20D0 && code <= 0x20FF) ||   // Combining Diacritical Marks for Symbols
-    (code >= 0xFE20 && code <= 0xFE2F)      // Combining Half Marks
-  ) {
-    return 0;
-  }
-
-  // Common emoji ranges (simplified - most emojis are 2 cells wide)
-  if (
-    (code >= 0x1F300 && code <= 0x1F9FF) || // Misc Symbols, Emoticons, etc.
-    (code >= 0x2600 && code <= 0x26FF) ||   // Misc Symbols
-    (code >= 0x2700 && code <= 0x27BF) ||   // Dingbats
-    (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
-    (code >= 0x1F680 && code <= 0x1F6FF) || // Transport/Map
-    (code >= 0x1F1E0 && code <= 0x1F1FF)    // Flags
-  ) {
-    return 2;
-  }
-
-  // CJK characters (2 cells wide)
-  if (
-    (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
-    (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
-    (code >= 0xF900 && code <= 0xFAFF) ||   // CJK Compatibility
-    (code >= 0xFF00 && code <= 0xFFEF)      // Fullwidth Forms
-  ) {
-    return 2;
-  }
-
-  // Default to 1 for other characters
-  return 1;
-}
+// Import shared character width utility (single source of truth)
+import { getCharWidth as getCharDisplayWidth } from '../../../core/char-width.ts';
 
 // ============================================
 // ScreenBuffer Class

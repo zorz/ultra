@@ -22,6 +22,7 @@ import {
 } from '../ansi/sequences.ts';
 import { resetColor } from '../ansi/colors.ts';
 import { transitionStyle } from '../ansi/styles.ts';
+import { getCharWidth } from '../../../core/char-width.ts';
 
 // ============================================
 // Types
@@ -201,22 +202,43 @@ export class Renderer {
     cells: Array<{ x: number; y: number; cell: Cell }>
   ): string {
     let output = '';
-    let lastX = -1;
     let lastY = -1;
+    let cursorX = -1; // Track actual terminal cursor position
 
     for (const { x, y, cell } of cells) {
-      // Skip placeholder cells for wide characters (char === '')
-      // The wide character in the previous cell already occupies this space
-      // But still update position tracking for correct adjacency calculation
+      // Handle placeholder cells for wide characters
       if (cell.char === '') {
-        lastX = x;
+        // Check if the previous cell is a wide character
+        // If so, skip - the wide char already cleared this position
+        // If not, we need to write a space to clear old content
+        const prevCell = x > 0 ? this.buffer.get(x - 1, y) : null;
+        const prevCharWidth = prevCell?.char ? getCharWidth(prevCell.char) : 1;
+
+        if (prevCharWidth === 2) {
+          // Previous char is wide - it already cleared this cell, skip
+          continue;
+        }
+
+        // Previous char is not wide - clear old content with a space
+        output += cursorToZero(y, x);
+        output += ' ';
+        cursorX = x + 1;
         lastY = y;
         continue;
       }
 
-      // Move cursor if not adjacent
-      if (y !== lastY || x !== lastX + 1) {
+      // Get character width for cursor tracking
+      const charWidth = cell.char ? getCharWidth(cell.char) : 1;
+
+      // For non-ASCII characters (code > 127), always reposition cursor
+      // to avoid terminal width calculation mismatches
+      const code = cell.char?.codePointAt(0) ?? 0;
+      const isNonAscii = code > 127;
+
+      // Move cursor if not at expected position or if we need to force reposition
+      if (y !== lastY || x !== cursorX || isNonAscii) {
         output += cursorToZero(y, x);
+        cursorX = x;
       }
 
       // Apply style changes
@@ -226,8 +248,16 @@ export class Renderer {
       // Write character
       output += cell.char;
 
+      // Update cursor position accounting for character width
+      // For non-ASCII characters, invalidate cursor position to force
+      // repositioning for the next character (terminal may advance differently)
+      if (isNonAscii) {
+        cursorX = -1; // Force reposition for next char
+      } else {
+        cursorX += charWidth;
+      }
+
       this.lastCell = cell;
-      lastX = x;
       lastY = y;
     }
 

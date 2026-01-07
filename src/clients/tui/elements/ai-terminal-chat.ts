@@ -381,11 +381,9 @@ export abstract class AITerminalChat extends BaseElement {
           for (let col = 0; col < contentWidth; col++) {
             if (col < line.length) {
               const cell = line[col];
-              // Skip placeholder cells for wide characters (char === '')
-              // The wide character in the previous cell already occupies this space
-              if (cell?.char === '') {
-                continue;
-              }
+              // Keep placeholder cells (char === '') as empty - the wide character
+              // before them already clears both terminal cells when written.
+              // The renderer will skip placeholders and reposition correctly.
               buffer.set(x + col, y + row, {
                 char: cell?.char ?? ' ',
                 fg: cell?.fg ?? defaultFg,

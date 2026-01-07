@@ -9,6 +9,7 @@ import { BaseElement, type ElementContext } from './base.ts';
 import type { KeyEvent, MouseEvent, Position, UnderlineStyle } from '../types.ts';
 import type { ScreenBuffer } from '../rendering/buffer.ts';
 import { darken, lighten } from '../../../core/colors.ts';
+import { getCharWidth } from '../../../core/char-width.ts';
 import { FoldManager } from '../../../core/fold.ts';
 import { UndoManager, type EditOperation, type UndoAction, type SerializedUndoState } from '../../../core/undo.ts';
 import { InlineDiffExpander, type InlineDiffCallbacks } from '../components/inline-diff-expander.ts';
@@ -1996,13 +1997,17 @@ export class DocumentEditor extends BaseElement {
    */
   private bufferColumnToScreenColumn(text: string, bufferCol: number, tabSize: number): number {
     let screenCol = 0;
-    for (let i = 0; i < bufferCol && i < text.length; i++) {
-      if (text[i] === '\t') {
+    let i = 0;
+    // Use for...of to properly iterate Unicode code points
+    for (const char of text) {
+      if (i >= bufferCol) break;
+      if (char === '\t') {
         // Tab advances to next tab stop
         screenCol = screenCol + tabSize - (screenCol % tabSize);
       } else {
-        screenCol++;
+        screenCol += getCharWidth(char);
       }
+      i++;
     }
     return screenCol;
   }
@@ -2013,15 +2018,18 @@ export class DocumentEditor extends BaseElement {
    */
   private screenColumnToBufferColumn(text: string, screenCol: number, tabSize: number): number {
     let currentScreenCol = 0;
-    for (let i = 0; i < text.length; i++) {
+    let i = 0;
+    // Use for...of to properly iterate Unicode code points
+    for (const char of text) {
       if (currentScreenCol >= screenCol) {
         return i;
       }
-      if (text[i] === '\t') {
+      if (char === '\t') {
         currentScreenCol = currentScreenCol + tabSize - (currentScreenCol % tabSize);
       } else {
-        currentScreenCol++;
+        currentScreenCol += getCharWidth(char);
       }
+      i++;
     }
     return text.length;
   }
@@ -2549,11 +2557,11 @@ export class DocumentEditor extends BaseElement {
           lastBreakableScreenCol = screenCol;
         }
 
-        // Calculate screen width of this character
+        // Calculate screen width of this character (accounting for wide chars like emoji)
         if (char === '\t') {
           screenCol = screenCol + tabSize - (screenCol % tabSize);
         } else {
-          screenCol++;
+          screenCol += getCharWidth(char);
         }
 
         breakBufferPos++;
@@ -3042,9 +3050,20 @@ export class DocumentEditor extends BaseElement {
           currentScreenPos++;
         }
       } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
         buffer.set(x + screenCol, y, { char, fg: color, bg });
         screenCol++;
         currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
       }
     }
   }
@@ -3082,9 +3101,20 @@ export class DocumentEditor extends BaseElement {
           currentScreenPos++;
         }
       } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
         buffer.set(x + screenCol, y, { char, fg, bg });
         screenCol++;
         currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
       }
     }
   }
@@ -3113,7 +3143,7 @@ export class DocumentEditor extends BaseElement {
       if (text[i] === '\t') {
         baseScreenCol = baseScreenCol + tabSize - (baseScreenCol % tabSize);
       } else {
-        baseScreenCol++;
+        baseScreenCol += getCharWidth(text[i]!);
       }
     }
 
@@ -3134,9 +3164,20 @@ export class DocumentEditor extends BaseElement {
         }
         charsWritten++;
       } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
         buffer.set(x + screenCol, y, { char, fg, bg });
         screenCol++;
         currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
         charsWritten++;
       }
     }
@@ -3335,7 +3376,7 @@ export class DocumentEditor extends BaseElement {
       if (text[i] === '\t') {
         baseScreenCol = baseScreenCol + tabSize - (baseScreenCol % tabSize);
       } else {
-        baseScreenCol++;
+        baseScreenCol += getCharWidth(text[i]!);
       }
     }
 
@@ -3369,9 +3410,20 @@ export class DocumentEditor extends BaseElement {
           currentScreenPos++;
         }
       } else {
+        const charWidth = getCharWidth(char);
+        if (charWidth === 0) {
+          // Skip zero-width characters (variation selectors, combining marks)
+          continue;
+        }
         buffer.set(x + screenCol, y, { char, fg: color, bg });
         screenCol++;
         currentScreenPos++;
+        // For wide characters, set placeholder in next cell
+        if (charWidth === 2 && screenCol < width) {
+          buffer.set(x + screenCol, y, { char: '', fg: color, bg });
+          screenCol++;
+          currentScreenPos++;
+        }
       }
       charsProcessed++;
     }
